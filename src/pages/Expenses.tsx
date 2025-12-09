@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
+import { useNavigate } from "react-router-dom";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 interface Expense {
   id: string;
@@ -40,6 +42,7 @@ interface Balance {
 
 export const Expenses = () => {
   const { user, currentRoom } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -373,6 +376,14 @@ export const Expenses = () => {
         receiptImage={receiptImage}
         onComplete={handleExpenseComplete}
       />
+
+      <BottomNav activeTab="expenses" onTabChange={(tab) => {
+        if (tab === 'home') navigate('/');
+        else if (tab === 'tasks') navigate('/tasks');
+        else if (tab === 'expenses') navigate('/expenses');
+        else if (tab === 'storage') navigate('/storage');
+        else if (tab === 'chat') navigate('/chat');
+      }} />
     </div>
   );
 };

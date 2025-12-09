@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Folder, Image, FileText, Film, Upload, Plus, MoreVertical, Grid, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 interface StorageItem {
   id: string;
@@ -40,8 +42,17 @@ const typeColors = {
 
 export const Storage = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const navigate = useNavigate();
   const usedStorage = 2.4;
   const totalStorage = 10;
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'home') navigate('/');
+    else if (tab === 'tasks') navigate('/tasks');
+    else if (tab === 'expenses') navigate('/expenses');
+    else if (tab === 'storage') navigate('/storage');
+    else if (tab === 'chat') navigate('/chat');
+  };
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -190,6 +201,8 @@ export const Storage = () => {
           })}
         </div>
       )}
+
+      <BottomNav activeTab="storage" onTabChange={handleTabChange} />
     </div>
   );
 };
