@@ -1,35 +1,32 @@
-import { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { Home } from "./Home";
-import { Tasks } from "./Tasks";
-import { Expenses } from "./Expenses";
-import { Storage } from "./Storage";
-import { Chat } from "./Chat";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("home");
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const renderContent = () => {
-    switch (activeTab) {
-      case "home":
-        return <Home />;
-      case "tasks":
-        return <Tasks />;
-      case "expenses":
-        return <Expenses />;
-      case "storage":
-        return <Storage />;
-      case "chat":
-        return <Chat />;
-      default:
-        return <Home />;
-    }
+  const getActiveTab = () => {
+    const path = location.pathname;
+    if (path === '/tasks') return 'tasks';
+    if (path === '/expenses') return 'expenses';
+    if (path === '/storage') return 'storage';
+    if (path === '/chat') return 'chat';
+    return 'home';
+  };
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'home') navigate('/');
+    else if (tab === 'tasks') navigate('/tasks');
+    else if (tab === 'expenses') navigate('/expenses');
+    else if (tab === 'storage') navigate('/storage');
+    else if (tab === 'chat') navigate('/chat');
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {renderContent()}
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <Home />
+      <BottomNav activeTab={getActiveTab()} onTabChange={handleTabChange} />
     </div>
   );
 };

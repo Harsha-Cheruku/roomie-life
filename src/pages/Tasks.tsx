@@ -2,6 +2,8 @@ import { useState } from "react";
 import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+import { BottomNav } from "@/components/layout/BottomNav";
 
 type TaskStatus = "todo" | "doing" | "done";
 type Priority = "low" | "medium" | "high";
@@ -46,6 +48,15 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 
 export const Tasks = () => {
   const [view, setView] = useState<"board" | "list">("board");
+  const navigate = useNavigate();
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'home') navigate('/');
+    else if (tab === 'tasks') navigate('/tasks');
+    else if (tab === 'expenses') navigate('/expenses');
+    else if (tab === 'storage') navigate('/storage');
+    else if (tab === 'chat') navigate('/chat');
+  };
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -176,6 +187,8 @@ export const Tasks = () => {
           })}
         </div>
       )}
+
+      <BottomNav activeTab="tasks" onTabChange={handleTabChange} />
     </div>
   );
 };
