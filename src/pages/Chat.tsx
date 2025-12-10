@@ -9,6 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { BottomNav } from '@/components/layout/BottomNav';
+import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
+import { AttachmentPicker, AttachmentPreview } from '@/components/chat/AttachmentPicker';
+import { toast } from 'sonner';
 
 interface Message {
   id: string;
@@ -26,9 +29,15 @@ interface RoomMember {
   };
 }
 
+interface PendingAttachment {
+  url: string;
+  type: 'image' | 'file' | 'voice';
+  fileName: string;
+}
+
 export const Chat = () => {
   const { user, currentRoom } = useAuth();
-  const { toast } = useToast();
+  const { toast: toastHook } = useToast();
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -36,6 +45,7 @@ export const Chat = () => {
   const [isSending, setIsSending] = useState(false);
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [profilesMap, setProfilesMap] = useState<Map<string, { display_name: string; avatar: string }>>(new Map());
+  const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -63,12 +73,13 @@ export const Chat = () => {
           const newMsg = payload.new as Message;
           setMessages((prev) => [...prev, newMsg]);
 
-          // Show notification toast for messages from others
           if (newMsg.sender_id !== user?.id) {
             const senderProfile = profilesMap.get(newMsg.sender_id);
-            toast({
+            toastHook({
               title: `${senderProfile?.avatar || '💬'} ${senderProfile?.display_name || 'Someone'}`,
-              description: newMsg.content.slice(0, 50) + (newMsg.content.length > 50 ? '...' : ''),
+              description: newMsg.message_type === 'text' 
+                ? newMsg.content.slice(0, 50) + (newMsg.content.length > 50 ? '...' : '')
+                : `Sent a ${newMsg.message_type}`,
             });
           }
         }
@@ -119,7 +130,6 @@ export const Chat = () => {
 
     setRoomMembers(members);
 
-    // Create a map for quick profile lookups
     const map = new Map<string, { display_name: string; avatar: string }>();
     members.forEach(m => map.set(m.user_id, m.profile));
     setProfilesMap(map);
@@ -147,29 +157,91 @@ export const Chat = () => {
     }
   };
 
+  const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
+    if (!user) return;
+
+    setIsSending(true);
+    try {
+      const fileName = `${user.id}/${Date.now()}.webm`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(fileName, audioBlob);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-attachments')
+        .getPublicUrl(fileName);
+
+      // Send as voice message
+      await sendMessageWithAttachment(publicUrl, 'voice', `Voice note (${duration}s)`);
+    } catch (error) {
+      console.error('Error uploading voice note:', error);
+      toast.error('Failed to send voice note');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleAttachmentUploaded = (url: string, type: 'image' | 'file' | 'voice', fileName: string) => {
+    setPendingAttachment({ url, type, fileName });
+  };
+
+  const sendMessageWithAttachment = async (attachmentUrl: string, type: string, fileName: string) => {
+    if (!user || !currentRoom) return;
+
+    const content = JSON.stringify({ url: attachmentUrl, fileName });
+
+    const { error } = await supabase.from('messages').insert({
+      room_id: currentRoom.id,
+      sender_id: user.id,
+      content,
+      message_type: type,
+    });
+
+    if (error) throw error;
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !currentRoom || isSending) return;
+    if (!user || !currentRoom || isSending) return;
 
-    const messageContent = newMessage.trim();
-    setNewMessage('');
+    const hasText = newMessage.trim();
+    const hasAttachment = pendingAttachment;
+
+    if (!hasText && !hasAttachment) return;
+
     setIsSending(true);
 
     try {
-      const { error } = await supabase.from('messages').insert({
-        room_id: currentRoom.id,
-        sender_id: user.id,
-        content: messageContent,
-        message_type: 'text',
-      });
+      // Send attachment first if exists
+      if (hasAttachment) {
+        await sendMessageWithAttachment(
+          hasAttachment.url,
+          hasAttachment.type,
+          hasAttachment.fileName
+        );
+        setPendingAttachment(null);
+      }
 
-      if (error) throw error;
+      // Send text message if exists
+      if (hasText) {
+        const { error } = await supabase.from('messages').insert({
+          room_id: currentRoom.id,
+          sender_id: user.id,
+          content: hasText,
+          message_type: 'text',
+        });
+
+        if (error) throw error;
+        setNewMessage('');
+      }
 
       inputRef.current?.focus();
     } catch (error) {
       console.error('Error sending message:', error);
-      setNewMessage(messageContent); // Restore message on error
-      toast({
+      toastHook({
         title: 'Failed to send',
         description: 'Could not send your message. Please try again.',
         variant: 'destructive',
@@ -210,6 +282,57 @@ export const Chat = () => {
     });
 
     return groups;
+  };
+
+  const parseAttachmentContent = (content: string) => {
+    try {
+      return JSON.parse(content);
+    } catch {
+      return { url: content, fileName: 'attachment' };
+    }
+  };
+
+  const renderMessageContent = (message: Message, isOwnMessage: boolean) => {
+    if (message.message_type === 'text') {
+      return <p className="text-sm break-words">{message.content}</p>;
+    }
+
+    const attachment = parseAttachmentContent(message.content);
+
+    if (message.message_type === 'image') {
+      return (
+        <img
+          src={attachment.url}
+          alt="Image"
+          className="max-w-[250px] max-h-[200px] rounded-lg object-cover cursor-pointer"
+          onClick={() => window.open(attachment.url, '_blank')}
+        />
+      );
+    }
+
+    if (message.message_type === 'voice') {
+      return (
+        <audio controls src={attachment.url} className="max-w-[200px]" />
+      );
+    }
+
+    if (message.message_type === 'file') {
+      return (
+        <a
+          href={attachment.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "flex items-center gap-2 text-sm hover:underline",
+            isOwnMessage ? "text-primary-foreground" : "text-primary"
+          )}
+        >
+          📎 {attachment.fileName || 'Download file'}
+        </a>
+      );
+    }
+
+    return <p className="text-sm break-words">{message.content}</p>;
   };
 
   const handleTabChange = (tab: string) => {
@@ -272,14 +395,12 @@ export const Chat = () => {
         ) : (
           messageGroups.map((group, groupIndex) => (
             <div key={groupIndex} className="space-y-3">
-              {/* Date header */}
               <div className="flex items-center justify-center">
                 <span className="bg-muted/80 text-muted-foreground text-xs px-3 py-1 rounded-full">
                   {formatDateHeader(group.date)}
                 </span>
               </div>
 
-              {/* Messages for this date */}
               {group.messages.map((message, msgIndex) => {
                 const isOwnMessage = message.sender_id === user?.id;
                 const senderProfile = profilesMap.get(message.sender_id);
@@ -294,7 +415,6 @@ export const Chat = () => {
                       isOwnMessage ? 'flex-row-reverse' : 'flex-row'
                     )}
                   >
-                    {/* Avatar */}
                     <div className="w-8 shrink-0">
                       {showAvatar && !isOwnMessage && (
                         <Avatar className="w-8 h-8">
@@ -305,7 +425,6 @@ export const Chat = () => {
                       )}
                     </div>
 
-                    {/* Message bubble */}
                     <div
                       className={cn(
                         'max-w-[75%] rounded-2xl px-4 py-2',
@@ -319,7 +438,7 @@ export const Chat = () => {
                           {senderProfile?.display_name || 'Unknown'}
                         </p>
                       )}
-                      <p className="text-sm break-words">{message.content}</p>
+                      {renderMessageContent(message, isOwnMessage)}
                       <p
                         className={cn(
                           'text-[10px] mt-1',
@@ -337,11 +456,30 @@ export const Chat = () => {
         )}
       </div>
 
+      {/* Pending Attachment Preview */}
+      {pendingAttachment && (
+        <div className="px-4 py-2 bg-card border-t border-border">
+          <AttachmentPreview
+            url={pendingAttachment.url}
+            type={pendingAttachment.type}
+            fileName={pendingAttachment.fileName}
+            onRemove={() => setPendingAttachment(null)}
+            isPreview
+          />
+        </div>
+      )}
+
       {/* Input */}
       <form
         onSubmit={sendMessage}
-        className="sticky bottom-20 left-0 right-0 bg-card border-t border-border p-4 flex items-center gap-3"
+        className="sticky bottom-20 left-0 right-0 bg-card border-t border-border p-4 flex items-center gap-2"
       >
+        <AttachmentPicker
+          userId={user?.id || ''}
+          onAttachmentUploaded={handleAttachmentUploaded}
+          disabled={isSending}
+        />
+        
         <Input
           ref={inputRef}
           value={newMessage}
@@ -350,18 +488,26 @@ export const Chat = () => {
           className="flex-1 h-12 rounded-xl bg-muted border-0"
           disabled={isSending}
         />
-        <Button
-          type="submit"
-          size="icon"
-          className="h-12 w-12 rounded-xl shrink-0"
-          disabled={!newMessage.trim() || isSending}
-        >
-          {isSending ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <Send className="w-5 h-5" />
-          )}
-        </Button>
+        
+        {newMessage.trim() || pendingAttachment ? (
+          <Button
+            type="submit"
+            size="icon"
+            className="h-12 w-12 rounded-xl shrink-0"
+            disabled={isSending}
+          >
+            {isSending ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Send className="w-5 h-5" />
+            )}
+          </Button>
+        ) : (
+          <VoiceRecorder
+            onRecordingComplete={uploadVoiceNote}
+            disabled={isSending}
+          />
+        )}
       </form>
 
       <BottomNav activeTab="chat" onTabChange={handleTabChange} />
