@@ -12,6 +12,7 @@ import { Expenses } from "./pages/Expenses";
 import { Tasks } from "./pages/Tasks";
 import { Storage } from "./pages/Storage";
 import { Chat } from "./pages/Chat";
+import Alarms from "./pages/Alarms";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -92,6 +93,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Chat />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alarms"
+              element={
+                <ProtectedRoute>
+                  <Alarms />
                 </ProtectedRoute>
               }
             />

@@ -14,6 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
+      alarm_acknowledgments: {
+        Row: {
+          acknowledged_at: string
+          id: string
+          trigger_id: string
+          user_id: string
+        }
+        Insert: {
+          acknowledged_at?: string
+          id?: string
+          trigger_id: string
+          user_id: string
+        }
+        Update: {
+          acknowledged_at?: string
+          id?: string
+          trigger_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alarm_acknowledgments_trigger_id_fkey"
+            columns: ["trigger_id"]
+            isOneToOne: false
+            referencedRelation: "alarm_triggers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alarm_triggers: {
+        Row: {
+          alarm_id: string
+          dismissed_at: string | null
+          dismissed_by: string | null
+          id: string
+          ring_count: number
+          status: string
+          triggered_at: string
+        }
+        Insert: {
+          alarm_id: string
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          id?: string
+          ring_count?: number
+          status?: string
+          triggered_at?: string
+        }
+        Update: {
+          alarm_id?: string
+          dismissed_at?: string | null
+          dismissed_by?: string | null
+          id?: string
+          ring_count?: number
+          status?: string
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alarm_triggers_alarm_id_fkey"
+            columns: ["alarm_id"]
+            isOneToOne: false
+            referencedRelation: "alarms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alarms: {
+        Row: {
+          alarm_time: string
+          condition_type: string
+          condition_value: number | null
+          created_at: string
+          created_by: string
+          days_of_week: number[]
+          id: string
+          is_active: boolean
+          room_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          alarm_time: string
+          condition_type?: string
+          condition_value?: number | null
+          created_at?: string
+          created_by: string
+          days_of_week?: number[]
+          id?: string
+          is_active?: boolean
+          room_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          alarm_time?: string
+          condition_type?: string
+          condition_value?: number | null
+          created_at?: string
+          created_by?: string
+          days_of_week?: number[]
+          id?: string
+          is_active?: boolean
+          room_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alarms_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_items: {
         Row: {
           created_at: string
