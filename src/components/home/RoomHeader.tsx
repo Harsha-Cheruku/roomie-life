@@ -1,9 +1,10 @@
-import { Bell, Settings, Users, LogOut, Copy, Check } from "lucide-react";
+import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -13,8 +14,9 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomHeader = () => {
-  const { currentRoom, profile, signOut } = useAuth();
+  const { currentRoom, profile, signOut, leaveRoom } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -73,7 +75,26 @@ export const RoomHeader = () => {
   };
 
   const handleSignOut = async () => {
+    setShowMenu(false);
     await signOut();
+  };
+
+  const handleLeaveRoom = async () => {
+    setShowMenu(false);
+    const { error } = await leaveRoom();
+    if (error) {
+      toast({
+        title: "Failed to leave room",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Left room",
+        description: "You have left the room successfully",
+      });
+      navigate("/setup");
+    }
   };
 
   return (
@@ -104,6 +125,13 @@ export const RoomHeader = () => {
                 >
                   {copied ? <Check className="w-4 h-4 text-mint" /> : <Copy className="w-4 h-4" />}
                   <span className="text-sm">Copy Invite Code</span>
+                </button>
+                <button
+                  onClick={handleLeaveRoom}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent/10 text-accent transition-colors text-left"
+                >
+                  <DoorOpen className="w-4 h-4" />
+                  <span className="text-sm">Leave Room</span>
                 </button>
                 <button
                   onClick={handleSignOut}
