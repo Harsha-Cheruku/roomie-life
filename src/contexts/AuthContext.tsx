@@ -133,54 +133,102 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const createRoom = async (name: string) => {
     if (!user) return { room: null, error: new Error("Not authenticated") };
 
-    const { data: room, error: roomError } = await supabase
-      .from("rooms")
-      .insert({ name, created_by: user.id })
-      .select()
-      .single();
+    try {
+      // Check if user is already in a room
+      const { data: existingMembership } = await supabase
+        .from("room_members")
+        .select("room_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (roomError || !room) {
-      return { room: null, error: roomError as Error };
+      if (existingMembership) {
+        return { room: null, error: new Error("You're already in a room. Leave your current room first.") };
+      }
+
+      const { data: room, error: roomError } = await supabase
+        .from("rooms")
+        .insert({ name, created_by: user.id })
+        .select()
+        .single();
+
+      if (roomError) {
+        console.error("Room creation error:", roomError);
+        return { room: null, error: new Error(roomError.message || "Failed to create room") };
+      }
+
+      if (!room) {
+        return { room: null, error: new Error("Room was not created") };
+      }
+
+      const { error: memberError } = await supabase
+        .from("room_members")
+        .insert({ room_id: room.id, user_id: user.id, role: "admin" });
+
+      if (memberError) {
+        console.error("Member creation error:", memberError);
+        // Try to clean up the room if member creation fails
+        await supabase.from("rooms").delete().eq("id", room.id);
+        return { room: null, error: new Error(memberError.message || "Failed to add you to the room") };
+      }
+
+      setCurrentRoom(room as Room);
+      return { room: room as Room, error: null };
+    } catch (err) {
+      console.error("Unexpected error creating room:", err);
+      return { room: null, error: new Error("An unexpected error occurred") };
     }
-
-    const { error: memberError } = await supabase
-      .from("room_members")
-      .insert({ room_id: room.id, user_id: user.id, role: "admin" });
-
-    if (memberError) {
-      return { room: null, error: memberError as Error };
-    }
-
-    setCurrentRoom(room as Room);
-    return { room: room as Room, error: null };
   };
 
   const joinRoom = async (inviteCode: string) => {
     if (!user) return { error: new Error("Not authenticated") };
 
-    const { data: room, error: roomError } = await supabase
-      .from("rooms")
-      .select("*")
-      .eq("invite_code", inviteCode.toUpperCase())
-      .maybeSingle();
+    try {
+      // Check if user is already in a room
+      const { data: existingMembership } = await supabase
+        .from("room_members")
+        .select("room_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (roomError || !room) {
-      return { error: new Error("Invalid invite code") };
-    }
-
-    const { error: memberError } = await supabase
-      .from("room_members")
-      .insert({ room_id: room.id, user_id: user.id, role: "member" });
-
-    if (memberError) {
-      if (memberError.code === "23505") {
-        return { error: new Error("You're already a member of this room") };
+      if (existingMembership) {
+        return { error: new Error("You're already in a room. Leave your current room first.") };
       }
-      return { error: memberError as Error };
-    }
 
-    setCurrentRoom(room as Room);
-    return { error: null };
+      const { data: room, error: roomError } = await supabase
+        .from("rooms")
+        .select("*")
+        .eq("invite_code", inviteCode.toUpperCase().trim())
+        .maybeSingle();
+
+      if (roomError) {
+        console.error("Room lookup error:", roomError);
+        return { error: new Error("Failed to find room") };
+      }
+
+      if (!room) {
+        return { error: new Error("Invalid invite code. Please check and try again.") };
+      }
+
+      const { error: memberError } = await supabase
+        .from("room_members")
+        .insert({ room_id: room.id, user_id: user.id, role: "member" });
+
+      if (memberError) {
+        if (memberError.code === "23505") {
+          // Already a member - just set the room
+          setCurrentRoom(room as Room);
+          return { error: null };
+        }
+        console.error("Join room error:", memberError);
+        return { error: new Error(memberError.message || "Failed to join room") };
+      }
+
+      setCurrentRoom(room as Room);
+      return { error: null };
+    } catch (err) {
+      console.error("Unexpected error joining room:", err);
+      return { error: new Error("An unexpected error occurred") };
+    }
   };
 
   const refreshProfile = async () => {
