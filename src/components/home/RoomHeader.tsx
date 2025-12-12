@@ -1,4 +1,4 @@
-import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen } from "lucide-react";
+import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -119,6 +119,13 @@ export const RoomHeader = () => {
             </Button>
             {showMenu && (
               <div className="absolute right-0 top-12 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px] z-50 animate-scale-in">
+                <button
+                  onClick={() => { setShowMenu(false); navigate("/room-settings"); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
+                >
+                  <Cog className="w-4 h-4" />
+                  <span className="text-sm">Room Settings</span>
+                </button>
                 <button
                   onClick={copyInviteCode}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
