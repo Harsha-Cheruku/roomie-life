@@ -5,19 +5,17 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-interface RoomMember {
+interface RoomMemberWithProfile {
   user_id: string;
   role: string;
-  profiles: {
-    display_name: string;
-    avatar: string;
-  };
+  display_name: string;
+  avatar: string;
 }
 
 export const RoomHeader = () => {
   const { currentRoom, profile, signOut } = useAuth();
   const { toast } = useToast();
-  const [members, setMembers] = useState<RoomMember[]>([]);
+  const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
@@ -30,14 +28,36 @@ export const RoomHeader = () => {
   const fetchMembers = async () => {
     if (!currentRoom?.id) return;
     
-    const { data } = await supabase
+    // First get room members
+    const { data: memberData } = await supabase
       .from("room_members")
-      .select("user_id, role, profiles(display_name, avatar)")
+      .select("user_id, role")
       .eq("room_id", currentRoom.id);
 
-    if (data) {
-      setMembers(data as unknown as RoomMember[]);
+    if (!memberData || memberData.length === 0) {
+      setMembers([]);
+      return;
     }
+
+    // Then fetch profiles for those members
+    const userIds = memberData.map(m => m.user_id);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("user_id, display_name, avatar")
+      .in("user_id", userIds);
+
+    // Combine the data
+    const combined = memberData.map(member => {
+      const profile = profileData?.find(p => p.user_id === member.user_id);
+      return {
+        user_id: member.user_id,
+        role: member.role,
+        display_name: profile?.display_name || "Unknown",
+        avatar: profile?.avatar || "😎"
+      };
+    });
+
+    setMembers(combined);
   };
 
   const copyInviteCode = () => {
@@ -106,9 +126,9 @@ export const RoomHeader = () => {
               key={member.user_id}
               className="w-10 h-10 rounded-full bg-card border-2 border-background flex items-center justify-center text-xl shadow-sm animate-scale-in"
               style={{ animationDelay: `${index * 50}ms`, zIndex: members.length - index }}
-              title={member.profiles?.display_name}
+              title={member.display_name}
             >
-              {member.profiles?.avatar || "😎"}
+              {member.avatar || "😎"}
             </div>
           ))}
           {members.length > 4 && (
