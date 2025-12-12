@@ -28,6 +28,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   createRoom: (name: string) => Promise<{ room: Room | null; error: Error | null }>;
   joinRoom: (inviteCode: string) => Promise<{ error: Error | null }>;
+  leaveRoom: () => Promise<{ error: Error | null }>;
   setCurrentRoom: (room: Room | null) => void;
   refreshProfile: () => Promise<void>;
 }
@@ -231,6 +232,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const leaveRoom = async () => {
+    if (!user || !currentRoom) return { error: new Error("Not in a room") };
+
+    try {
+      const { error } = await supabase
+        .from("room_members")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("room_id", currentRoom.id);
+
+      if (error) {
+        console.error("Leave room error:", error);
+        return { error: new Error(error.message || "Failed to leave room") };
+      }
+
+      setCurrentRoom(null);
+      return { error: null };
+    } catch (err) {
+      console.error("Unexpected error leaving room:", err);
+      return { error: new Error("An unexpected error occurred") };
+    }
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
@@ -250,6 +274,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         signOut,
         createRoom,
         joinRoom,
+        leaveRoom,
         setCurrentRoom,
         refreshProfile,
       }}
