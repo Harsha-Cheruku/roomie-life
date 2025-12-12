@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { Auth } from "./pages/Auth";
 import { RoomSetup } from "./pages/RoomSetup";
+import { RoomSettings } from "./pages/RoomSettings";
 import { Expenses } from "./pages/Expenses";
 import { Tasks } from "./pages/Tasks";
 import { Storage } from "./pages/Storage";
@@ -101,6 +102,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Alarms />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/room-settings"
+              element={
+                <ProtectedRoute>
+                  <RoomSettings />
                 </ProtectedRoute>
               }
             />
