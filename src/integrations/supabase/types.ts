@@ -174,6 +174,7 @@ export type Database = {
           expense_item_id: string | null
           id: string
           is_paid: boolean
+          status: string
           user_id: string
         }
         Insert: {
@@ -183,6 +184,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          status?: string
           user_id: string
         }
         Update: {
@@ -192,6 +194,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          status?: string
           user_id?: string
         }
         Relationships: [
@@ -405,6 +408,59 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          id: string
+          priority: string
+          reminder_time: string | null
+          room_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          reminder_time?: string | null
+          room_id: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          priority?: string
+          reminder_time?: string | null
+          room_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
