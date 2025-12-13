@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2 } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -8,6 +8,15 @@ import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { useToast } from "@/hooks/use-toast";
+
+interface ExpenseSplit {
+  id: string;
+  user_id: string;
+  amount: number;
+  is_paid: boolean;
+  status: string;
+}
 
 interface Expense {
   id: string;
@@ -20,11 +29,7 @@ interface Expense {
     display_name: string;
     avatar: string;
   };
-  splits?: {
-    user_id: string;
-    amount: number;
-    is_paid: boolean;
-  }[];
+  splits?: ExpenseSplit[];
 }
 
 interface ScanResult {
@@ -43,6 +48,7 @@ interface Balance {
 export const Expenses = () => {
   const { user, currentRoom } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -51,6 +57,7 @@ export const Expenses = () => {
   const [showSplitter, setShowSplitter] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [updatingSplitId, setUpdatingSplitId] = useState<string | null>(null);
 
   // Calculate summary stats
   const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0 });
@@ -76,9 +83,11 @@ export const Expenses = () => {
           status,
           created_at,
           expense_splits (
+            id,
             user_id,
             amount,
-            is_paid
+            is_paid,
+            status
           )
         `)
         .eq('room_id', currentRoom.id)
@@ -121,7 +130,7 @@ export const Expenses = () => {
           youPaid += expense.total_amount;
         }
         const userSplit = expense.splits?.find(s => s.user_id === user.id);
-        if (userSplit && !userSplit.is_paid) {
+        if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted') {
           youOwe += userSplit.amount;
         }
       });
@@ -156,7 +165,7 @@ export const Expenses = () => {
 
     expenseData.forEach(expense => {
       expense.splits?.forEach(split => {
-        if (split.user_id !== user.id) {
+        if (split.user_id !== user.id && split.status === 'accepted') {
           // If the current user paid and this person owes
           if (expense.created_by === user.id && !split.is_paid) {
             balanceMap.set(split.user_id, (balanceMap.get(split.user_id) || 0) + split.amount);
@@ -164,7 +173,7 @@ export const Expenses = () => {
           // If this person paid and current user owes
           if (expense.created_by === split.user_id) {
             const userSplit = expense.splits?.find(s => s.user_id === user.id);
-            if (userSplit && !userSplit.is_paid) {
+            if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted') {
               balanceMap.set(split.user_id, (balanceMap.get(split.user_id) || 0) - userSplit.amount);
             }
           }
@@ -194,6 +203,32 @@ export const Expenses = () => {
     fetchExpenses();
   };
 
+  const handleSplitAction = async (splitId: string, action: 'accepted' | 'rejected') => {
+    setUpdatingSplitId(splitId);
+    try {
+      const { error } = await supabase
+        .from('expense_splits')
+        .update({ status: action })
+        .eq('id', splitId);
+
+      if (error) throw error;
+
+      toast({
+        title: action === 'accepted' ? 'Expense accepted' : 'Expense rejected',
+      });
+
+      fetchExpenses();
+    } catch (error) {
+      console.error('Error updating split:', error);
+      toast({
+        title: 'Failed to update',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingSplitId(null);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const today = new Date();
@@ -216,6 +251,12 @@ export const Expenses = () => {
     if (lower.includes('water')) return '💧';
     return '📝';
   };
+
+  // Get pending expenses for current user
+  const pendingForMe = expenses.filter(exp => {
+    const mySplit = exp.splits?.find(s => s.user_id === user?.id);
+    return mySplit && mySplit.status === 'pending' && exp.created_by !== user?.id;
+  });
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -265,6 +306,61 @@ export const Expenses = () => {
           </div>
         </div>
       </header>
+
+      {/* Pending Approvals */}
+      {pendingForMe.length > 0 && (
+        <section className="px-4 mb-6">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-accent" />
+            Pending Your Approval ({pendingForMe.length})
+          </h2>
+          <div className="space-y-3">
+            {pendingForMe.map((expense, index) => {
+              const mySplit = expense.splits?.find(s => s.user_id === user?.id);
+              const isUpdating = updatingSplitId === mySplit?.id;
+              
+              return (
+                <div
+                  key={expense.id}
+                  className="bg-accent/10 border border-accent/30 rounded-2xl p-4 animate-slide-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center text-xl">
+                      {getCategoryEmoji(expense.title)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">{expense.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {expense.creator_profile?.display_name} assigned ₹{mySplit?.amount.toFixed(0)} to you
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 h-10 gap-2 bg-mint hover:bg-mint/90"
+                      onClick={() => mySplit && handleSplitAction(mySplit.id, 'accepted')}
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Accept
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-10 gap-2 border-coral text-coral hover:bg-coral/10"
+                      onClick={() => mySplit && handleSplitAction(mySplit.id, 'rejected')}
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Balances */}
       {balances.length > 0 && (
@@ -324,35 +420,51 @@ export const Expenses = () => {
             <p className="text-sm text-muted-foreground/70 mt-1">Scan a bill to get started!</p>
           </div>
         ) : (
-          expenses.map((expense, index) => (
-            <div
-              key={expense.id}
-              className="bg-card rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up"
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
-                {getCategoryEmoji(expense.title)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-lg">{expense.creator_profile?.avatar || '😊'}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {expense.created_by === user?.id ? 'You' : expense.creator_profile?.display_name} paid
-                  </span>
-                  <Users className="w-3 h-3 text-muted-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    {expense.splits?.length || 0}
-                  </span>
+          expenses.map((expense, index) => {
+            const mySplit = expense.splits?.find(s => s.user_id === user?.id);
+            
+            return (
+              <div
+                key={expense.id}
+                className="bg-card rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up"
+                style={{ animationDelay: `${index * 30}ms` }}
+              >
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
+                  {getCategoryEmoji(expense.title)}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-lg">{expense.creator_profile?.avatar || '😊'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {expense.created_by === user?.id ? 'You' : expense.creator_profile?.display_name} paid
+                    </span>
+                    <Users className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-xs text-muted-foreground">
+                      {expense.splits?.filter(s => s.status === 'accepted').length || 0}/{expense.splits?.length || 0}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground">₹{expense.total_amount.toLocaleString()}</p>
+                  <div className="flex items-center gap-1 justify-end mt-1">
+                    {mySplit && expense.created_by !== user?.id && (
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded-full",
+                        mySplit.status === 'accepted' ? 'bg-mint/20 text-mint' :
+                        mySplit.status === 'rejected' ? 'bg-coral/20 text-coral' :
+                        'bg-accent/20 text-accent'
+                      )}>
+                        {mySplit.status === 'accepted' ? '✓' : mySplit.status === 'rejected' ? '✗' : '⏳'}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground">{formatDate(expense.created_at)}</span>
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </div>
-              <div className="text-right">
-                <p className="text-sm font-bold text-foreground">₹{expense.total_amount.toLocaleString()}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(expense.created_at)}</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </div>
-          ))
+            );
+          })
         )}
 
         <Button variant="outline" className="w-full mt-4" onClick={() => setShowScanner(true)}>
