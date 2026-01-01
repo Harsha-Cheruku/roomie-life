@@ -141,30 +141,19 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
         </SheetHeader>
 
         <div className="mt-6 space-y-5 overflow-y-auto max-h-[calc(90vh-180px)]">
-          {/* Title */}
+          {/* Title - First */}
           <div>
-            <label className="text-sm font-medium text-muted-foreground">Title</label>
+            <label className="text-sm font-medium text-muted-foreground">Task Name</label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="What needs to be done?"
               className="mt-1 rounded-xl"
+              autoFocus
             />
           </div>
 
-          {/* Description */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Description (optional)</label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add details..."
-              className="mt-1 rounded-xl resize-none"
-              rows={3}
-            />
-          </div>
-
-          {/* Assign to */}
+          {/* Assign to - Second */}
           <div>
             <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <Users className="w-4 h-4" />
@@ -176,7 +165,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
                   key={member.user_id}
                   onClick={() => setAssignedTo(member.user_id)}
                   className={cn(
-                    "flex items-center gap-2 p-3 rounded-xl border transition-colors",
+                    "flex items-center gap-2 p-3 rounded-xl border transition-colors press-effect",
                     assignedTo === member.user_id
                       ? 'border-primary bg-primary/10'
                       : 'border-border hover:border-primary/50'
@@ -195,7 +184,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
             </div>
           </div>
 
-          {/* Priority */}
+          {/* Priority - Third */}
           <div>
             <label className="text-sm font-medium text-muted-foreground">Priority</label>
             <div className="flex gap-2 mt-2">
@@ -204,7 +193,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
                   key={option.value}
                   onClick={() => setPriority(option.value)}
                   className={cn(
-                    "flex-1 py-2 px-3 rounded-xl border text-sm font-medium transition-colors",
+                    "flex-1 py-2 px-3 rounded-xl border text-sm font-medium transition-colors press-effect",
                     priority === option.value ? option.color : 'border-border text-muted-foreground'
                   )}
                 >
@@ -214,7 +203,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
             </div>
           </div>
 
-          {/* Due Date */}
+          {/* Due Date - Fourth */}
           <div>
             <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <Calendar className="w-4 h-4" />
@@ -228,11 +217,11 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
             />
           </div>
 
-          {/* Reminder */}
+          {/* Reminder - Fifth */}
           <div>
             <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
               <Clock className="w-4 h-4" />
-              Reminder Notification
+              Reminder
             </label>
             <Input
               type="datetime-local"
@@ -241,12 +230,24 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
               className="mt-1 rounded-xl"
             />
           </div>
+
+          {/* Description - Last (optional) */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Notes (optional)</label>
+            <Textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Add any extra details..."
+              className="mt-1 rounded-xl resize-none"
+              rows={3}
+            />
+          </div>
         </div>
 
         {/* Submit button */}
         <div className="absolute bottom-0 left-0 right-0 p-4 bg-background border-t">
           <Button
-            className="w-full h-14 rounded-xl text-base gap-2"
+            className="w-full h-14 rounded-xl text-base gap-2 press-effect"
             onClick={handleSubmit}
             disabled={isSubmitting || !title.trim() || !assignedTo}
           >

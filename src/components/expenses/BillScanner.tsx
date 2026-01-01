@@ -128,7 +128,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
               <Button
                 variant="outline"
-                className="w-full h-14 rounded-xl gap-3"
+                className="w-full h-14 rounded-xl gap-3 press-effect"
                 onClick={() => cameraInputRef.current?.click()}
               >
                 <Camera className="w-5 h-5" />

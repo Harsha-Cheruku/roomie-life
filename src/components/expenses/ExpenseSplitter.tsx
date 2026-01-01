@@ -454,7 +454,7 @@ export const ExpenseSplitter = ({
         {/* Save button */}
         <div className="shrink-0 pt-4 border-t">
           <Button 
-            className="w-full h-14 rounded-xl text-base gap-2"
+            className="w-full h-14 rounded-xl text-base gap-2 press-effect"
             onClick={saveExpense}
             disabled={isSaving || items.length === 0}
           >
@@ -466,7 +466,7 @@ export const ExpenseSplitter = ({
             ) : (
               <>
                 <Save className="w-5 h-5" />
-                Save Expense
+                Save & Split
               </>
             )}
           </Button>

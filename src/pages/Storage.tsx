@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { TopBar } from "@/components/layout/TopBar";
 
 interface StorageItem {
   id: string;
@@ -56,17 +57,22 @@ export const Storage = () => {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
-      <header className="px-4 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="font-display text-2xl font-bold text-foreground">Storage</h1>
-          <Button variant="gradient" size="sm" className="gap-2">
+      {/* Header with TopBar */}
+      <TopBar 
+        title="Storage" 
+        showBack={true}
+        onBack={() => navigate('/')}
+        hint="Share files with your roommates 📁"
+        rightContent={
+          <Button variant="gradient" size="sm" className="gap-2 press-effect">
             <Upload className="w-4 h-4" />
             Upload
           </Button>
-        </div>
+        }
+      />
 
-        {/* Storage Usage Card */}
+      {/* Storage Usage Card */}
+      <div className="px-4 mb-6">
         <div className="bg-card rounded-2xl p-4 shadow-card">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -90,7 +96,7 @@ export const Storage = () => {
             <span>{(totalStorage - usedStorage).toFixed(1)} GB free</span>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Quick Folders */}
       <section className="px-4 mb-6">
