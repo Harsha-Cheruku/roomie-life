@@ -68,8 +68,8 @@ export const RoomHeader = () => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       toast({
-        title: "Copied!",
-        description: `Invite code: ${currentRoom.invite_code}`,
+        title: "Copied! 📋",
+        description: "Share this code with your roommates",
       });
     }
   };
@@ -84,14 +84,14 @@ export const RoomHeader = () => {
     const { error } = await leaveRoom();
     if (error) {
       toast({
-        title: "Failed to leave room",
-        description: error.message,
+        title: "Couldn't leave room",
+        description: "Something went wrong. Try again?",
         variant: "destructive",
       });
     } else {
       toast({
-        title: "Left room",
-        description: "You have left the room successfully",
+        title: "You've left the room 👋",
+        description: "You can rejoin anytime with the invite code",
       });
       navigate("/setup");
     }
@@ -107,42 +107,46 @@ export const RoomHeader = () => {
           </h1>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="glass" size="icon" className="relative">
+          <Button variant="glass" size="icon" className="relative press-effect">
             <Bell className="w-5 h-5 text-foreground" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center animate-bounce-soft">
               3
             </span>
           </Button>
           <div className="relative">
-            <Button variant="glass" size="icon" onClick={() => setShowMenu(!showMenu)}>
+            <Button variant="glass" size="icon" onClick={() => setShowMenu(!showMenu)} className="press-effect">
               <Settings className="w-5 h-5 text-foreground" />
             </Button>
             {showMenu && (
               <div className="absolute right-0 top-12 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px] z-50 animate-scale-in">
                 <button
                   onClick={() => { setShowMenu(false); navigate("/room-settings"); }}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
                 >
                   <Cog className="w-4 h-4" />
                   <span className="text-sm">Room Settings</span>
                 </button>
                 <button
                   onClick={copyInviteCode}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
                 >
                   {copied ? <Check className="w-4 h-4 text-mint" /> : <Copy className="w-4 h-4" />}
-                  <span className="text-sm">Copy Invite Code</span>
+                  <span className="text-sm">Share Invite Code</span>
                 </button>
+                <div className="border-t border-border my-1"></div>
                 <button
                   onClick={handleLeaveRoom}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent/10 text-accent transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-accent/10 text-muted-foreground transition-colors text-left press-effect"
                 >
                   <DoorOpen className="w-4 h-4" />
-                  <span className="text-sm">Leave Room</span>
+                  <div>
+                    <span className="text-sm">Leave Room</span>
+                    <p className="text-[10px] text-muted-foreground/70">You can rejoin anytime</p>
+                  </div>
                 </button>
                 <button
                   onClick={handleSignOut}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-destructive/10 text-destructive transition-colors text-left press-effect"
                 >
                   <LogOut className="w-4 h-4" />
                   <span className="text-sm">Sign Out</span>

@@ -8,6 +8,8 @@ import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { TopBar } from "@/components/layout/TopBar";
+import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 
 interface ExpenseSplit {
@@ -260,17 +262,22 @@ export const Expenses = () => {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
-      <header className="px-4 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="font-display text-2xl font-bold text-foreground">Expenses</h1>
-          <Button variant="gradient" size="sm" className="gap-2" onClick={() => setShowScanner(true)}>
+      {/* Header with TopBar */}
+      <TopBar 
+        title="Expenses" 
+        showBack={true}
+        onBack={() => navigate('/')}
+        hint="Split bills fairly with your roommates 💰"
+        rightContent={
+          <Button variant="gradient" size="sm" className="gap-2 press-effect" onClick={() => setShowScanner(true)}>
             <Camera className="w-4 h-4" />
             Scan Bill
           </Button>
-        </div>
+        }
+      />
 
-        {/* Summary Card */}
+      {/* Summary Card */}
+      <div className="px-4 mb-6">
         <div className="gradient-coral rounded-3xl p-5 shadow-coral">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -305,7 +312,7 @@ export const Expenses = () => {
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
       {/* Pending Approvals */}
       {pendingForMe.length > 0 && (
@@ -414,11 +421,13 @@ export const Expenses = () => {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : expenses.length === 0 ? (
-          <div className="text-center py-12">
-            <Receipt className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-            <p className="text-muted-foreground">No expenses yet</p>
-            <p className="text-sm text-muted-foreground/70 mt-1">Scan a bill to get started!</p>
-          </div>
+          <EmptyState
+            emoji="💸"
+            title="No expenses yet!"
+            description="Scan a bill or add an expense to start splitting costs with your roommates."
+            actionLabel="Scan First Bill"
+            onAction={() => setShowScanner(true)}
+          />
         ) : (
           expenses.map((expense, index) => {
             const mySplit = expense.splits?.find(s => s.user_id === user?.id);

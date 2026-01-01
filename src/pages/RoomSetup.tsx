@@ -139,7 +139,7 @@ export const RoomSetup = () => {
         <div className="w-full max-w-sm animate-slide-up">
           <button
             onClick={() => setStep("choice")}
-            className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors"
+            className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
           </button>
@@ -149,7 +149,7 @@ export const RoomSetup = () => {
           </div>
 
           <h1 className="font-display text-2xl font-bold text-foreground mb-2">
-            Create Your Room
+            Create Your Room ✨
           </h1>
           <p className="text-muted-foreground mb-8">
             Give your room a name that everyone will recognize
@@ -168,13 +168,17 @@ export const RoomSetup = () => {
             <Button
               variant="gradient"
               size="lg"
-              className="w-full"
+              className="w-full press-effect"
               onClick={handleCreateRoom}
               disabled={isLoading}
             >
               {isLoading ? "Creating..." : "Create Room"}
               <ArrowRight className="w-5 h-5" />
             </Button>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              You can invite friends later 🎉
+            </p>
           </div>
         </div>
       </div>
@@ -187,7 +191,7 @@ export const RoomSetup = () => {
         <div className="w-full max-w-sm animate-slide-up">
           <button
             onClick={() => setStep("choice")}
-            className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors"
+            className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
           </button>
@@ -197,10 +201,10 @@ export const RoomSetup = () => {
           </div>
 
           <h1 className="font-display text-2xl font-bold text-foreground mb-2">
-            Join a Room
+            Join a Room 🏠
           </h1>
           <p className="text-muted-foreground mb-8">
-            Enter the 6-character invite code from your roommate
+            Enter the 6-character code from your roommate
           </p>
 
           <div className="space-y-4">
@@ -216,13 +220,17 @@ export const RoomSetup = () => {
             <Button
               variant="gradientCoral"
               size="lg"
-              className="w-full"
+              className="w-full press-effect"
               onClick={handleJoinRoom}
               disabled={isLoading}
             >
               {isLoading ? "Joining..." : "Join Room"}
               <ArrowRight className="w-5 h-5" />
             </Button>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              Ask your roommate for the code 💬
+            </p>
           </div>
         </div>
       </div>

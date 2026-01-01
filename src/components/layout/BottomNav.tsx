@@ -32,10 +32,10 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300",
+                "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 press-effect",
                 isActive
                   ? "bg-primary/10 scale-105"
-                  : "hover:bg-muted/50 active:scale-95"
+                  : "hover:bg-muted/50"
               )}
             >
               <item.icon
