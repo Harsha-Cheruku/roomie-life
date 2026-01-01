@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2 } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { TopBar } from "@/components/layout/TopBar";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
+import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -182,26 +184,31 @@ export const Tasks = () => {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
-      <header className="px-4 pt-6 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="font-display text-2xl font-bold text-foreground">Tasks</h1>
+      {/* Header with TopBar */}
+      <TopBar 
+        title="Tasks" 
+        showBack={true}
+        onBack={() => navigate('/')}
+        hint="Everything here is shared with your room ❤️"
+        rightContent={
           <div className="flex gap-2">
-            <Button variant="glass" size="iconSm">
+            <Button variant="glass" size="iconSm" className="press-effect">
               <Calendar className="w-4 h-4" />
             </Button>
-            <Button variant="glass" size="iconSm">
+            <Button variant="glass" size="iconSm" className="press-effect">
               <Filter className="w-4 h-4" />
             </Button>
           </div>
-        </div>
+        }
+      />
 
-        {/* View Toggle */}
+      {/* View Toggle */}
+      <div className="px-4 mb-4">
         <div className="flex gap-2 p-1 bg-muted rounded-xl">
           <button
             onClick={() => setView("board")}
             className={cn(
-              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all press-effect",
               view === "board" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
             )}
           >
@@ -210,14 +217,14 @@ export const Tasks = () => {
           <button
             onClick={() => setView("list")}
             className={cn(
-              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all press-effect",
               view === "list" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
             )}
           >
             List
           </button>
         </div>
-      </header>
+      </div>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -350,17 +357,13 @@ export const Tasks = () => {
           {view === "list" && (
             <div className="px-4 space-y-3">
               {tasks.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-muted-foreground">No tasks yet</p>
-                  <Button 
-                    variant="outline" 
-                    className="mt-4"
-                    onClick={() => setShowCreateDialog(true)}
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create First Task
-                  </Button>
-                </div>
+                <EmptyState
+                  emoji="🌱"
+                  title="Looks peaceful here"
+                  description="No tasks yet! Add your first task and start getting things done together."
+                  actionLabel="Add First Task"
+                  onAction={() => setShowCreateDialog(true)}
+                />
               ) : (
                 tasks.map((task, index) => {
                   const StatusIcon = statusIcons[task.status];
