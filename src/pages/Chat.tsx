@@ -349,11 +349,15 @@ export const Chat = () => {
     <div className="min-h-screen bg-background flex flex-col pb-20">
       {/* Header */}
       <header className="px-4 py-3 bg-card border-b border-border flex items-center gap-3 sticky top-0 z-10">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
+        <button
+          onClick={() => navigate('/')}
+          className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center hover:bg-muted/80 transition-all active:scale-95 press-effect"
+          aria-label="Go back"
+        >
+          <ArrowLeft className="w-5 h-5 text-foreground" />
+        </button>
         <div className="flex-1">
-          <h1 className="font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
+          <h1 className="font-display font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Users className="w-3 h-3" />
             <span>{roomMembers.length} members</span>
