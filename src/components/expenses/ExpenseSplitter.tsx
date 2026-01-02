@@ -183,10 +183,13 @@ export const ExpenseSplitter = ({
         .insert({
           room_id: currentRoom.id,
           created_by: user.id,
+          paid_by: user.id,
           title,
           total_amount: calculateTotal(),
           receipt_url: receiptImage,
           status: 'pending',
+          category: 'general',
+          split_type: 'custom',
         })
         .select()
         .single();
