@@ -216,33 +216,45 @@ export type Database = {
       }
       expenses: {
         Row: {
+          category: string | null
           created_at: string
           created_by: string
           id: string
+          notes: string | null
+          paid_by: string
           receipt_url: string | null
           room_id: string
+          split_type: string | null
           status: string
           title: string
           total_amount: number
           updated_at: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           created_by: string
           id?: string
+          notes?: string | null
+          paid_by: string
           receipt_url?: string | null
           room_id: string
+          split_type?: string | null
           status?: string
           title: string
           total_amount: number
           updated_at?: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           created_by?: string
           id?: string
+          notes?: string | null
+          paid_by?: string
           receipt_url?: string | null
           room_id?: string
+          split_type?: string | null
           status?: string
           title?: string
           total_amount?: number

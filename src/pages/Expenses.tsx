@@ -6,6 +6,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
+import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
+import { SettleUpDialog } from "@/components/expenses/SettleUpDialog";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -57,12 +59,14 @@ export const Expenses = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showScanner, setShowScanner] = useState(false);
   const [showSplitter, setShowSplitter] = useState(false);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showSettleUp, setShowSettleUp] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [updatingSplitId, setUpdatingSplitId] = useState<string | null>(null);
 
   // Calculate summary stats
-  const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0 });
+  const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0, youAreOwed: 0 });
 
   useEffect(() => {
     if (currentRoom) {
@@ -125,11 +129,18 @@ export const Expenses = () => {
       let totalSpent = 0;
       let youPaid = 0;
       let youOwe = 0;
+      let youAreOwed = 0;
 
       expensesWithProfiles.forEach(expense => {
         totalSpent += expense.total_amount;
         if (expense.created_by === user.id) {
           youPaid += expense.total_amount;
+          // Calculate how much others owe you from this expense
+          expense.splits?.forEach(split => {
+            if (split.user_id !== user.id && !split.is_paid && split.status === 'accepted') {
+              youAreOwed += split.amount;
+            }
+          });
         }
         const userSplit = expense.splits?.find(s => s.user_id === user.id);
         if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted') {
@@ -137,7 +148,7 @@ export const Expenses = () => {
         }
       });
 
-      setStats({ total: totalSpent, youPaid, youOwe });
+      setStats({ total: totalSpent, youPaid, youOwe, youAreOwed });
 
       // Calculate balances with other users
       await calculateBalances(expensesWithProfiles);
@@ -269,10 +280,16 @@ export const Expenses = () => {
         onBack={() => navigate('/')}
         hint="Split bills fairly with your roommates 💰"
         rightContent={
-          <Button variant="gradient" size="sm" className="gap-2 press-effect" onClick={() => setShowScanner(true)}>
-            <Camera className="w-4 h-4" />
-            Scan Bill
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="gap-2 press-effect" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-4 h-4" />
+              Add
+            </Button>
+            <Button variant="gradient" size="sm" className="gap-2 press-effect" onClick={() => setShowScanner(true)}>
+              <Camera className="w-4 h-4" />
+              Scan
+            </Button>
+          </div>
         }
       />
 
@@ -291,23 +308,32 @@ export const Expenses = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-2">
             <div className="bg-primary-foreground/10 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">You Paid</span>
+              <div className="flex items-center gap-1 mb-1">
+                <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
+                <span className="text-xs text-primary-foreground/70">Paid</span>
               </div>
-              <p className="text-lg font-bold text-primary-foreground">
+              <p className="text-base font-bold text-primary-foreground">
                 ₹{stats.youPaid.toLocaleString()}
               </p>
             </div>
             <div className="bg-primary-foreground/10 rounded-xl p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingDown className="w-4 h-4 text-primary-foreground/70" />
+              <div className="flex items-center gap-1 mb-1">
+                <TrendingDown className="w-3 h-3 text-primary-foreground/70" />
                 <span className="text-xs text-primary-foreground/70">You Owe</span>
               </div>
-              <p className="text-lg font-bold text-primary-foreground">
+              <p className="text-base font-bold text-primary-foreground">
                 ₹{stats.youOwe.toLocaleString()}
+              </p>
+            </div>
+            <div className="bg-primary-foreground/10 rounded-xl p-3">
+              <div className="flex items-center gap-1 mb-1">
+                <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
+                <span className="text-xs text-primary-foreground/70">Owed</span>
+              </div>
+              <p className="text-base font-bold text-primary-foreground">
+                ₹{stats.youAreOwed.toLocaleString()}
               </p>
             </div>
           </div>
@@ -374,7 +400,7 @@ export const Expenses = () => {
         <section className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-lg font-semibold text-foreground">Balances</h2>
-            <button className="text-sm text-primary font-medium">Settle Up</button>
+            <button className="text-sm text-primary font-medium press-effect" onClick={() => setShowSettleUp(true)}>Settle Up</button>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2">
             {balances.map((person, index) => (
@@ -476,7 +502,7 @@ export const Expenses = () => {
           })
         )}
 
-        <Button variant="outline" className="w-full mt-4" onClick={() => setShowScanner(true)}>
+        <Button variant="outline" className="w-full mt-4" onClick={() => setShowCreateDialog(true)}>
           <Plus className="w-4 h-4 mr-2" />
           Add Expense
         </Button>
@@ -495,6 +521,21 @@ export const Expenses = () => {
         onOpenChange={setShowSplitter}
         scanResult={scanResult}
         receiptImage={receiptImage}
+        onComplete={handleExpenseComplete}
+      />
+
+      {/* Create Expense Dialog */}
+      <CreateExpenseDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onComplete={handleExpenseComplete}
+      />
+
+      {/* Settle Up Dialog */}
+      <SettleUpDialog
+        open={showSettleUp}
+        onOpenChange={setShowSettleUp}
+        balances={balances}
         onComplete={handleExpenseComplete}
       />
 
