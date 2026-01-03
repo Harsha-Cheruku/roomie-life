@@ -195,17 +195,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { error: new Error("You're already in a room. Leave your current room first.") };
       }
 
-      const { data: room, error: roomError } = await supabase
-        .from("rooms")
-        .select("*")
-        .eq("invite_code", inviteCode.toUpperCase().trim())
-        .maybeSingle();
+      // Use secure function to lookup room by invite code (prevents enumeration)
+      const { data: rooms, error: roomError } = await supabase
+        .rpc('lookup_room_by_invite_code', { code: inviteCode.trim() });
 
       if (roomError) {
         console.error("Room lookup error:", roomError);
         return { error: new Error("Failed to find room") };
       }
 
+      const room = rooms?.[0];
       if (!room) {
         return { error: new Error("Invalid invite code. Please check and try again.") };
       }

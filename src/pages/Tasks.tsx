@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
@@ -10,6 +9,7 @@ import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useNavigation } from "@/hooks/useNavigation";
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -62,7 +62,7 @@ export const Tasks = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
-  const navigate = useNavigate();
+  const { navigate, navigateToTab, goBack } = useNavigation();
   const { user, currentRoom } = useAuth();
   const { toast } = useToast();
 
@@ -171,14 +171,6 @@ export const Tasks = () => {
     return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
-  const handleTabChange = (tab: string) => {
-    if (tab === 'home') navigate('/');
-    else if (tab === 'tasks') navigate('/tasks');
-    else if (tab === 'expenses') navigate('/expenses');
-    else if (tab === 'storage') navigate('/storage');
-    else if (tab === 'chat') navigate('/chat');
-  };
-
   // Filter out rejected tasks for board view
   const boardTasks = tasks.filter(t => t.status !== 'rejected');
 
@@ -188,7 +180,7 @@ export const Tasks = () => {
       <TopBar 
         title="Tasks" 
         showBack={true}
-        onBack={() => navigate('/')}
+        onBack={goBack}
         hint="Everything here is shared with your room ❤️"
         rightContent={
           <div className="flex gap-2">
@@ -470,7 +462,7 @@ export const Tasks = () => {
         onTaskCreated={fetchTasks}
       />
 
-      <BottomNav activeTab="tasks" onTabChange={handleTabChange} />
+      <BottomNav activeTab="tasks" onTabChange={navigateToTab} />
     </div>
   );
 };
