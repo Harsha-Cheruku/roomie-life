@@ -480,9 +480,30 @@ export type Database = {
     }
     Functions: {
       get_user_room_ids: { Args: { _user_id: string }; Returns: string[] }
+      is_room_admin: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
       is_room_member: {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
+      }
+      lookup_room_by_invite_code: {
+        Args: { code: string }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          id: string
+          invite_code: string
+          name: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "rooms"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
     }
     Enums: {

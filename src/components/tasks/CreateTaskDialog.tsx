@@ -8,15 +8,8 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useRoomMembers } from '@/hooks/useRoomMembers';
 import { cn } from '@/lib/utils';
-
-interface RoomMember {
-  user_id: string;
-  profile: {
-    display_name: string;
-    avatar: string;
-  };
-}
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -27,61 +20,14 @@ interface CreateTaskDialogProps {
 export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTaskDialogProps) => {
   const { user, currentRoom } = useAuth();
   const { toast } = useToast();
+  const { members } = useRoomMembers();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [dueDate, setDueDate] = useState('');
   const [reminderTime, setReminderTime] = useState('');
-  const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (currentRoom && open) {
-      fetchRoomMembers();
-    }
-  }, [currentRoom, open]);
-
-  const fetchRoomMembers = async () => {
-    if (!currentRoom) return;
-
-    // First get room members
-    const { data: membersData, error: membersError } = await supabase
-      .from('room_members')
-      .select('user_id')
-      .eq('room_id', currentRoom.id);
-
-    if (membersError) {
-      console.error('Error fetching room members:', membersError);
-      return;
-    }
-
-    const userIds = membersData?.map(m => m.user_id) || [];
-    
-    // Then get profiles for those users
-    const { data: profilesData, error: profilesError } = await supabase
-      .from('profiles')
-      .select('user_id, display_name, avatar')
-      .in('user_id', userIds);
-
-    if (profilesError) {
-      console.error('Error fetching profiles:', profilesError);
-      return;
-    }
-
-    const members = userIds.map(userId => {
-      const profile = profilesData?.find(p => p.user_id === userId);
-      return {
-        user_id: userId,
-        profile: {
-          display_name: profile?.display_name || 'Unknown',
-          avatar: profile?.avatar || '😊',
-        },
-      };
-    });
-
-    setRoomMembers(members);
-  };
 
   const handleSubmit = async () => {
     if (!user || !currentRoom || !title.trim() || !assignedTo) {
@@ -171,7 +117,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
               Assign to
             </label>
             <div className="grid grid-cols-2 gap-2 mt-2">
-              {roomMembers.map(member => (
+              {members.map(member => (
                 <button
                   key={member.user_id}
                   onClick={() => setAssignedTo(member.user_id)}
@@ -184,11 +130,11 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
                 >
                   <Avatar className="w-8 h-8">
                     <AvatarFallback className="bg-primary/20">
-                      {member.profile.avatar}
+                      {member.avatar}
                     </AvatarFallback>
                   </Avatar>
                   <span className="flex-1 text-left text-sm truncate">
-                    {member.user_id === user?.id ? 'You' : member.profile.display_name}
+                    {member.user_id === user?.id ? 'You' : member.display_name}
                   </span>
                 </button>
               ))}
