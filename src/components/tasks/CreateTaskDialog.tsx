@@ -45,29 +45,40 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
   const fetchRoomMembers = async () => {
     if (!currentRoom) return;
 
-    const { data, error } = await supabase
+    // First get room members
+    const { data: membersData, error: membersError } = await supabase
       .from('room_members')
-      .select(`
-        user_id,
-        profiles:user_id (
-          display_name,
-          avatar
-        )
-      `)
+      .select('user_id')
       .eq('room_id', currentRoom.id);
 
-    if (error) {
-      console.error('Error fetching room members:', error);
+    if (membersError) {
+      console.error('Error fetching room members:', membersError);
       return;
     }
 
-    const members = data?.map((member: any) => ({
-      user_id: member.user_id,
-      profile: {
-        display_name: member.profiles?.display_name || 'Unknown',
-        avatar: member.profiles?.avatar || '😊',
-      },
-    })) || [];
+    const userIds = membersData?.map(m => m.user_id) || [];
+    
+    // Then get profiles for those users
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', userIds);
+
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+      return;
+    }
+
+    const members = userIds.map(userId => {
+      const profile = profilesData?.find(p => p.user_id === userId);
+      return {
+        user_id: userId,
+        profile: {
+          display_name: profile?.display_name || 'Unknown',
+          avatar: profile?.avatar || '😊',
+        },
+      };
+    });
 
     setRoomMembers(members);
   };
