@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,9 +27,14 @@ interface Expense {
   title: string;
   total_amount: number;
   created_by: string;
+  paid_by: string;
   status: string;
   created_at: string;
   creator_profile?: {
+    display_name: string;
+    avatar: string;
+  };
+  payer_profile?: {
     display_name: string;
     avatar: string;
   };
@@ -64,17 +69,12 @@ export const Expenses = () => {
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [updatingSplitId, setUpdatingSplitId] = useState<string | null>(null);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   // Calculate summary stats
   const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0, youAreOwed: 0 });
 
-  useEffect(() => {
-    if (currentRoom) {
-      fetchExpenses();
-    }
-  }, [currentRoom, activeTab]);
-
-  const fetchExpenses = async () => {
+  const fetchExpenses = useCallback(async () => {
     if (!currentRoom || !user) return;
 
     setIsLoading(true);
@@ -86,6 +86,7 @@ export const Expenses = () => {
           title,
           total_amount,
           created_by,
+          paid_by,
           status,
           created_at,
           expense_splits (
@@ -108,42 +109,66 @@ export const Expenses = () => {
       const { data: expenseData, error: expenseError } = await query;
       if (expenseError) throw expenseError;
 
-      // Fetch creator profiles
-      const creatorIds = [...new Set(expenseData?.map(e => e.created_by) || [])];
+      // Fetch creator and payer profiles
+      const userIds = [...new Set([
+        ...(expenseData?.map(e => e.created_by) || []),
+        ...(expenseData?.map(e => e.paid_by) || [])
+      ])];
+      
       const { data: profiles } = await supabase
         .from('profiles')
         .select('user_id, display_name, avatar')
-        .in('user_id', creatorIds);
+        .in('user_id', userIds);
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
       const expensesWithProfiles = expenseData?.map(expense => ({
         ...expense,
         creator_profile: profileMap.get(expense.created_by),
+        payer_profile: profileMap.get(expense.paid_by),
         splits: expense.expense_splits,
       })) || [];
 
       setExpenses(expensesWithProfiles);
 
-      // Calculate stats
+      // Calculate stats from ALL expenses (not filtered)
+      const { data: allExpenses } = await supabase
+        .from('expenses')
+        .select(`
+          id,
+          total_amount,
+          created_by,
+          paid_by,
+          expense_splits (
+            id,
+            user_id,
+            amount,
+            is_paid,
+            status
+          )
+        `)
+        .eq('room_id', currentRoom.id);
+
       let totalSpent = 0;
       let youPaid = 0;
       let youOwe = 0;
       let youAreOwed = 0;
 
-      expensesWithProfiles.forEach(expense => {
+      allExpenses?.forEach(expense => {
         totalSpent += expense.total_amount;
-        if (expense.created_by === user.id) {
+        
+        if (expense.paid_by === user.id) {
           youPaid += expense.total_amount;
           // Calculate how much others owe you from this expense
-          expense.splits?.forEach(split => {
+          expense.expense_splits?.forEach((split: any) => {
             if (split.user_id !== user.id && !split.is_paid && split.status === 'accepted') {
               youAreOwed += split.amount;
             }
           });
         }
-        const userSplit = expense.splits?.find(s => s.user_id === user.id);
-        if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted') {
+        
+        const userSplit = expense.expense_splits?.find((s: any) => s.user_id === user.id);
+        if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted' && expense.paid_by !== user.id) {
           youOwe += userSplit.amount;
         }
       });
@@ -151,41 +176,67 @@ export const Expenses = () => {
       setStats({ total: totalSpent, youPaid, youOwe, youAreOwed });
 
       // Calculate balances with other users
-      await calculateBalances(expensesWithProfiles);
+      await calculateBalances(allExpenses || []);
     } catch (error) {
       console.error('Error fetching expenses:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentRoom, user, activeTab]);
 
-  const calculateBalances = async (expenseData: Expense[]) => {
+  useEffect(() => {
+    if (currentRoom) {
+      fetchExpenses();
+      
+      // Subscribe to realtime updates for instant KPI refresh
+      const channel = supabase
+        .channel('expenses-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` },
+          () => fetchExpenses()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'expense_splits' },
+          () => fetchExpenses()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [currentRoom, activeTab, fetchExpenses]);
+
+  const calculateBalances = async (expenseData: any[]) => {
     if (!currentRoom || !user) return;
 
     const { data: members } = await supabase
       .from('room_members')
-      .select(`
-        user_id,
-        profiles:user_id (
-          display_name,
-          avatar
-        )
-      `)
+      .select('user_id')
       .eq('room_id', currentRoom.id)
       .neq('user_id', user.id);
+
+    const memberIds = members?.map(m => m.user_id) || [];
+    
+    const { data: memberProfiles } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', memberIds);
 
     const balanceMap = new Map<string, number>();
 
     expenseData.forEach(expense => {
-      expense.splits?.forEach(split => {
-        if (split.user_id !== user.id && split.status === 'accepted') {
+      expense.expense_splits?.forEach((split: any) => {
+        if (split.status === 'accepted') {
           // If the current user paid and this person owes
-          if (expense.created_by === user.id && !split.is_paid) {
+          if (expense.paid_by === user.id && split.user_id !== user.id && !split.is_paid) {
             balanceMap.set(split.user_id, (balanceMap.get(split.user_id) || 0) + split.amount);
           }
           // If this person paid and current user owes
-          if (expense.created_by === split.user_id) {
-            const userSplit = expense.splits?.find(s => s.user_id === user.id);
+          if (expense.paid_by === split.user_id && split.user_id !== user.id) {
+            const userSplit = expense.expense_splits?.find((s: any) => s.user_id === user.id);
             if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted') {
               balanceMap.set(split.user_id, (balanceMap.get(split.user_id) || 0) - userSplit.amount);
             }
@@ -194,10 +245,10 @@ export const Expenses = () => {
       });
     });
 
-    const balanceList = members?.map((member: any) => ({
+    const balanceList = memberProfiles?.map(member => ({
       user_id: member.user_id,
-      name: member.profiles?.display_name || 'Unknown',
-      avatar: member.profiles?.avatar || '😊',
+      name: member.display_name || 'Unknown',
+      avatar: member.avatar || '😊',
       owes: balanceMap.get(member.user_id) || 0,
     })) || [];
 
@@ -214,6 +265,12 @@ export const Expenses = () => {
     setScanResult(null);
     setReceiptImage(null);
     fetchExpenses();
+    
+    // Show success and offer to view the created expense
+    toast({
+      title: 'Expense created! 🎉',
+      description: 'Your expense has been saved and split.',
+    });
   };
 
   const handleSplitAction = async (splitId: string, action: 'accepted' | 'rejected') => {
@@ -233,6 +290,50 @@ export const Expenses = () => {
       fetchExpenses();
     } catch (error) {
       console.error('Error updating split:', error);
+      toast({
+        title: 'Failed to update',
+        variant: 'destructive',
+      });
+    } finally {
+      setUpdatingSplitId(null);
+    }
+  };
+
+  const handlePayment = async (split: ExpenseSplit, expense: Expense) => {
+    // Create UPI payment URL
+    const payerProfile = expense.payer_profile;
+    const amount = split.amount.toFixed(2);
+    const note = encodeURIComponent(`Payment for: ${expense.title}`);
+    
+    // Generic UPI intent - works with most UPI apps
+    const upiUrl = `upi://pay?pa=&pn=${encodeURIComponent(payerProfile?.display_name || 'Roommate')}&am=${amount}&cu=INR&tn=${note}`;
+    
+    // Open UPI app
+    window.open(upiUrl, '_blank');
+    
+    toast({
+      title: 'Opening payment app...',
+      description: 'Complete the payment in your UPI app, then mark as paid here.',
+    });
+  };
+
+  const markAsPaid = async (splitId: string) => {
+    setUpdatingSplitId(splitId);
+    try {
+      const { error } = await supabase
+        .from('expense_splits')
+        .update({ is_paid: true })
+        .eq('id', splitId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Marked as paid! ✓',
+      });
+
+      fetchExpenses();
+    } catch (error) {
+      console.error('Error marking as paid:', error);
       toast({
         title: 'Failed to update',
         variant: 'destructive',
@@ -265,10 +366,16 @@ export const Expenses = () => {
     return '📝';
   };
 
-  // Get pending expenses for current user
+  // Get pending expenses for current user (only from others, not self-created)
   const pendingForMe = expenses.filter(exp => {
     const mySplit = exp.splits?.find(s => s.user_id === user?.id);
     return mySplit && mySplit.status === 'pending' && exp.created_by !== user?.id;
+  });
+
+  // Get my unpaid splits that need payment
+  const unpaidSplits = expenses.filter(exp => {
+    const mySplit = exp.splits?.find(s => s.user_id === user?.id);
+    return mySplit && mySplit.status === 'accepted' && !mySplit.is_paid && exp.paid_by !== user?.id;
   });
 
   return (
@@ -395,6 +502,61 @@ export const Expenses = () => {
         </section>
       )}
 
+      {/* Unpaid - Need to Pay */}
+      {unpaidSplits.length > 0 && (
+        <section className="px-4 mb-6">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+            <CreditCard className="w-5 h-5 text-coral" />
+            You Need to Pay ({unpaidSplits.length})
+          </h2>
+          <div className="space-y-3">
+            {unpaidSplits.map((expense, index) => {
+              const mySplit = expense.splits?.find(s => s.user_id === user?.id);
+              const isUpdating = updatingSplitId === mySplit?.id;
+              
+              return (
+                <div
+                  key={expense.id}
+                  className="bg-coral/10 border border-coral/30 rounded-2xl p-4 animate-slide-up"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-coral/20 flex items-center justify-center text-xl">
+                      {getCategoryEmoji(expense.title)}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-semibold text-foreground">{expense.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Pay ₹{mySplit?.amount.toFixed(0)} to {expense.payer_profile?.display_name}
+                      </p>
+                    </div>
+                    <span className="text-lg font-bold text-coral">₹{mySplit?.amount.toFixed(0)}</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      className="flex-1 h-10 gap-2"
+                      onClick={() => mySplit && handlePayment(mySplit, expense)}
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      Pay via UPI
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-10 gap-2"
+                      onClick={() => mySplit && markAsPaid(mySplit.id)}
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Mark Paid
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Balances */}
       {balances.length > 0 && (
         <section className="px-4 mb-6">
@@ -470,9 +632,9 @@ export const Expenses = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-lg">{expense.creator_profile?.avatar || '😊'}</span>
+                    <span className="text-lg">{expense.payer_profile?.avatar || '😊'}</span>
                     <span className="text-xs text-muted-foreground">
-                      {expense.created_by === user?.id ? 'You' : expense.creator_profile?.display_name} paid
+                      {expense.paid_by === user?.id ? 'You' : expense.payer_profile?.display_name} paid
                     </span>
                     <Users className="w-3 h-3 text-muted-foreground" />
                     <span className="text-xs text-muted-foreground">
@@ -483,14 +645,15 @@ export const Expenses = () => {
                 <div className="text-right">
                   <p className="text-sm font-bold text-foreground">₹{expense.total_amount.toLocaleString()}</p>
                   <div className="flex items-center gap-1 justify-end mt-1">
-                    {mySplit && expense.created_by !== user?.id && (
+                    {mySplit && expense.paid_by !== user?.id && (
                       <span className={cn(
                         "text-xs px-2 py-0.5 rounded-full",
-                        mySplit.status === 'accepted' ? 'bg-mint/20 text-mint' :
-                        mySplit.status === 'rejected' ? 'bg-coral/20 text-coral' :
+                        mySplit.is_paid ? 'bg-mint/20 text-mint' :
+                        mySplit.status === 'accepted' ? 'bg-coral/20 text-coral' :
+                        mySplit.status === 'rejected' ? 'bg-muted text-muted-foreground' :
                         'bg-accent/20 text-accent'
                       )}>
-                        {mySplit.status === 'accepted' ? '✓' : mySplit.status === 'rejected' ? '✗' : '⏳'}
+                        {mySplit.is_paid ? '✓ Paid' : mySplit.status === 'accepted' ? '₹' + mySplit.amount.toFixed(0) : mySplit.status === 'rejected' ? '✗' : '⏳'}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{formatDate(expense.created_at)}</span>

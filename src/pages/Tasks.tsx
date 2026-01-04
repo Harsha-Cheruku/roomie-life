@@ -174,6 +174,13 @@ export const Tasks = () => {
   // Filter out rejected tasks for board view
   const boardTasks = tasks.filter(t => t.status !== 'rejected');
 
+  // Check if task needs accept/reject buttons (only if assigned by someone else AND pending)
+  const needsApproval = (task: Task) => {
+    return task.status === 'pending' && 
+           task.assigned_to === user?.id && 
+           task.created_by !== user?.id;
+  };
+
   return (
     <div className="min-h-screen bg-background pb-32">
       {/* Header with TopBar */}
@@ -247,6 +254,7 @@ export const Tasks = () => {
                             const StatusIcon = statusIcons[task.status];
                             const isAssignedToMe = task.assigned_to === user?.id;
                             const isUpdating = updatingTaskId === task.id;
+                            const showApprovalButtons = needsApproval(task);
                             
                             return (
                               <div
@@ -275,10 +283,10 @@ export const Tasks = () => {
                                   )}
                                 </div>
 
-                                {/* Action buttons for assigned user */}
+                                {/* Action buttons - Only show if needs approval or assignee can progress */}
                                 {isAssignedToMe && (
                                   <div className="flex gap-2 pt-2 border-t border-border/50">
-                                    {task.status === 'pending' && (
+                                    {showApprovalButtons && (
                                       <>
                                         <Button
                                           size="sm"
@@ -362,6 +370,7 @@ export const Tasks = () => {
                   const column = columns.find((c) => c.id === task.status) || columns[0];
                   const isAssignedToMe = task.assigned_to === user?.id;
                   const isUpdating = updatingTaskId === task.id;
+                  const showApprovalButtons = needsApproval(task);
 
                   return (
                     <div
@@ -393,7 +402,7 @@ export const Tasks = () => {
                       {/* Action buttons */}
                       {isAssignedToMe && task.status !== 'done' && task.status !== 'rejected' && (
                         <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                          {task.status === 'pending' && (
+                          {showApprovalButtons && (
                             <>
                               <Button
                                 size="sm"
@@ -419,7 +428,7 @@ export const Tasks = () => {
                           {task.status === 'accepted' && (
                             <Button
                               size="sm"
-                              className="w-full h-8 text-xs"
+                              className="flex-1 h-8 text-xs"
                               onClick={() => handleTaskAction(task.id, 'start')}
                               disabled={isUpdating}
                             >
@@ -429,7 +438,7 @@ export const Tasks = () => {
                           {task.status === 'in_progress' && (
                             <Button
                               size="sm"
-                              className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
+                              className="flex-1 h-8 text-xs bg-mint hover:bg-mint/90"
                               onClick={() => handleTaskAction(task.id, 'complete')}
                               disabled={isUpdating}
                             >
@@ -442,27 +451,26 @@ export const Tasks = () => {
                   );
                 })
               )}
-
-              <Button 
-                variant="outline" 
-                className="w-full mt-4" 
-                onClick={() => setShowCreateDialog(true)}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Task
-              </Button>
             </div>
           )}
         </>
       )}
 
-      <CreateTaskDialog
-        open={showCreateDialog}
+      {/* Create Task FAB */}
+      <button
+        onClick={() => setShowCreateDialog(true)}
+        className="fixed bottom-24 right-4 w-14 h-14 gradient-primary rounded-2xl shadow-glow flex items-center justify-center text-primary-foreground press-effect z-40"
+      >
+        <Plus className="w-6 h-6" />
+      </button>
+
+      <CreateTaskDialog 
+        open={showCreateDialog} 
         onOpenChange={setShowCreateDialog}
         onTaskCreated={fetchTasks}
       />
 
-      <BottomNav activeTab="tasks" onTabChange={navigateToTab} />
+      <BottomNav activeTab="tasks" onTabChange={() => {}} />
     </div>
   );
 };

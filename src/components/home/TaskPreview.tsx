@@ -14,6 +14,7 @@ interface Task {
   id: string;
   title: string;
   assigned_to: string;
+  created_by: string;
   status: TaskStatus;
   priority: Priority;
   due_date: string | null;
@@ -136,6 +137,13 @@ export const TaskPreview = () => {
     return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
+  // Only show accept/reject for tasks assigned by someone else
+  const needsApproval = (task: Task) => {
+    return task.status === 'pending' && 
+           task.assigned_to === user?.id && 
+           task.created_by !== user?.id;
+  };
+
   if (isLoading) {
     return (
       <section className="px-4">
@@ -189,7 +197,7 @@ export const TaskPreview = () => {
           tasks.map((task, index) => {
             const StatusIcon = statusIcons[task.status];
             const isAssignedToMe = task.assigned_to === user?.id;
-            const isPending = task.status === 'pending' && isAssignedToMe;
+            const showApprovalButtons = needsApproval(task);
             const isUpdating = updatingTaskId === task.id;
 
             return (
@@ -197,7 +205,7 @@ export const TaskPreview = () => {
                 key={task.id}
                 className={cn(
                   "bg-card rounded-2xl p-4 shadow-card animate-slide-up",
-                  isPending && "border-2 border-accent/50"
+                  showApprovalButtons && "border-2 border-accent/50"
                 )}
                 style={{ animationDelay: `${index * 50}ms` }}
               >
@@ -244,8 +252,8 @@ export const TaskPreview = () => {
                   )}
                 </div>
 
-                {/* Accept/Reject buttons for pending tasks */}
-                {isPending && (
+                {/* Accept/Reject buttons only for tasks assigned by others */}
+                {showApprovalButtons && (
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
                     <Button
                       size="sm"

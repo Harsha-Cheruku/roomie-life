@@ -5,7 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -15,7 +16,7 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomSettings = () => {
-  const { currentRoom, user, setCurrentRoom } = useAuth();
+  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -25,6 +26,7 @@ export const RoomSettings = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
 
   useEffect(() => {
     if (!currentRoom) {
@@ -138,10 +140,25 @@ export const RoomSettings = () => {
     }
   };
 
+  const handleSwitchRoom = (room: typeof currentRoom) => {
+    if (room) {
+      switchRoom(room);
+      setShowRoomSwitcher(false);
+      toast({
+        title: `Switched to ${room.name}`,
+      });
+      navigate("/");
+    }
+  };
+
+  const handleCreateNewRoom = () => {
+    navigate("/setup");
+  };
+
   if (!currentRoom) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <header className="px-4 pt-6 pb-4 border-b border-border">
         <div className="flex items-center gap-3">
@@ -155,6 +172,72 @@ export const RoomSettings = () => {
       </header>
 
       <div className="p-4 space-y-6">
+        {/* Room Switcher Section */}
+        {userRooms.length > 0 && (
+          <section className="bg-card rounded-2xl p-4 shadow-card">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 text-primary" />
+                <h2 className="font-display text-lg font-semibold text-foreground">
+                  Switch Room
+                </h2>
+              </div>
+              <span className="text-xs text-muted-foreground">{userRooms.length} room{userRooms.length !== 1 ? 's' : ''}</span>
+            </div>
+
+            <div className="space-y-2">
+              {userRooms.map((room) => (
+                <button
+                  key={room.id}
+                  onClick={() => room.id !== currentRoom.id && handleSwitchRoom(room)}
+                  className={cn(
+                    "w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left",
+                    room.id === currentRoom.id 
+                      ? "bg-primary/10 border-2 border-primary" 
+                      : "bg-muted/50 hover:bg-muted border-2 border-transparent"
+                  )}
+                >
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center text-xl",
+                    room.id === currentRoom.id ? "bg-primary/20" : "bg-muted"
+                  )}>
+                    🏠
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "font-medium truncate",
+                      room.id === currentRoom.id ? "text-primary" : "text-foreground"
+                    )}>
+                      {room.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Code: {room.invite_code}
+                    </p>
+                  </div>
+                  {room.id === currentRoom.id && (
+                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
+                      Current
+                    </span>
+                  )}
+                </button>
+              ))}
+              
+              <button
+                onClick={handleCreateNewRoom}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-border hover:border-primary hover:bg-primary/5 transition-colors text-left"
+              >
+                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                  <Plus className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-muted-foreground">Create or Join Room</p>
+                  <p className="text-xs text-muted-foreground">Add another room</p>
+                </div>
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Room Name Section */}
         <section className="bg-card rounded-2xl p-4 shadow-card">
           <h2 className="font-display text-lg font-semibold text-foreground mb-4">
@@ -217,8 +300,9 @@ export const RoomSettings = () => {
                 key={member.user_id}
                 className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
               >
-                <div className="w-10 h-10 rounded-full bg-card border-2 border-border flex items-center justify-center text-xl">
+                <div className="relative w-10 h-10 rounded-full bg-card border-2 border-border flex items-center justify-center text-xl">
                   {member.avatar}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-muted bg-mint" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground truncate">
