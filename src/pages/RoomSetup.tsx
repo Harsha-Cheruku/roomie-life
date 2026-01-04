@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Home, Users, Plus, ArrowRight, Copy, Check, Sparkles } from "lucide-react";
+import { Home, Users, Plus, ArrowRight, Copy, Check, Sparkles, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SetupStep = "choice" | "create" | "join" | "success";
@@ -15,10 +15,23 @@ export const RoomSetup = () => {
   const [inviteCode, setInviteCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCheckingRooms, setIsCheckingRooms] = useState(true);
   
-  const { createRoom, joinRoom, currentRoom, profile } = useAuth();
+  const { createRoom, joinRoom, currentRoom, profile, userRooms, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Check if user already has rooms and redirect
+  useEffect(() => {
+    if (user && currentRoom) {
+      navigate("/", { replace: true });
+    } else if (user && userRooms.length > 0) {
+      // User has rooms but no current room selected - shouldn't happen, but handle it
+      navigate("/", { replace: true });
+    } else if (user) {
+      setIsCheckingRooms(false);
+    }
+  }, [user, currentRoom, userRooms, navigate]);
 
   const handleCreateRoom = async () => {
     if (!roomName.trim()) {
@@ -70,7 +83,7 @@ export const RoomSetup = () => {
         title: "Welcome! 🎉",
         description: "You've successfully joined the room",
       });
-      navigate("/");
+      navigate("/", { replace: true });
     }
   };
 
@@ -85,6 +98,18 @@ export const RoomSetup = () => {
       });
     }
   };
+
+  // Show loading while checking for existing rooms
+  if (isCheckingRooms) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center animate-pulse">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (step === "success" && currentRoom) {
     return (
@@ -122,7 +147,7 @@ export const RoomSetup = () => {
           <Button
             variant="gradient"
             size="lg"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/", { replace: true })}
             className="w-full max-w-xs"
           >
             Enter Room

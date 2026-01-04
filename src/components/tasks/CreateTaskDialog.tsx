@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Calendar, Clock, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +41,10 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
 
     setIsSubmitting(true);
     try {
+      // Self-assigned tasks are auto-accepted
+      const isSelfAssigned = assignedTo === user.id;
+      const initialStatus = isSelfAssigned ? 'accepted' : 'pending';
+      
       const { error } = await supabase
         .from('tasks')
         .insert({
@@ -50,7 +54,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
           title: title.trim(),
           description: description.trim() || null,
           priority,
-          status: 'pending',
+          status: initialStatus,
           due_date: dueDate ? new Date(dueDate).toISOString() : null,
           reminder_time: reminderTime ? new Date(reminderTime).toISOString() : null,
         });
@@ -59,7 +63,9 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
 
       toast({
         title: 'Task created!',
-        description: 'The task has been assigned',
+        description: isSelfAssigned 
+          ? 'Task added to your To Do list' 
+          : 'The task has been assigned',
       });
 
       // Reset form
@@ -134,7 +140,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
                     </AvatarFallback>
                   </Avatar>
                   <span className="flex-1 text-left text-sm truncate">
-                    {member.user_id === user?.id ? 'You' : member.display_name}
+                    {member.user_id === user?.id ? 'Myself' : member.display_name}
                   </span>
                 </button>
               ))}

@@ -22,6 +22,7 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   currentRoom: Room | null;
+  userRooms: Room[];
   loading: boolean;
   signUp: (email: string, password: string, displayName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -30,8 +31,12 @@ interface AuthContextType {
   joinRoom: (inviteCode: string) => Promise<{ error: Error | null }>;
   leaveRoom: () => Promise<{ error: Error | null }>;
   setCurrentRoom: (room: Room | null) => void;
+  switchRoom: (room: Room) => void;
   refreshProfile: () => Promise<void>;
+  refreshRooms: () => Promise<void>;
 }
+
+const LAST_ROOM_KEY = 'roommate_last_room_id';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -40,6 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
+  const [userRooms, setUserRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (userId: string) => {
@@ -54,16 +60,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const fetchUserRoom = async (userId: string) => {
-    const { data: membership } = await supabase
+  const fetchUserRooms = async (userId: string) => {
+    const { data: memberships } = await supabase
       .from("room_members")
       .select("room_id, rooms(*)")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
+      .eq("user_id", userId);
 
-    if (membership?.rooms) {
-      setCurrentRoom(membership.rooms as unknown as Room);
+    if (memberships && memberships.length > 0) {
+      const rooms = memberships
+        .map(m => m.rooms as unknown as Room)
+        .filter(Boolean);
+      
+      setUserRooms(rooms);
+
+      // Get last active room from localStorage
+      const lastRoomId = localStorage.getItem(LAST_ROOM_KEY);
+      
+      // Try to restore last active room, otherwise use first room
+      let roomToSet: Room | null = null;
+      
+      if (lastRoomId) {
+        roomToSet = rooms.find(r => r.id === lastRoomId) || null;
+      }
+      
+      if (!roomToSet && rooms.length > 0) {
+        roomToSet = rooms[0];
+      }
+      
+      if (roomToSet) {
+        setCurrentRoom(roomToSet);
+        localStorage.setItem(LAST_ROOM_KEY, roomToSet.id);
+      }
+    } else {
+      setUserRooms([]);
+      setCurrentRoom(null);
     }
   };
 
@@ -76,11 +106,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (session?.user) {
           setTimeout(() => {
             fetchProfile(session.user.id);
-            fetchUserRoom(session.user.id);
+            fetchUserRooms(session.user.id);
           }, 0);
         } else {
           setProfile(null);
           setCurrentRoom(null);
+          setUserRooms([]);
         }
       }
     );
@@ -91,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (session?.user) {
         fetchProfile(session.user.id);
-        fetchUserRoom(session.user.id);
+        fetchUserRooms(session.user.id);
       }
       setLoading(false);
     });
@@ -129,23 +160,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await supabase.auth.signOut();
     setProfile(null);
     setCurrentRoom(null);
+    setUserRooms([]);
+    localStorage.removeItem(LAST_ROOM_KEY);
   };
 
   const createRoom = async (name: string) => {
     if (!user) return { room: null, error: new Error("Not authenticated") };
 
     try {
-      // Check if user is already in a room
-      const { data: existingMembership } = await supabase
-        .from("room_members")
-        .select("room_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (existingMembership) {
-        return { room: null, error: new Error("You're already in a room. Leave your current room first.") };
-      }
-
       const { data: room, error: roomError } = await supabase
         .from("rooms")
         .insert({ name, created_by: user.id })
@@ -172,8 +194,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { room: null, error: new Error(memberError.message || "Failed to add you to the room") };
       }
 
-      setCurrentRoom(room as Room);
-      return { room: room as Room, error: null };
+      const newRoom = room as Room;
+      setCurrentRoom(newRoom);
+      setUserRooms(prev => [...prev, newRoom]);
+      localStorage.setItem(LAST_ROOM_KEY, newRoom.id);
+      
+      return { room: newRoom, error: null };
     } catch (err) {
       console.error("Unexpected error creating room:", err);
       return { room: null, error: new Error("An unexpected error occurred") };
@@ -184,17 +210,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return { error: new Error("Not authenticated") };
 
     try {
-      // Check if user is already in a room
-      const { data: existingMembership } = await supabase
-        .from("room_members")
-        .select("room_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (existingMembership) {
-        return { error: new Error("You're already in a room. Leave your current room first.") };
-      }
-
       // Use secure function to lookup room by invite code (prevents enumeration)
       const { data: rooms, error: roomError } = await supabase
         .rpc('lookup_room_by_invite_code', { code: inviteCode.trim() });
@@ -209,21 +224,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { error: new Error("Invalid invite code. Please check and try again.") };
       }
 
+      // Check if already a member
+      const { data: existingMember } = await supabase
+        .from("room_members")
+        .select("id")
+        .eq("room_id", room.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (existingMember) {
+        // Already a member - just set the room
+        const newRoom = room as Room;
+        setCurrentRoom(newRoom);
+        if (!userRooms.find(r => r.id === newRoom.id)) {
+          setUserRooms(prev => [...prev, newRoom]);
+        }
+        localStorage.setItem(LAST_ROOM_KEY, newRoom.id);
+        return { error: null };
+      }
+
       const { error: memberError } = await supabase
         .from("room_members")
         .insert({ room_id: room.id, user_id: user.id, role: "member" });
 
       if (memberError) {
-        if (memberError.code === "23505") {
-          // Already a member - just set the room
-          setCurrentRoom(room as Room);
-          return { error: null };
-        }
         console.error("Join room error:", memberError);
         return { error: new Error(memberError.message || "Failed to join room") };
       }
 
-      setCurrentRoom(room as Room);
+      const newRoom = room as Room;
+      setCurrentRoom(newRoom);
+      setUserRooms(prev => [...prev, newRoom]);
+      localStorage.setItem(LAST_ROOM_KEY, newRoom.id);
+      
       return { error: null };
     } catch (err) {
       console.error("Unexpected error joining room:", err);
@@ -246,7 +279,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { error: new Error(error.message || "Failed to leave room") };
       }
 
-      setCurrentRoom(null);
+      const leftRoomId = currentRoom.id;
+      const remainingRooms = userRooms.filter(r => r.id !== leftRoomId);
+      setUserRooms(remainingRooms);
+      
+      // Switch to another room if available
+      if (remainingRooms.length > 0) {
+        setCurrentRoom(remainingRooms[0]);
+        localStorage.setItem(LAST_ROOM_KEY, remainingRooms[0].id);
+      } else {
+        setCurrentRoom(null);
+        localStorage.removeItem(LAST_ROOM_KEY);
+      }
+      
       return { error: null };
     } catch (err) {
       console.error("Unexpected error leaving room:", err);
@@ -254,9 +299,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const switchRoom = (room: Room) => {
+    setCurrentRoom(room);
+    localStorage.setItem(LAST_ROOM_KEY, room.id);
+  };
+
   const refreshProfile = async () => {
     if (user) {
       await fetchProfile(user.id);
+    }
+  };
+
+  const refreshRooms = async () => {
+    if (user) {
+      await fetchUserRooms(user.id);
     }
   };
 
@@ -267,6 +323,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         session,
         profile,
         currentRoom,
+        userRooms,
         loading,
         signUp,
         signIn,
@@ -275,7 +332,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         joinRoom,
         leaveRoom,
         setCurrentRoom,
+        switchRoom,
         refreshProfile,
+        refreshRooms,
       }}
     >
       {children}
