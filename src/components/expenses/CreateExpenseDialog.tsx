@@ -82,29 +82,47 @@ export const CreateExpenseDialog = ({
   const fetchRoomMembers = async () => {
     if (!currentRoom) return;
 
-    const { data, error } = await supabase
+    // First get room member user_ids
+    const { data: memberData, error: memberError } = await supabase
       .from('room_members')
-      .select(`
-        user_id,
-        profiles:user_id (
-          display_name,
-          avatar
-        )
-      `)
+      .select('user_id')
       .eq('room_id', currentRoom.id);
 
-    if (error) {
-      console.error('Error fetching room members:', error);
+    if (memberError) {
+      console.error('Error fetching room members:', memberError);
       return;
     }
 
-    const members = data?.map((member: any) => ({
-      user_id: member.user_id,
-      profile: {
-        display_name: member.profiles?.display_name || 'Unknown',
-        avatar: member.profiles?.avatar || '😊',
-      },
-    })) || [];
+    if (!memberData || memberData.length === 0) {
+      setRoomMembers([]);
+      setMemberSplits([]);
+      return;
+    }
+
+    // Then fetch profiles for those users
+    const userIds = memberData.map(m => m.user_id);
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', userIds);
+
+    if (profileError) {
+      console.error('Error fetching profiles:', profileError);
+      return;
+    }
+
+    const profileMap = new Map(profileData?.map(p => [p.user_id, p]) || []);
+
+    const members = memberData.map(member => {
+      const profile = profileMap.get(member.user_id);
+      return {
+        user_id: member.user_id,
+        profile: {
+          display_name: profile?.display_name || 'Unknown',
+          avatar: profile?.avatar || '😊',
+        },
+      };
+    });
 
     setRoomMembers(members);
     
@@ -184,6 +202,19 @@ export const CreateExpenseDialog = ({
     return memberSplits.filter(m => m.selected).reduce((sum, m) => sum + m.percentage, 0);
   };
 
+  const isValidSplit = () => {
+    const totalAmount = parseFloat(amount) || 0;
+    if (totalAmount <= 0) return false;
+    
+    if (splitType === 'percentage') {
+      return Math.abs(getTotalPercentage() - 100) < 0.01;
+    }
+    if (splitType === 'custom') {
+      return Math.abs(getTotalSplitAmount() - totalAmount) < 0.01;
+    }
+    return true; // Equal split is always valid
+  };
+
   const saveExpense = async () => {
     if (!user || !currentRoom || !title.trim() || !amount) {
       toast({
@@ -195,12 +226,40 @@ export const CreateExpenseDialog = ({
     }
 
     const totalAmount = parseFloat(amount);
+    if (totalAmount <= 0) {
+      toast({
+        title: 'Invalid amount',
+        description: 'Amount must be greater than 0',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     const selectedSplits = memberSplits.filter(m => m.selected && m.amount > 0);
 
     if (selectedSplits.length === 0) {
       toast({
         title: 'No members selected',
         description: 'Please select at least one member to split with',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Validate split totals
+    if (splitType === 'percentage' && Math.abs(getTotalPercentage() - 100) >= 0.01) {
+      toast({
+        title: 'Invalid percentages',
+        description: 'Percentages must add up to 100%',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
+      toast({
+        title: 'Invalid split amounts',
+        description: `Split amounts must total ₹${totalAmount.toFixed(0)}`,
         variant: 'destructive',
       });
       return;

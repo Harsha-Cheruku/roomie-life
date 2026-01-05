@@ -79,29 +79,46 @@ export const ExpenseSplitter = ({
   const fetchRoomMembers = async () => {
     if (!currentRoom) return;
 
-    const { data, error } = await supabase
+    // First get room member user_ids
+    const { data: memberData, error: memberError } = await supabase
       .from('room_members')
-      .select(`
-        user_id,
-        profiles:user_id (
-          display_name,
-          avatar
-        )
-      `)
+      .select('user_id')
       .eq('room_id', currentRoom.id);
 
-    if (error) {
-      console.error('Error fetching room members:', error);
+    if (memberError) {
+      console.error('Error fetching room members:', memberError);
       return;
     }
 
-    const members = data?.map((member: any) => ({
-      user_id: member.user_id,
-      profile: {
-        display_name: member.profiles?.display_name || 'Unknown',
-        avatar: member.profiles?.avatar || '😊',
-      },
-    })) || [];
+    if (!memberData || memberData.length === 0) {
+      setRoomMembers([]);
+      return;
+    }
+
+    // Then fetch profiles for those users
+    const userIds = memberData.map(m => m.user_id);
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', userIds);
+
+    if (profileError) {
+      console.error('Error fetching profiles:', profileError);
+      return;
+    }
+
+    const profileMap = new Map(profileData?.map(p => [p.user_id, p]) || []);
+
+    const members = memberData.map(member => {
+      const profile = profileMap.get(member.user_id);
+      return {
+        user_id: member.user_id,
+        profile: {
+          display_name: profile?.display_name || 'Unknown',
+          avatar: profile?.avatar || '😊',
+        },
+      };
+    });
 
     setRoomMembers(members);
 
