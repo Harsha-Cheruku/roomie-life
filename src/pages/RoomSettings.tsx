@@ -152,7 +152,7 @@ export const RoomSettings = () => {
   };
 
   const handleCreateNewRoom = () => {
-    navigate("/setup");
+    navigate("/setup?add=true");
   };
 
   if (!currentRoom) return null;
