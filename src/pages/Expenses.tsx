@@ -8,6 +8,7 @@ import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
 import { SettleUpDialog } from "@/components/expenses/SettleUpDialog";
+import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -70,6 +71,8 @@ export const Expenses = () => {
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [updatingSplitId, setUpdatingSplitId] = useState<string | null>(null);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const [showExpenseDetail, setShowExpenseDetail] = useState(false);
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, { user_id: string; display_name: string; avatar: string }>>(new Map());
 
   // Calculate summary stats
   const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0, youAreOwed: 0 });
@@ -212,18 +215,23 @@ export const Expenses = () => {
   const calculateBalances = async (expenseData: any[]) => {
     if (!currentRoom || !user) return;
 
-    const { data: members } = await supabase
+    // Fetch all room members including current user for profiles
+    const { data: allMembers } = await supabase
       .from('room_members')
       .select('user_id')
-      .eq('room_id', currentRoom.id)
-      .neq('user_id', user.id);
+      .eq('room_id', currentRoom.id);
 
-    const memberIds = members?.map(m => m.user_id) || [];
+    const allMemberIds = allMembers?.map(m => m.user_id) || [];
     
-    const { data: memberProfiles } = await supabase
+    const { data: profilesData } = await supabase
       .from('profiles')
       .select('user_id, display_name, avatar')
-      .in('user_id', memberIds);
+      .in('user_id', allMemberIds);
+
+    // Store profiles for use in expense detail sheet
+    const profileMap = new Map<string, { user_id: string; display_name: string; avatar: string }>();
+    profilesData?.forEach(p => profileMap.set(p.user_id, p));
+    setMemberProfiles(profileMap);
 
     const balanceMap = new Map<string, number>();
 
@@ -245,7 +253,7 @@ export const Expenses = () => {
       });
     });
 
-    const balanceList = memberProfiles?.map(member => ({
+    const balanceList = profilesData?.filter(p => p.user_id !== user.id).map(member => ({
       user_id: member.user_id,
       name: member.display_name || 'Unknown',
       avatar: member.avatar || '😊',
@@ -621,9 +629,13 @@ export const Expenses = () => {
             const mySplit = expense.splits?.find(s => s.user_id === user?.id);
             
             return (
-              <div
+              <button
                 key={expense.id}
-                className="bg-card rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up"
+                onClick={() => {
+                  setSelectedExpense(expense);
+                  setShowExpenseDetail(true);
+                }}
+                className="w-full bg-card rounded-2xl p-4 shadow-card flex items-center gap-3 animate-slide-up text-left hover:bg-muted/50 transition-colors press-effect"
                 style={{ animationDelay: `${index * 30}ms` }}
               >
                 <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center text-2xl">
@@ -660,7 +672,7 @@ export const Expenses = () => {
                   </div>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </div>
+              </button>
             );
           })
         )}
@@ -700,6 +712,15 @@ export const Expenses = () => {
         onOpenChange={setShowSettleUp}
         balances={balances}
         onComplete={handleExpenseComplete}
+      />
+
+      {/* Expense Detail Sheet */}
+      <ExpenseDetailSheet
+        open={showExpenseDetail}
+        onOpenChange={setShowExpenseDetail}
+        expense={selectedExpense}
+        memberProfiles={memberProfiles}
+        onUpdate={fetchExpenses}
       />
 
       <BottomNav activeTab="expenses" onTabChange={(tab) => {
