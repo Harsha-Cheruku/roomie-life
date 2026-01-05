@@ -50,6 +50,20 @@ export const TaskPreview = () => {
   useEffect(() => {
     if (currentRoom) {
       fetchTasks();
+      
+      // Subscribe to realtime updates for instant KPI refresh
+      const channel = supabase
+        .channel('task-preview-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'tasks', filter: `room_id=eq.${currentRoom.id}` },
+          () => fetchTasks()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [currentRoom]);
 

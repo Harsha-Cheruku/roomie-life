@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,22 +16,30 @@ export const RoomSetup = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [isCheckingRooms, setIsCheckingRooms] = useState(true);
+  const [searchParams] = useSearchParams();
+  
+  // Check if user is adding a new room (from settings)
+  const isAddingRoom = searchParams.get('add') === 'true';
   
   const { createRoom, joinRoom, currentRoom, profile, userRooms, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  // Check if user already has rooms and redirect
+  // Check if user already has rooms and redirect (only if NOT adding a new room)
   useEffect(() => {
-    if (user && currentRoom) {
-      navigate("/", { replace: true });
-    } else if (user && userRooms.length > 0) {
-      // User has rooms but no current room selected - shouldn't happen, but handle it
-      navigate("/", { replace: true });
-    } else if (user) {
+    if (!isAddingRoom) {
+      if (user && currentRoom) {
+        navigate("/", { replace: true });
+      } else if (user && userRooms.length > 0) {
+        navigate("/", { replace: true });
+      } else if (user) {
+        setIsCheckingRooms(false);
+      }
+    } else {
+      // Adding room mode - skip redirect check
       setIsCheckingRooms(false);
     }
-  }, [user, currentRoom, userRooms, navigate]);
+  }, [user, currentRoom, userRooms, navigate, isAddingRoom]);
 
   const handleCreateRoom = async () => {
     if (!roomName.trim()) {
@@ -163,7 +171,7 @@ export const RoomSetup = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm animate-slide-up">
           <button
-            onClick={() => setStep("choice")}
+            onClick={() => isAddingRoom ? navigate("/room-settings") : setStep("choice")}
             className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
@@ -215,7 +223,7 @@ export const RoomSetup = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm animate-slide-up">
           <button
-            onClick={() => setStep("choice")}
+            onClick={() => isAddingRoom ? navigate("/room-settings") : setStep("choice")}
             className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
@@ -264,15 +272,23 @@ export const RoomSetup = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
+      {isAddingRoom && (
+        <button
+          onClick={() => navigate("/room-settings")}
+          className="absolute top-6 left-6 text-muted-foreground flex items-center gap-2 hover:text-foreground transition-colors press-effect"
+        >
+          ← Back to Settings
+        </button>
+      )}
       <div className="text-center mb-10 animate-scale-in">
         <div className="w-20 h-20 gradient-primary rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-glow">
           <Sparkles className="w-10 h-10 text-primary-foreground" />
         </div>
         <h1 className="font-display text-2xl font-bold text-foreground">
-          Hey {profile?.display_name || "there"}! 👋
+          {isAddingRoom ? "Add Another Room" : `Hey ${profile?.display_name || "there"}! 👋`}
         </h1>
         <p className="text-muted-foreground mt-2">
-          Let's get you set up with a room
+          {isAddingRoom ? "Create or join a new room" : "Let's get you set up with a room"}
         </p>
       </div>
 

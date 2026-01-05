@@ -23,6 +23,25 @@ export const ExpenseOverview = () => {
   useEffect(() => {
     if (currentRoom) {
       fetchExpenseData();
+      
+      // Subscribe to realtime updates for instant KPI refresh
+      const channel = supabase
+        .channel('expense-overview-changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` },
+          () => fetchExpenseData()
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'expense_splits' },
+          () => fetchExpenseData()
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [currentRoom]);
 

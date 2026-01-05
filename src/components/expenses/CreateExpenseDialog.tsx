@@ -142,24 +142,48 @@ export const CreateExpenseDialog = ({
     
     if (selectedMembers.length === 0) return;
 
-    setMemberSplits(prev => prev.map(split => {
-      if (!split.selected) {
-        return { ...split, amount: 0, percentage: 0 };
-      }
+    setMemberSplits(prev => {
+      const selected = prev.filter(m => m.selected);
+      const selectedCount = selected.length;
       
+      if (selectedCount === 0) return prev;
+      
+      // For equal split, distribute evenly with proper rounding
       if (splitType === 'equal') {
-        const equalShare = totalAmount / selectedMembers.length;
-        const equalPercent = 100 / selectedMembers.length;
-        return { ...split, amount: equalShare, percentage: equalPercent };
+        const baseShare = Math.floor((totalAmount * 100) / selectedCount) / 100; // Truncate to 2 decimals
+        const remainder = totalAmount - (baseShare * selectedCount);
+        
+        let index = 0;
+        return prev.map(split => {
+          if (!split.selected) {
+            return { ...split, amount: 0, percentage: 0 };
+          }
+          
+          // Give remainder cents to first person
+          const share = index === 0 ? baseShare + remainder : baseShare;
+          index++;
+          
+          return { 
+            ...split, 
+            amount: Math.round(share * 100) / 100, 
+            percentage: 100 / selectedCount 
+          };
+        });
       }
       
-      // For percentage and custom, keep existing values but recalculate amount
-      if (splitType === 'percentage') {
-        return { ...split, amount: (totalAmount * split.percentage) / 100 };
-      }
-      
-      return split;
-    }));
+      return prev.map(split => {
+        if (!split.selected) {
+          return { ...split, amount: 0, percentage: 0 };
+        }
+        
+        // For percentage, recalculate amount
+        if (splitType === 'percentage') {
+          return { ...split, amount: Math.round((totalAmount * split.percentage) / 100 * 100) / 100 };
+        }
+        
+        return split;
+      });
+    });
   };
 
   const toggleMemberSelection = (userId: string) => {
