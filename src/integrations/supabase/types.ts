@@ -174,6 +174,7 @@ export type Database = {
           expense_item_id: string | null
           id: string
           is_paid: boolean
+          rejection_comment: string | null
           status: string
           user_id: string
         }
@@ -184,6 +185,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          rejection_comment?: string | null
           status?: string
           user_id: string
         }
@@ -194,6 +196,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          rejection_comment?: string | null
           status?: string
           user_id?: string
         }
@@ -430,6 +433,7 @@ export type Database = {
           due_date: string | null
           id: string
           priority: string
+          rejection_comment: string | null
           reminder_time: string | null
           room_id: string
           status: string
@@ -444,6 +448,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string
+          rejection_comment?: string | null
           reminder_time?: string | null
           room_id: string
           status?: string
@@ -458,6 +463,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           priority?: string
+          rejection_comment?: string | null
           reminder_time?: string | null
           room_id?: string
           status?: string

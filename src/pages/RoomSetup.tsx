@@ -171,7 +171,7 @@ export const RoomSetup = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm animate-slide-up">
           <button
-            onClick={() => isAddingRoom ? navigate("/room-settings") : setStep("choice")}
+            onClick={() => isAddingRoom ? navigate(-1) : setStep("choice")}
             className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
@@ -223,7 +223,7 @@ export const RoomSetup = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm animate-slide-up">
           <button
-            onClick={() => isAddingRoom ? navigate("/room-settings") : setStep("choice")}
+            onClick={() => isAddingRoom ? navigate(-1) : setStep("choice")}
             className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
@@ -274,10 +274,10 @@ export const RoomSetup = () => {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
       {isAddingRoom && (
         <button
-          onClick={() => navigate("/room-settings")}
+          onClick={() => navigate(-1)}
           className="absolute top-6 left-6 text-muted-foreground flex items-center gap-2 hover:text-foreground transition-colors press-effect"
         >
-          ← Back to Settings
+          ← Back
         </button>
       )}
       <div className="text-center mb-10 animate-scale-in">
