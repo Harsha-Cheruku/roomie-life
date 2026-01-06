@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
+import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
+import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +26,7 @@ interface Task {
   priority: Priority;
   due_date: string | null;
   reminder_time: string | null;
+  rejection_comment?: string | null;
   created_at: string;
   assignee_profile?: {
     display_name: string;
@@ -34,13 +37,6 @@ interface Task {
     avatar: string;
   };
 }
-
-const columns: { id: TaskStatus; title: string; color: string; bgColor: string }[] = [
-  { id: "pending", title: "Pending", color: "text-accent", bgColor: "bg-accent/10" },
-  { id: "accepted", title: "To Do", color: "text-muted-foreground", bgColor: "bg-muted/50" },
-  { id: "in_progress", title: "In Progress", color: "text-primary", bgColor: "bg-primary/10" },
-  { id: "done", title: "Done", color: "text-mint", bgColor: "bg-mint/10" },
-];
 
 const priorityColors: Record<Priority, string> = {
   low: "bg-mint/20 text-mint",
@@ -57,20 +53,30 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 };
 
 export const Tasks = () => {
-  const [view, setView] = useState<"board" | "list">("board");
+  const [view, setView] = useState<"board" | "list">("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showDetailSheet, setShowDetailSheet] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const { navigate, navigateToTab, goBack } = useNavigation();
   const { user, currentRoom } = useAuth();
   const { toast } = useToast();
+
+  // Status counts for the summary
+  const statusCounts = {
+    todo: tasks.filter(t => t.status === 'pending' || t.status === 'accepted').length,
+    inProgress: tasks.filter(t => t.status === 'in_progress').length,
+    done: tasks.filter(t => t.status === 'done').length,
+  };
 
   useEffect(() => {
     if (currentRoom) {
       fetchTasks();
       
-      // Subscribe to realtime updates
       const channel = supabase
         .channel('tasks-changes')
         .on(
@@ -98,7 +104,6 @@ export const Tasks = () => {
 
       if (error) throw error;
 
-      // Fetch profiles for assignees and creators
       const userIds = [...new Set([
         ...(tasksData?.map(t => t.assigned_to) || []),
         ...(tasksData?.map(t => t.created_by) || [])
@@ -125,13 +130,12 @@ export const Tasks = () => {
     }
   };
 
-  const handleTaskAction = async (taskId: string, action: 'accept' | 'reject' | 'start' | 'complete') => {
+  const handleTaskAction = async (taskId: string, action: 'accept' | 'start' | 'complete') => {
     setUpdatingTaskId(taskId);
     try {
       let newStatus: TaskStatus;
       switch (action) {
         case 'accept': newStatus = 'accepted'; break;
-        case 'reject': newStatus = 'rejected'; break;
         case 'start': newStatus = 'in_progress'; break;
         case 'complete': newStatus = 'done'; break;
       }
@@ -145,7 +149,6 @@ export const Tasks = () => {
 
       toast({
         title: action === 'accept' ? 'Task accepted!' : 
-               action === 'reject' ? 'Task rejected' :
                action === 'start' ? 'Task started!' : 'Task completed!',
       });
     } catch (error) {
@@ -157,6 +160,28 @@ export const Tasks = () => {
     } finally {
       setUpdatingTaskId(null);
     }
+  };
+
+  const handleRejectClick = (taskId: string) => {
+    setRejectingTaskId(taskId);
+    setShowRejectDialog(true);
+  };
+
+  const handleRejectConfirm = async (comment: string) => {
+    if (!rejectingTaskId) return;
+    
+    const { error } = await supabase
+      .from('tasks')
+      .update({ 
+        status: 'rejected',
+        rejection_comment: comment 
+      })
+      .eq('id', rejectingTaskId);
+
+    if (error) throw error;
+
+    toast({ title: 'Task rejected' });
+    setRejectingTaskId(null);
   };
 
   const formatDueDate = (dateString: string | null) => {
@@ -171,21 +196,26 @@ export const Tasks = () => {
     return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   };
 
-  // Filter out rejected tasks for board view
-  const boardTasks = tasks.filter(t => t.status !== 'rejected');
-
-  // Check if task needs accept/reject buttons (only if assigned by someone else AND pending)
   const needsApproval = (task: Task) => {
     return task.status === 'pending' && 
            task.assigned_to === user?.id && 
            task.created_by !== user?.id;
   };
 
+  const openTaskDetail = (task: Task) => {
+    setSelectedTask(task);
+    setShowDetailSheet(true);
+  };
+
+  const rejectingTask = tasks.find(t => t.id === rejectingTaskId);
+
+  // Group tasks by assignee for the "Assigned by People" section
+  const myTasks = tasks.filter(t => t.assigned_to === user?.id);
+
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header with TopBar */}
       <TopBar 
-        title="Tasks" 
+        title="Task Manager" 
         showBack={true}
         onBack={goBack}
         hint="Everything here is shared with your room ❤️"
@@ -201,265 +231,234 @@ export const Tasks = () => {
         }
       />
 
-      {/* View Toggle */}
+      {/* Status Summary Cards */}
       <div className="px-4 mb-4">
-        <div className="flex gap-2 p-1 bg-muted rounded-xl">
-          <button
-            onClick={() => setView("board")}
-            className={cn(
-              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all press-effect",
-              view === "board" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
-            )}
-          >
-            Board
-          </button>
-          <button
-            onClick={() => setView("list")}
-            className={cn(
-              "flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all press-effect",
-              view === "list" ? "bg-card shadow-sm text-foreground" : "text-muted-foreground"
-            )}
-          >
-            List
-          </button>
+        <div className="bg-card rounded-2xl p-4 shadow-card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium text-muted-foreground">Task Name</span>
+            <div className="flex gap-2">
+              <Button variant="glass" size="iconSm" className="w-8 h-8">
+                <Calendar className="w-4 h-4" />
+              </Button>
+              <Button variant="glass" size="iconSm" className="w-8 h-8">
+                <Filter className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-muted/50 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-foreground">{statusCounts.todo}</p>
+              <p className="text-xs text-muted-foreground">To Do</p>
+            </div>
+            <div className="bg-primary/10 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-primary">{statusCounts.inProgress}</p>
+              <p className="text-xs text-muted-foreground">In Progress</p>
+            </div>
+            <div className="bg-mint/10 rounded-xl p-3 text-center">
+              <p className="text-2xl font-bold text-mint">{statusCounts.done}</p>
+              <p className="text-xs text-muted-foreground">Done</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      ) : (
-        <>
-          {/* Board View */}
-          {view === "board" && (
-            <div className="px-4 overflow-x-auto">
-              <div className="flex gap-4 pb-4" style={{ minWidth: "fit-content" }}>
-                {columns.map((column) => {
-                  const columnTasks = boardTasks.filter((t) => t.status === column.id);
-                  return (
-                    <div key={column.id} className="w-72 flex-shrink-0">
-                      <div className={cn("rounded-2xl p-3", column.bgColor)}>
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className={cn("font-semibold text-sm", column.color)}>
-                            {column.title}
-                          </h3>
-                          <span className={cn("text-xs font-bold px-2 py-0.5 rounded-full", column.bgColor, column.color)}>
-                            {columnTasks.length}
-                          </span>
-                        </div>
+      {/* Assigned by People Section */}
+      <div className="px-4 mb-4">
+        <div className="bg-card rounded-2xl p-4 shadow-card">
+          <h3 className="font-semibold text-foreground mb-3">Assigned by People</h3>
+          <p className="text-sm text-muted-foreground mb-3">Created by you</p>
+          
+          {/* Status Filter Tabs */}
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+            {['To Do', 'In De', 'Prgees', 'Done'].map((status, idx) => (
+              <button
+                key={status}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
+                  idx === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                )}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
 
-                        <div className="space-y-3">
-                          {columnTasks.map((task, index) => {
-                            const StatusIcon = statusIcons[task.status];
-                            const isAssignedToMe = task.assigned_to === user?.id;
-                            const isUpdating = updatingTaskId === task.id;
-                            const showApprovalButtons = needsApproval(task);
-                            
-                            return (
-                              <div
-                                key={task.id}
-                                className="bg-card rounded-xl p-3 shadow-card animate-slide-up"
-                                style={{ animationDelay: `${index * 50}ms` }}
-                              >
-                                <div className="flex items-start gap-2 mb-2">
-                                  <StatusIcon className={cn("w-4 h-4 mt-0.5", column.color)} />
-                                  <p className="text-sm font-medium text-foreground flex-1">
-                                    {task.title}
-                                  </p>
-                                </div>
-                                
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
-                                    <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
-                                      {task.priority}
-                                    </span>
-                                  </div>
-                                  {task.due_date && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {formatDueDate(task.due_date)}
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Action buttons - Only show if needs approval or assignee can progress */}
-                                {isAssignedToMe && (
-                                  <div className="flex gap-2 pt-2 border-t border-border/50">
-                                    {showApprovalButtons && (
-                                      <>
-                                        <Button
-                                          size="sm"
-                                          className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
-                                          onClick={() => handleTaskAction(task.id, 'accept')}
-                                          disabled={isUpdating}
-                                        >
-                                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                          Accept
-                                        </Button>
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
-                                          onClick={() => handleTaskAction(task.id, 'reject')}
-                                          disabled={isUpdating}
-                                        >
-                                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                                          Reject
-                                        </Button>
-                                      </>
-                                    )}
-                                    {task.status === 'accepted' && (
-                                      <Button
-                                        size="sm"
-                                        className="w-full h-8 text-xs"
-                                        onClick={() => handleTaskAction(task.id, 'start')}
-                                        disabled={isUpdating}
-                                      >
-                                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
-                                      </Button>
-                                    )}
-                                    {task.status === 'in_progress' && (
-                                      <Button
-                                        size="sm"
-                                        className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
-                                        onClick={() => handleTaskAction(task.id, 'complete')}
-                                        disabled={isUpdating}
-                                      >
-                                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
-                                      </Button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {column.id === 'pending' && (
-                            <button 
-                              onClick={() => setShowCreateDialog(true)}
-                              className="w-full py-3 border-2 border-dashed border-border rounded-xl text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
-                            >
-                              <Plus className="w-4 h-4" />
-                              Add Task
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+          {/* Task List */}
+          <div className="space-y-3">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            </div>
-          )}
+            ) : myTasks.length === 0 ? (
+              <EmptyState
+                emoji="🌱"
+                title="Looks peaceful here"
+                description="No tasks yet! Add your first task and start getting things done together."
+                actionLabel="Create your first task"
+                onAction={() => setShowCreateDialog(true)}
+              />
+            ) : (
+              myTasks.slice(0, 4).map((task, index) => {
+                const StatusIcon = statusIcons[task.status];
+                const isAssignedToMe = task.assigned_to === user?.id;
+                const isUpdating = updatingTaskId === task.id;
+                const showApprovalButtons = needsApproval(task);
 
-          {/* List View */}
-          {view === "list" && (
-            <div className="px-4 space-y-3">
-              {tasks.length === 0 ? (
-                <EmptyState
-                  emoji="🌱"
-                  title="Looks peaceful here"
-                  description="No tasks yet! Add your first task and start getting things done together."
-                  actionLabel="Add First Task"
-                  onAction={() => setShowCreateDialog(true)}
-                />
-              ) : (
-                tasks.map((task, index) => {
-                  const StatusIcon = statusIcons[task.status];
-                  const column = columns.find((c) => c.id === task.status) || columns[0];
-                  const isAssignedToMe = task.assigned_to === user?.id;
-                  const isUpdating = updatingTaskId === task.id;
-                  const showApprovalButtons = needsApproval(task);
-
-                  return (
-                    <div
-                      key={task.id}
-                      className="bg-card rounded-2xl p-4 shadow-card animate-slide-up"
-                      style={{ animationDelay: `${index * 30}ms` }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <StatusIcon className={cn("w-5 h-5", column.color)} />
-                        <div className="flex-1 min-w-0">
-                          <p className={cn("text-sm font-medium truncate", task.status === "done" ? "line-through text-muted-foreground" : "text-foreground")}>
-                            {task.title}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
-                            </span>
-                            <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
-                              {task.priority}
-                            </span>
-                          </div>
-                        </div>
-                        {task.due_date && (
-                          <span className="text-xs text-muted-foreground">{formatDueDate(task.due_date)}</span>
-                        )}
-                      </div>
-
-                      {/* Action buttons */}
-                      {isAssignedToMe && task.status !== 'done' && task.status !== 'rejected' && (
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                          {showApprovalButtons && (
-                            <>
-                              <Button
-                                size="sm"
-                                className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
-                                onClick={() => handleTaskAction(task.id, 'accept')}
-                                disabled={isUpdating}
-                              >
-                                {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                Accept
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
-                                onClick={() => handleTaskAction(task.id, 'reject')}
-                                disabled={isUpdating}
-                              >
-                                {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
-                                Reject
-                              </Button>
-                            </>
-                          )}
-                          {task.status === 'accepted' && (
-                            <Button
-                              size="sm"
-                              className="flex-1 h-8 text-xs"
-                              onClick={() => handleTaskAction(task.id, 'start')}
-                              disabled={isUpdating}
-                            >
-                              {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
-                            </Button>
-                          )}
-                          {task.status === 'in_progress' && (
-                            <Button
-                              size="sm"
-                              className="flex-1 h-8 text-xs bg-mint hover:bg-mint/90"
-                              onClick={() => handleTaskAction(task.id, 'complete')}
-                              disabled={isUpdating}
-                            >
-                              {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
-                            </Button>
-                          )}
-                        </div>
+                return (
+                  <div
+                    key={task.id}
+                    onClick={() => openTaskDetail(task)}
+                    className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl cursor-pointer hover:bg-muted/50 transition-colors animate-slide-up"
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
+                      {task.assignee_profile?.avatar || '😊'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "font-medium text-sm truncate",
+                        task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
+                      )}>
+                        {task.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {task.description || 'No description'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-xs px-2 py-1 rounded-full", priorityColors[task.priority])}>
+                        {task.priority}
+                      </span>
+                      {task.due_date && (
+                        <span className="text-xs text-muted-foreground">
+                          {formatDueDate(task.due_date)}
+                        </span>
                       )}
                     </div>
-                  );
-                })
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* All Tasks List */}
+      <div className="px-4 space-y-3">
+        <h3 className="font-semibold text-foreground px-1">All Tasks</h3>
+        {tasks.filter(t => t.status !== 'rejected').map((task, index) => {
+          const StatusIcon = statusIcons[task.status];
+          const isAssignedToMe = task.assigned_to === user?.id;
+          const isUpdating = updatingTaskId === task.id;
+          const showApprovalButtons = needsApproval(task);
+
+          return (
+            <div
+              key={task.id}
+              className="bg-card rounded-2xl p-4 shadow-card animate-slide-up"
+              style={{ animationDelay: `${index * 30}ms` }}
+            >
+              <div 
+                className="flex items-center gap-3 cursor-pointer"
+                onClick={() => openTaskDetail(task)}
+              >
+                <StatusIcon className={cn(
+                  "w-5 h-5",
+                  task.status === 'done' ? 'text-mint' : 
+                  task.status === 'in_progress' ? 'text-primary' : 'text-muted-foreground'
+                )} />
+                <div className="flex-1 min-w-0">
+                  <p className={cn(
+                    "text-sm font-medium truncate",
+                    task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
+                  )}>
+                    {task.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
+                    </span>
+                    <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
+                      {task.priority}
+                    </span>
+                  </div>
+                </div>
+                {task.due_date && (
+                  <span className="text-xs text-muted-foreground">{formatDueDate(task.due_date)}</span>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              {isAssignedToMe && task.status !== 'done' && task.status !== 'rejected' && (
+                <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
+                  {showApprovalButtons && (
+                    <>
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTaskAction(task.id, 'accept');
+                        }}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        Accept
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRejectClick(task.id);
+                        }}
+                        disabled={isUpdating}
+                      >
+                        <X className="w-3 h-3" />
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  {task.status === 'accepted' && (
+                    <Button
+                      size="sm"
+                      className="w-full h-8 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTaskAction(task.id, 'start');
+                      }}
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
+                    </Button>
+                  )}
+                  {task.status === 'in_progress' && (
+                    <Button
+                      size="sm"
+                      className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTaskAction(task.id, 'complete');
+                      }}
+                      disabled={isUpdating}
+                    >
+                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
+                    </Button>
+                  )}
+                </div>
               )}
             </div>
-          )}
-        </>
-      )}
+          );
+        })}
+      </div>
 
-      {/* Create Task FAB */}
-      <button
+      {/* FAB */}
+      <button 
         onClick={() => setShowCreateDialog(true)}
-        className="fixed bottom-24 right-4 w-14 h-14 gradient-primary rounded-2xl shadow-glow flex items-center justify-center text-primary-foreground press-effect z-40"
+        className="fixed bottom-24 right-4 w-14 h-14 bg-primary rounded-full shadow-lg flex items-center justify-center text-primary-foreground z-50 press-effect hover:bg-primary/90 transition-all"
       >
         <Plus className="w-6 h-6" />
       </button>
@@ -470,7 +469,22 @@ export const Tasks = () => {
         onTaskCreated={fetchTasks}
       />
 
-      <BottomNav activeTab="tasks" onTabChange={() => {}} />
+      <TaskDetailSheet
+        open={showDetailSheet}
+        onOpenChange={setShowDetailSheet}
+        task={selectedTask}
+        onUpdate={fetchTasks}
+      />
+
+      <RejectCommentDialog
+        open={showRejectDialog}
+        onOpenChange={setShowRejectDialog}
+        onConfirm={handleRejectConfirm}
+        title="Reject Task"
+        description={`Please provide a reason for rejecting "${rejectingTask?.title || 'this task'}".`}
+      />
+
+      <BottomNav activeTab="tasks" onTabChange={navigateToTab} />
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Send, Loader2, ArrowLeft, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -48,7 +48,15 @@ export const Chat = () => {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
+  const scrollToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, []);
+
+  // Fetch room members once
   useEffect(() => {
     if (currentRoom) {
       fetchRoomMembers();
@@ -56,11 +64,17 @@ export const Chat = () => {
     }
   }, [currentRoom]);
 
+  // Set up real-time subscription with optimistic updates
   useEffect(() => {
     if (!currentRoom || profilesMap.size === 0) return;
 
+    // Clean up existing channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
+
     const channel = supabase
-      .channel(`room-${currentRoom.id}-messages`)
+      .channel(`room-${currentRoom.id}-messages-realtime`)
       .on(
         'postgres_changes',
         {
@@ -71,8 +85,15 @@ export const Chat = () => {
         },
         (payload) => {
           const newMsg = payload.new as Message;
-          setMessages((prev) => [...prev, newMsg]);
+          
+          // Add message if not already present (prevents duplicates from optimistic updates)
+          setMessages((prev) => {
+            const exists = prev.some(m => m.id === newMsg.id);
+            if (exists) return prev;
+            return [...prev, newMsg];
+          });
 
+          // Show notification for messages from others
           if (newMsg.sender_id !== user?.id) {
             const senderProfile = profilesMap.get(newMsg.sender_id);
             toastHook({
@@ -86,47 +107,58 @@ export const Chat = () => {
       )
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentRoom, profilesMap, user?.id]);
+    channelRef.current = channel;
 
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
+  }, [currentRoom, profilesMap, user?.id, toastHook]);
+
+  // Scroll to bottom when messages change
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
-
-  const scrollToBottom = () => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  };
+  }, [messages, scrollToBottom]);
 
   const fetchRoomMembers = async () => {
     if (!currentRoom) return;
 
-    const { data, error } = await supabase
+    // First get member IDs
+    const { data: membersData, error: membersError } = await supabase
       .from('room_members')
-      .select(`
-        user_id,
-        profiles:user_id (
-          display_name,
-          avatar
-        )
-      `)
+      .select('user_id')
       .eq('room_id', currentRoom.id);
 
-    if (error) {
-      console.error('Error fetching room members:', error);
+    if (membersError) {
+      console.error('Error fetching room members:', membersError);
       return;
     }
 
-    const members = data?.map((member: any) => ({
-      user_id: member.user_id,
-      profile: {
-        display_name: member.profiles?.display_name || 'Unknown',
-        avatar: member.profiles?.avatar || '😊',
-      },
-    })) || [];
+    const userIds = membersData?.map(m => m.user_id) || [];
+
+    // Then fetch profiles
+    const { data: profilesData, error: profilesError } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', userIds);
+
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+      return;
+    }
+
+    const members = userIds.map(userId => {
+      const profile = profilesData?.find(p => p.user_id === userId);
+      return {
+        user_id: userId,
+        profile: {
+          display_name: profile?.display_name || 'Unknown',
+          avatar: profile?.avatar || '😊',
+        },
+      };
+    });
 
     setRoomMembers(members);
 
@@ -174,7 +206,6 @@ export const Chat = () => {
         .from('chat-attachments')
         .getPublicUrl(fileName);
 
-      // Send as voice message
       await sendMessageWithAttachment(publicUrl, 'voice', `Voice note (${duration}s)`);
     } catch (error) {
       console.error('Error uploading voice note:', error);
@@ -213,6 +244,10 @@ export const Chat = () => {
     if (!hasText && !hasAttachment) return;
 
     setIsSending(true);
+    const messageText = newMessage.trim();
+    
+    // Clear input immediately for instant feedback
+    setNewMessage('');
 
     try {
       // Send attachment first if exists
@@ -226,21 +261,39 @@ export const Chat = () => {
       }
 
       // Send text message if exists
-      if (hasText) {
-        const { error } = await supabase.from('messages').insert({
+      if (messageText) {
+        // Optimistic update - add message immediately
+        const optimisticMessage: Message = {
+          id: `temp-${Date.now()}`,
           room_id: currentRoom.id,
           sender_id: user.id,
-          content: hasText,
+          content: messageText,
           message_type: 'text',
-        });
+          created_at: new Date().toISOString(),
+        } as Message;
+
+        setMessages(prev => [...prev, optimisticMessage]);
+
+        const { data, error } = await supabase.from('messages').insert({
+          room_id: currentRoom.id,
+          sender_id: user.id,
+          content: messageText,
+          message_type: 'text',
+        }).select().single();
 
         if (error) throw error;
-        setNewMessage('');
+
+        // Replace optimistic message with real one
+        setMessages(prev => prev.map(m => 
+          m.id === optimisticMessage.id ? data : m
+        ));
       }
 
       inputRef.current?.focus();
     } catch (error) {
       console.error('Error sending message:', error);
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => !m.id.startsWith('temp-')));
       toastHook({
         title: 'Failed to send',
         description: 'Could not send your message. Please try again.',
