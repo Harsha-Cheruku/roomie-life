@@ -66,12 +66,32 @@ export const Tasks = () => {
   const { user, currentRoom } = useAuth();
   const { toast } = useToast();
 
-  // Status counts for the summary
+  // Real-time KPI counts
   const statusCounts = {
+    total: tasks.length,
     todo: tasks.filter(t => t.status === 'pending' || t.status === 'accepted').length,
     inProgress: tasks.filter(t => t.status === 'in_progress').length,
     done: tasks.filter(t => t.status === 'done').length,
+    rejected: tasks.filter(t => t.status === 'rejected').length,
   };
+
+  // Tasks created by current user
+  const tasksCreatedByMe = tasks.filter(t => t.created_by === user?.id);
+  
+  // Tasks assigned to current user by others
+  const tasksAssignedToMe = tasks.filter(t => t.assigned_to === user?.id && t.created_by !== user?.id);
+
+  // Active filter for created-by-me section
+  const [createdByMeFilter, setCreatedByMeFilter] = useState<'todo' | 'in_progress' | 'done' | 'rejected'>('todo');
+
+  // Filter tasks created by me based on active filter
+  const filteredCreatedByMe = tasksCreatedByMe.filter(task => {
+    if (createdByMeFilter === 'todo') return task.status === 'pending' || task.status === 'accepted';
+    if (createdByMeFilter === 'in_progress') return task.status === 'in_progress';
+    if (createdByMeFilter === 'done') return task.status === 'done';
+    if (createdByMeFilter === 'rejected') return task.status === 'rejected';
+    return true;
+  });
 
   useEffect(() => {
     if (currentRoom) {
@@ -209,8 +229,6 @@ export const Tasks = () => {
 
   const rejectingTask = tasks.find(t => t.id === rejectingTaskId);
 
-  // Group tasks by assignee for the "Assigned by People" section
-  const myTasks = tasks.filter(t => t.assigned_to === user?.id);
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -231,55 +249,66 @@ export const Tasks = () => {
         }
       />
 
-      {/* Status Summary Cards */}
+      {/* KPI Summary Cards - Real-time Updates */}
       <div className="px-4 mb-4">
         <div className="bg-card rounded-2xl p-4 shadow-card">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-muted-foreground">Task Name</span>
-            <div className="flex gap-2">
-              <Button variant="glass" size="iconSm" className="w-8 h-8">
-                <Calendar className="w-4 h-4" />
-              </Button>
-              <Button variant="glass" size="iconSm" className="w-8 h-8">
-                <Filter className="w-4 h-4" />
-              </Button>
-            </div>
+            <span className="text-sm font-medium text-muted-foreground">Task Overview</span>
+            <span className="text-xs text-primary font-medium">{statusCounts.total} Total</span>
           </div>
           
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-2">
             <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-foreground">{statusCounts.todo}</p>
+              <p className="text-xl font-bold text-foreground">{statusCounts.todo}</p>
               <p className="text-xs text-muted-foreground">To Do</p>
             </div>
             <div className="bg-primary/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-primary">{statusCounts.inProgress}</p>
+              <p className="text-xl font-bold text-primary">{statusCounts.inProgress}</p>
               <p className="text-xs text-muted-foreground">In Progress</p>
             </div>
             <div className="bg-mint/10 rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold text-mint">{statusCounts.done}</p>
+              <p className="text-xl font-bold text-mint">{statusCounts.done}</p>
               <p className="text-xs text-muted-foreground">Done</p>
+            </div>
+            <div className="bg-coral/10 rounded-xl p-3 text-center">
+              <p className="text-xl font-bold text-coral">{statusCounts.rejected}</p>
+              <p className="text-xs text-muted-foreground">Rejected</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Assigned by People Section */}
+      {/* Created by You Section */}
       <div className="px-4 mb-4">
         <div className="bg-card rounded-2xl p-4 shadow-card">
-          <h3 className="font-semibold text-foreground mb-3">Assigned by People</h3>
-          <p className="text-sm text-muted-foreground mb-3">Created by you</p>
+          <h3 className="font-semibold text-foreground mb-3">Created by You</h3>
+          <p className="text-sm text-muted-foreground mb-3">Tasks you've assigned to others</p>
           
-          {/* Status Filter Tabs */}
+          {/* Status Filter Tabs - Fixed spelling */}
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
-            {['To Do', 'In De', 'Prgees', 'Done'].map((status, idx) => (
+            {[
+              { key: 'todo' as const, label: 'To Do', count: tasksCreatedByMe.filter(t => t.status === 'pending' || t.status === 'accepted').length },
+              { key: 'in_progress' as const, label: 'In Progress', count: tasksCreatedByMe.filter(t => t.status === 'in_progress').length },
+              { key: 'done' as const, label: 'Done', count: tasksCreatedByMe.filter(t => t.status === 'done').length },
+              { key: 'rejected' as const, label: 'Rejected', count: tasksCreatedByMe.filter(t => t.status === 'rejected').length },
+            ].map((status) => (
               <button
-                key={status}
+                key={status.key}
+                onClick={() => setCreatedByMeFilter(status.key)}
                 className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all",
-                  idx === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                  "px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex items-center gap-1.5",
+                  createdByMeFilter === status.key 
+                    ? "bg-primary text-primary-foreground" 
+                    : "bg-muted text-muted-foreground hover:bg-muted/80"
                 )}
               >
-                {status}
+                {status.label}
+                <span className={cn(
+                  "text-xs px-1.5 py-0.5 rounded-full",
+                  createdByMeFilter === status.key ? "bg-primary-foreground/20" : "bg-background"
+                )}>
+                  {status.count}
+                </span>
               </button>
             ))}
           </div>
@@ -290,26 +319,23 @@ export const Tasks = () => {
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
-            ) : myTasks.length === 0 ? (
-              <EmptyState
-                emoji="🌱"
-                title="Looks peaceful here"
-                description="No tasks yet! Add your first task and start getting things done together."
-                actionLabel="Create your first task"
-                onAction={() => setShowCreateDialog(true)}
-              />
+            ) : filteredCreatedByMe.length === 0 ? (
+              <div className="text-center py-6 text-muted-foreground text-sm">
+                No tasks in this category
+              </div>
             ) : (
-              myTasks.slice(0, 4).map((task, index) => {
+              filteredCreatedByMe.map((task, index) => {
                 const StatusIcon = statusIcons[task.status];
-                const isAssignedToMe = task.assigned_to === user?.id;
-                const isUpdating = updatingTaskId === task.id;
-                const showApprovalButtons = needsApproval(task);
+                const isRejected = task.status === 'rejected';
 
                 return (
                   <div
                     key={task.id}
                     onClick={() => openTaskDetail(task)}
-                    className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl cursor-pointer hover:bg-muted/50 transition-colors animate-slide-up"
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors animate-slide-up",
+                      isRejected ? "bg-coral/10 border border-coral/30" : "bg-muted/30 hover:bg-muted/50"
+                    )}
                     style={{ animationDelay: `${index * 30}ms` }}
                   >
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
@@ -318,13 +344,20 @@ export const Tasks = () => {
                     <div className="flex-1 min-w-0">
                       <p className={cn(
                         "font-medium text-sm truncate",
-                        task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
+                        task.status === "done" ? "line-through text-muted-foreground" : 
+                        isRejected ? "text-coral" : "text-foreground"
                       )}>
                         {task.title}
                       </p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {task.description || 'No description'}
+                        Assigned to: {task.assignee_profile?.display_name || 'Unknown'}
                       </p>
+                      {/* Show rejection comment for creator */}
+                      {isRejected && task.rejection_comment && (
+                        <p className="text-xs text-coral mt-1 truncate">
+                          ❌ {task.rejection_comment}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={cn("text-xs px-2 py-1 rounded-full", priorityColors[task.priority])}>
@@ -344,115 +377,269 @@ export const Tasks = () => {
         </div>
       </div>
 
-      {/* All Tasks List */}
-      <div className="px-4 space-y-3">
-        <h3 className="font-semibold text-foreground px-1">All Tasks</h3>
-        {tasks.filter(t => t.status !== 'rejected').map((task, index) => {
-          const StatusIcon = statusIcons[task.status];
-          const isAssignedToMe = task.assigned_to === user?.id;
-          const isUpdating = updatingTaskId === task.id;
-          const showApprovalButtons = needsApproval(task);
+      {/* Assigned to You by Others */}
+      {tasksAssignedToMe.length > 0 && (
+        <div className="px-4 mb-4">
+          <div className="bg-card rounded-2xl p-4 shadow-card">
+            <h3 className="font-semibold text-foreground mb-3">Assigned to You</h3>
+            <p className="text-sm text-muted-foreground mb-3">Tasks from your roommates</p>
+            
+            <div className="space-y-3">
+              {tasksAssignedToMe.map((task, index) => {
+                const StatusIcon = statusIcons[task.status];
+                const isUpdating = updatingTaskId === task.id;
+                const showApprovalButtons = needsApproval(task);
+                const isRejected = task.status === 'rejected';
 
-          return (
-            <div
-              key={task.id}
-              className="bg-card rounded-2xl p-4 shadow-card animate-slide-up"
-              style={{ animationDelay: `${index * 30}ms` }}
-            >
-              <div 
-                className="flex items-center gap-3 cursor-pointer"
-                onClick={() => openTaskDetail(task)}
-              >
-                <StatusIcon className={cn(
-                  "w-5 h-5",
-                  task.status === 'done' ? 'text-mint' : 
-                  task.status === 'in_progress' ? 'text-primary' : 'text-muted-foreground'
-                )} />
-                <div className="flex-1 min-w-0">
-                  <p className={cn(
-                    "text-sm font-medium truncate",
-                    task.status === "done" ? "line-through text-muted-foreground" : "text-foreground"
-                  )}>
-                    {task.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
-                    </span>
-                    <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
-                      {task.priority}
-                    </span>
+                return (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "p-3 rounded-xl animate-slide-up",
+                      isRejected ? "bg-coral/10 border border-coral/30" : "bg-muted/30"
+                    )}
+                    style={{ animationDelay: `${index * 30}ms` }}
+                  >
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer"
+                      onClick={() => openTaskDetail(task)}
+                    >
+                      <StatusIcon className={cn(
+                        "w-5 h-5",
+                        task.status === 'done' ? 'text-mint' : 
+                        task.status === 'in_progress' ? 'text-primary' : 
+                        task.status === 'rejected' ? 'text-coral' : 'text-muted-foreground'
+                      )} />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "font-medium text-sm truncate",
+                          task.status === "done" ? "line-through text-muted-foreground" : 
+                          isRejected ? "text-coral" : "text-foreground"
+                        )}>
+                          {task.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          From: {task.creator_profile?.display_name || 'Unknown'}
+                        </p>
+                        {isRejected && task.rejection_comment && (
+                          <p className="text-xs text-coral mt-1 truncate">
+                            Your reason: {task.rejection_comment}
+                          </p>
+                        )}
+                      </div>
+                      <span className={cn("text-xs px-2 py-1 rounded-full", priorityColors[task.priority])}>
+                        {task.priority}
+                      </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    {task.status !== 'done' && task.status !== 'rejected' && (
+                      <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
+                        {showApprovalButtons && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTaskAction(task.id, 'accept');
+                              }}
+                              disabled={isUpdating}
+                            >
+                              {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRejectClick(task.id);
+                              }}
+                              disabled={isUpdating}
+                            >
+                              <X className="w-3 h-3" />
+                              Reject
+                            </Button>
+                          </>
+                        )}
+                        {task.status === 'accepted' && (
+                          <Button
+                            size="sm"
+                            className="w-full h-8 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTaskAction(task.id, 'start');
+                            }}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
+                          </Button>
+                        )}
+                        {task.status === 'in_progress' && (
+                          <Button
+                            size="sm"
+                            className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleTaskAction(task.id, 'complete');
+                            }}
+                            disabled={isUpdating}
+                          >
+                            {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* All Tasks List - Includes Rejected with Highlighting */}
+      <div className="px-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="font-semibold text-foreground px-1">All Tasks</h3>
+          <span className="text-xs text-muted-foreground">{tasks.length} tasks</span>
+        </div>
+        
+        {tasks.length === 0 && !isLoading ? (
+          <EmptyState
+            emoji="🌱"
+            title="Looks peaceful here"
+            description="No tasks yet! Add your first task and start getting things done together."
+            actionLabel="Create your first task"
+            onAction={() => setShowCreateDialog(true)}
+          />
+        ) : (
+          tasks.map((task, index) => {
+            const StatusIcon = statusIcons[task.status];
+            const isAssignedToMe = task.assigned_to === user?.id;
+            const isUpdating = updatingTaskId === task.id;
+            const showApprovalButtons = needsApproval(task);
+            const isRejected = task.status === 'rejected';
+
+            return (
+              <div
+                key={task.id}
+                className={cn(
+                  "rounded-2xl p-4 shadow-card animate-slide-up",
+                  isRejected ? "bg-coral/10 border border-coral/30" : "bg-card"
+                )}
+                style={{ animationDelay: `${index * 30}ms` }}
+              >
+                <div 
+                  className="flex items-center gap-3 cursor-pointer"
+                  onClick={() => openTaskDetail(task)}
+                >
+                  <StatusIcon className={cn(
+                    "w-5 h-5",
+                    task.status === 'done' ? 'text-mint' : 
+                    task.status === 'in_progress' ? 'text-primary' : 
+                    isRejected ? 'text-coral' : 'text-muted-foreground'
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <p className={cn(
+                      "text-sm font-medium truncate",
+                      task.status === "done" ? "line-through text-muted-foreground" : 
+                      isRejected ? "text-coral" : "text-foreground"
+                    )}>
+                      {task.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
+                      </span>
+                      <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
+                        {task.priority}
+                      </span>
+                      {isRejected && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-coral/20 text-coral">
+                          Rejected
+                        </span>
+                      )}
+                    </div>
+                    {/* Show rejection comment */}
+                    {isRejected && task.rejection_comment && (
+                      <p className="text-xs text-coral mt-2 line-clamp-2">
+                        ❌ {task.rejection_comment}
+                      </p>
+                    )}
+                  </div>
+                  {task.due_date && (
+                    <span className="text-xs text-muted-foreground">{formatDueDate(task.due_date)}</span>
+                  )}
                 </div>
-                {task.due_date && (
-                  <span className="text-xs text-muted-foreground">{formatDueDate(task.due_date)}</span>
+
+                {/* Action buttons */}
+                {isAssignedToMe && task.status !== 'done' && task.status !== 'rejected' && (
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
+                    {showApprovalButtons && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTaskAction(task.id, 'accept');
+                          }}
+                          disabled={isUpdating}
+                        >
+                          {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRejectClick(task.id);
+                          }}
+                          disabled={isUpdating}
+                        >
+                          <X className="w-3 h-3" />
+                          Reject
+                        </Button>
+                      </>
+                    )}
+                    {task.status === 'accepted' && (
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTaskAction(task.id, 'start');
+                        }}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
+                      </Button>
+                    )}
+                    {task.status === 'in_progress' && (
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTaskAction(task.id, 'complete');
+                        }}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
-
-              {/* Action buttons */}
-              {isAssignedToMe && task.status !== 'done' && task.status !== 'rejected' && (
-                <div className="flex gap-2 mt-3 pt-3 border-t border-border/50">
-                  {showApprovalButtons && (
-                    <>
-                      <Button
-                        size="sm"
-                        className="flex-1 h-8 text-xs gap-1 bg-mint hover:bg-mint/90"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTaskAction(task.id, 'accept');
-                        }}
-                        disabled={isUpdating}
-                      >
-                        {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                        Accept
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="flex-1 h-8 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRejectClick(task.id);
-                        }}
-                        disabled={isUpdating}
-                      >
-                        <X className="w-3 h-3" />
-                        Reject
-                      </Button>
-                    </>
-                  )}
-                  {task.status === 'accepted' && (
-                    <Button
-                      size="sm"
-                      className="w-full h-8 text-xs"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTaskAction(task.id, 'start');
-                      }}
-                      disabled={isUpdating}
-                    >
-                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Start Working'}
-                    </Button>
-                  )}
-                  {task.status === 'in_progress' && (
-                    <Button
-                      size="sm"
-                      className="w-full h-8 text-xs bg-mint hover:bg-mint/90"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTaskAction(task.id, 'complete');
-                      }}
-                      disabled={isUpdating}
-                    >
-                      {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3 mr-1" /> Mark Done</>}
-                    </Button>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* FAB */}

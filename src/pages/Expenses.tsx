@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,7 @@ import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
 import { SettleUpDialog } from "@/components/expenses/SettleUpDialog";
 import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
+import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -21,6 +22,7 @@ interface ExpenseSplit {
   amount: number;
   is_paid: boolean;
   status: string;
+  rejection_comment?: string | null;
 }
 
 interface Expense {
@@ -73,9 +75,23 @@ export const Expenses = () => {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, { user_id: string; display_name: string; avatar: string }>>(new Map());
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
+  const [rejectingExpenseTitle, setRejectingExpenseTitle] = useState<string>('');
 
-  // Calculate summary stats
-  const [stats, setStats] = useState({ total: 0, youPaid: 0, youOwe: 0, youAreOwed: 0 });
+  // Expense KPIs - Real-time updates
+  const [stats, setStats] = useState({ 
+    total: 0, 
+    youPaid: 0, 
+    youOwe: 0, 
+    youAreOwed: 0,
+    // Bill status KPIs
+    totalBills: 0,
+    pendingBills: 0,
+    acceptedBills: 0,
+    rejectedBills: 0,
+    settledBills: 0,
+  });
 
   const fetchExpenses = useCallback(async () => {
     if (!currentRoom || !user) return;
@@ -142,6 +158,7 @@ export const Expenses = () => {
           total_amount,
           created_by,
           paid_by,
+          status,
           expense_splits (
             id,
             user_id,
@@ -156,6 +173,12 @@ export const Expenses = () => {
       let youPaid = 0;
       let youOwe = 0;
       let youAreOwed = 0;
+      
+      // Bill status counters
+      let pendingBills = 0;
+      let acceptedBills = 0;
+      let rejectedBills = 0;
+      let settledBills = 0;
 
       allExpenses?.forEach(expense => {
         totalSpent += expense.total_amount;
@@ -174,9 +197,38 @@ export const Expenses = () => {
         if (userSplit && !userSplit.is_paid && userSplit.status === 'accepted' && expense.paid_by !== user.id) {
           youOwe += userSplit.amount;
         }
+
+        // Count bill statuses
+        if (expense.status === 'settled') {
+          settledBills++;
+        } else {
+          // Check splits for this expense
+          const splits = expense.expense_splits || [];
+          const hasRejected = splits.some((s: any) => s.status === 'rejected');
+          const allAccepted = splits.every((s: any) => s.status === 'accepted' || s.is_paid);
+          const hasPending = splits.some((s: any) => s.status === 'pending');
+
+          if (hasRejected) {
+            rejectedBills++;
+          } else if (allAccepted && splits.length > 0) {
+            acceptedBills++;
+          } else if (hasPending) {
+            pendingBills++;
+          }
+        }
       });
 
-      setStats({ total: totalSpent, youPaid, youOwe, youAreOwed });
+      setStats({ 
+        total: totalSpent, 
+        youPaid, 
+        youOwe, 
+        youAreOwed,
+        totalBills: allExpenses?.length || 0,
+        pendingBills,
+        acceptedBills,
+        rejectedBills,
+        settledBills,
+      });
 
       // Calculate balances with other users
       await calculateBalances(allExpenses || []);
@@ -281,18 +333,19 @@ export const Expenses = () => {
     });
   };
 
-  const handleSplitAction = async (splitId: string, action: 'accepted' | 'rejected') => {
+  // Accept split (no comment needed)
+  const handleSplitAccept = async (splitId: string) => {
     setUpdatingSplitId(splitId);
     try {
       const { error } = await supabase
         .from('expense_splits')
-        .update({ status: action })
+        .update({ status: 'accepted' })
         .eq('id', splitId);
 
       if (error) throw error;
 
       toast({
-        title: action === 'accepted' ? 'Expense accepted' : 'Expense rejected',
+        title: 'Expense accepted',
       });
 
       fetchExpenses();
@@ -305,6 +358,33 @@ export const Expenses = () => {
     } finally {
       setUpdatingSplitId(null);
     }
+  };
+
+  // Open rejection dialog (mandatory comment)
+  const handleRejectClick = (splitId: string, expenseTitle: string) => {
+    setRejectingSplitId(splitId);
+    setRejectingExpenseTitle(expenseTitle);
+    setShowRejectDialog(true);
+  };
+
+  // Confirm rejection with comment
+  const handleRejectConfirm = async (comment: string) => {
+    if (!rejectingSplitId) return;
+    
+    const { error } = await supabase
+      .from('expense_splits')
+      .update({ 
+        status: 'rejected',
+        rejection_comment: comment 
+      })
+      .eq('id', rejectingSplitId);
+
+    if (error) throw error;
+
+    toast({ title: 'Expense rejected' });
+    setRejectingSplitId(null);
+    setRejectingExpenseTitle('');
+    fetchExpenses();
   };
 
   const handlePayment = async (split: ExpenseSplit, expense: Expense) => {
@@ -408,7 +488,7 @@ export const Expenses = () => {
         }
       />
 
-      {/* Summary Card */}
+      {/* Summary Card with Bill KPIs */}
       <div className="px-4 mb-6">
         <div className="gradient-coral rounded-3xl p-5 shadow-coral">
           <div className="flex items-center justify-between mb-4">
@@ -423,7 +503,7 @@ export const Expenses = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="bg-primary-foreground/10 rounded-xl p-3">
               <div className="flex items-center gap-1 mb-1">
                 <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
@@ -450,6 +530,30 @@ export const Expenses = () => {
               <p className="text-base font-bold text-primary-foreground">
                 ₹{stats.youAreOwed.toLocaleString()}
               </p>
+            </div>
+          </div>
+
+          {/* Bill Status KPIs */}
+          <div className="grid grid-cols-5 gap-1 pt-3 border-t border-primary-foreground/20">
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-foreground">{stats.totalBills}</p>
+              <p className="text-[10px] text-primary-foreground/70">Total</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-foreground">{stats.pendingBills}</p>
+              <p className="text-[10px] text-primary-foreground/70">Pending</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-foreground">{stats.acceptedBills}</p>
+              <p className="text-[10px] text-primary-foreground/70">Accepted</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-foreground">{stats.rejectedBills}</p>
+              <p className="text-[10px] text-primary-foreground/70">Rejected</p>
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-bold text-primary-foreground">{stats.settledBills}</p>
+              <p className="text-[10px] text-primary-foreground/70">Settled</p>
             </div>
           </div>
         </div>
@@ -487,7 +591,7 @@ export const Expenses = () => {
                   <div className="flex gap-2">
                     <Button
                       className="flex-1 h-10 gap-2 bg-mint hover:bg-mint/90"
-                      onClick={() => mySplit && handleSplitAction(mySplit.id, 'accepted')}
+                      onClick={() => mySplit && handleSplitAccept(mySplit.id)}
                       disabled={isUpdating}
                     >
                       {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -496,10 +600,10 @@ export const Expenses = () => {
                     <Button
                       variant="outline"
                       className="flex-1 h-10 gap-2 border-coral text-coral hover:bg-coral/10"
-                      onClick={() => mySplit && handleSplitAction(mySplit.id, 'rejected')}
+                      onClick={() => mySplit && handleRejectClick(mySplit.id, expense.title)}
                       disabled={isUpdating}
                     >
-                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      <X className="w-4 h-4" />
                       Reject
                     </Button>
                   </div>
@@ -721,6 +825,15 @@ export const Expenses = () => {
         expense={selectedExpense}
         memberProfiles={memberProfiles}
         onUpdate={fetchExpenses}
+      />
+
+      {/* Reject Comment Dialog */}
+      <RejectCommentDialog
+        open={showRejectDialog}
+        onOpenChange={setShowRejectDialog}
+        onConfirm={handleRejectConfirm}
+        title="Reject Expense"
+        description={`Please provide a reason for rejecting "${rejectingExpenseTitle}".`}
       />
 
       <BottomNav activeTab="expenses" onTabChange={(tab) => {
