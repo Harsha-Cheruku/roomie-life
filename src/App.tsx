@@ -14,6 +14,7 @@ import { Tasks } from "./pages/Tasks";
 import { Storage } from "./pages/Storage";
 import { Chat } from "./pages/Chat";
 import Alarms from "./pages/Alarms";
+import Reminders from "./pages/Reminders";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -102,6 +103,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Alarms />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reminders"
+              element={
+                <ProtectedRoute>
+                  <Reminders />
                 </ProtectedRoute>
               }
             />

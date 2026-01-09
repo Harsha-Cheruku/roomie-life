@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Music, Gamepad2, Clock, Receipt, Cloud, Users } from "lucide-react";
+import { Bell, Gamepad2, Clock, Receipt, Cloud, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface QuickAction {
@@ -11,12 +11,12 @@ interface QuickAction {
 }
 
 const actions: QuickAction[] = [
-  { icon: Music, label: "Music Sync", gradient: "gradient-ocean", delay: 0 },
+  { icon: Bell, label: "Reminders", gradient: "gradient-ocean", delay: 0, route: "/reminders" },
   { icon: Gamepad2, label: "Games", gradient: "gradient-sunset", delay: 50 },
   { icon: Clock, label: "Alarms", gradient: "gradient-mint", delay: 100, route: "/alarms" },
   { icon: Receipt, label: "Split Bill", gradient: "gradient-coral", delay: 150, route: "/expenses" },
   { icon: Cloud, label: "Storage", gradient: "gradient-primary", delay: 200, route: "/storage" },
-  { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 250 },
+  { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 250, route: "/room-settings" },
 ];
 
 export const QuickActions = () => {
