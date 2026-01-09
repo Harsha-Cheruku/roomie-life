@@ -365,6 +365,65 @@ export type Database = {
         }
         Relationships: []
       }
+      reminders: {
+        Row: {
+          allowed_completers: string[] | null
+          completed_at: string | null
+          completed_by: string | null
+          condition_ref_id: string | null
+          condition_type: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          remind_at: string
+          room_id: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          allowed_completers?: string[] | null
+          completed_at?: string | null
+          completed_by?: string | null
+          condition_ref_id?: string | null
+          condition_type?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          remind_at: string
+          room_id: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          allowed_completers?: string[] | null
+          completed_at?: string | null
+          completed_by?: string | null
+          condition_ref_id?: string | null
+          condition_type?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          remind_at?: string
+          room_id?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminders_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_members: {
         Row: {
           id: string
