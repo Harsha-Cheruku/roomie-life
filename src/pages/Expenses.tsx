@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,7 @@ import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
 import { SettleUpDialog } from "@/components/expenses/SettleUpDialog";
 import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
+import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -58,7 +59,7 @@ interface Balance {
 }
 
 export const Expenses = () => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
@@ -78,6 +79,9 @@ export const Expenses = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
   const [rejectingExpenseTitle, setRejectingExpenseTitle] = useState<string>('');
+  const [kpiFilter, setKpiFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'settled' | null>(null);
+  const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
+  const [markingPaidSplit, setMarkingPaidSplit] = useState<{ id: string; amount: number; title: string } | null>(null);
 
   // Expense KPIs - Real-time updates
   const [stats, setStats] = useState({ 
@@ -113,7 +117,8 @@ export const Expenses = () => {
             user_id,
             amount,
             is_paid,
-            status
+            status,
+            rejection_comment
           )
         `)
         .eq('room_id', currentRoom.id)
@@ -405,33 +410,27 @@ export const Expenses = () => {
     });
   };
 
-  const markAsPaid = async (splitId: string) => {
-    setUpdatingSplitId(splitId);
-    try {
-      const { error } = await supabase
-        .from('expense_splits')
-        .update({ is_paid: true })
-        .eq('id', splitId);
+  const markAsPaid = async (splitId: string, amount: number, title: string) => {
+    // Open confirmation dialog instead of directly marking
+    setMarkingPaidSplit({ id: splitId, amount, title });
+    setShowMarkPaidDialog(true);
+  };
 
-      if (error) throw error;
-
-      toast({
-        title: 'Marked as paid! ✓',
-      });
-
-      fetchExpenses();
-    } catch (error) {
-      console.error('Error marking as paid:', error);
-      toast({
-        title: 'Failed to update',
-        variant: 'destructive',
-      });
-    } finally {
-      setUpdatingSplitId(null);
-    }
+  const handleMarkPaidConfirmed = () => {
+    fetchExpenses();
+    setMarkingPaidSplit(null);
   };
 
   const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+  };
     const date = new Date(dateString);
     const today = new Date();
     const yesterday = new Date(today);
@@ -456,14 +455,34 @@ export const Expenses = () => {
 
   // Get pending expenses for current user (only from others, not self-created)
   const pendingForMe = expenses.filter(exp => {
+    if (isSoloMode) return false; // No pending approvals in solo mode
     const mySplit = exp.splits?.find(s => s.user_id === user?.id);
     return mySplit && mySplit.status === 'pending' && exp.created_by !== user?.id;
   });
 
   // Get my unpaid splits that need payment
   const unpaidSplits = expenses.filter(exp => {
+    if (isSoloMode) return false; // No unpaid splits in solo mode
     const mySplit = exp.splits?.find(s => s.user_id === user?.id);
     return mySplit && mySplit.status === 'accepted' && !mySplit.is_paid && exp.paid_by !== user?.id;
+  });
+
+  // Filter expenses based on KPI filter
+  const filteredExpenses = expenses.filter(exp => {
+    if (!kpiFilter || kpiFilter === 'all') return true;
+    
+    if (kpiFilter === 'settled') return exp.status === 'settled';
+    
+    const splits = exp.splits || [];
+    const hasRejected = splits.some(s => s.status === 'rejected');
+    const allAccepted = splits.every(s => s.status === 'accepted' || s.is_paid);
+    const hasPending = splits.some(s => s.status === 'pending');
+    
+    if (kpiFilter === 'rejected') return hasRejected;
+    if (kpiFilter === 'accepted') return allAccepted && splits.length > 0 && exp.status !== 'settled';
+    if (kpiFilter === 'pending') return hasPending && !hasRejected;
+    
+    return true;
   });
 
   return (
@@ -533,28 +552,29 @@ export const Expenses = () => {
             </div>
           </div>
 
-          {/* Bill Status KPIs */}
+          {/* Bill Status KPIs - Clickable for filtering */}
           <div className="grid grid-cols-5 gap-1 pt-3 border-t border-primary-foreground/20">
-            <div className="text-center">
-              <p className="text-lg font-bold text-primary-foreground">{stats.totalBills}</p>
-              <p className="text-[10px] text-primary-foreground/70">Total</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-primary-foreground">{stats.pendingBills}</p>
-              <p className="text-[10px] text-primary-foreground/70">Pending</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-primary-foreground">{stats.acceptedBills}</p>
-              <p className="text-[10px] text-primary-foreground/70">Accepted</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-primary-foreground">{stats.rejectedBills}</p>
-              <p className="text-[10px] text-primary-foreground/70">Rejected</p>
-            </div>
-            <div className="text-center">
-              <p className="text-lg font-bold text-primary-foreground">{stats.settledBills}</p>
-              <p className="text-[10px] text-primary-foreground/70">Settled</p>
-            </div>
+            {[
+              { key: 'all' as const, label: 'Total', value: stats.totalBills },
+              { key: 'pending' as const, label: 'Pending', value: stats.pendingBills },
+              { key: 'accepted' as const, label: 'Accepted', value: stats.acceptedBills },
+              { key: 'rejected' as const, label: 'Rejected', value: stats.rejectedBills },
+              { key: 'settled' as const, label: 'Settled', value: stats.settledBills },
+            ].map((item) => (
+              <button
+                key={item.key}
+                onClick={() => setKpiFilter(kpiFilter === item.key ? null : item.key)}
+                className={cn(
+                  "text-center p-1 rounded-lg transition-all",
+                  kpiFilter === item.key 
+                    ? "bg-primary-foreground/30 ring-2 ring-primary-foreground" 
+                    : "hover:bg-primary-foreground/10"
+                )}
+              >
+                <p className="text-lg font-bold text-primary-foreground">{item.value}</p>
+                <p className="text-[10px] text-primary-foreground/70">{item.label}</p>
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -655,10 +675,9 @@ export const Expenses = () => {
                     <Button
                       variant="outline"
                       className="flex-1 h-10 gap-2"
-                      onClick={() => mySplit && markAsPaid(mySplit.id)}
-                      disabled={isUpdating}
+                      onClick={() => mySplit && markAsPaid(mySplit.id, mySplit.amount, expense.title)}
                     >
-                      {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      <Check className="w-4 h-4" />
                       Mark Paid
                     </Button>
                   </div>
@@ -720,16 +739,16 @@ export const Expenses = () => {
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        ) : expenses.length === 0 ? (
+        ) : filteredExpenses.length === 0 ? (
           <EmptyState
             emoji="💸"
-            title="No expenses yet!"
-            description="Scan a bill or add an expense to start splitting costs with your roommates."
-            actionLabel="Scan First Bill"
-            onAction={() => setShowScanner(true)}
+            title={kpiFilter ? `No ${kpiFilter} expenses` : "No expenses yet!"}
+            description={kpiFilter ? `No expenses match the "${kpiFilter}" filter.` : "Scan a bill or add an expense to start splitting costs with your roommates."}
+            actionLabel={kpiFilter ? "Clear Filter" : "Scan First Bill"}
+            onAction={() => kpiFilter ? setKpiFilter(null) : setShowScanner(true)}
           />
         ) : (
-          expenses.map((expense, index) => {
+          filteredExpenses.map((expense, index) => {
             const mySplit = expense.splits?.find(s => s.user_id === user?.id);
             
             return (
@@ -835,6 +854,18 @@ export const Expenses = () => {
         title="Reject Expense"
         description={`Please provide a reason for rejecting "${rejectingExpenseTitle}".`}
       />
+
+      {/* Mark as Paid Confirmation Dialog */}
+      {markingPaidSplit && (
+        <MarkAsPaidDialog
+          open={showMarkPaidDialog}
+          onOpenChange={setShowMarkPaidDialog}
+          splitId={markingPaidSplit.id}
+          amount={markingPaidSplit.amount}
+          expenseTitle={markingPaidSplit.title}
+          onComplete={handleMarkPaidConfirmed}
+        />
+      )}
 
       <BottomNav activeTab="expenses" onTabChange={(tab) => {
         if (tab === 'home') navigate('/');

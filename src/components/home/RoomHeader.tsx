@@ -1,4 +1,4 @@
-import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog, RefreshCw, Circle } from "lucide-react";
+import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog, RefreshCw, Circle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -17,7 +17,7 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomHeader = () => {
-  const { currentRoom, profile, signOut, leaveRoom, userRooms, switchRoom, user } = useAuth();
+  const { currentRoom, profile, signOut, leaveRoom, userRooms, switchRoom, user, isSoloMode, toggleSoloMode } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
@@ -215,6 +215,22 @@ export const RoomHeader = () => {
                     <span className="text-sm">Switch Room</span>
                   </button>
                 )}
+                <button
+                  onClick={() => { toggleSoloMode(); setShowMenu(false); }}
+                  className={cn(
+                    "w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect",
+                    isSoloMode && "bg-primary/10"
+                  )}
+                >
+                  <User className="w-4 h-4" />
+                  <div className="flex-1">
+                    <span className="text-sm">{isSoloMode ? 'Exit Solo Mode' : 'Solo Mode'}</span>
+                    <p className="text-[10px] text-muted-foreground/70">
+                      {isSoloMode ? 'Return to group tracking' : 'Track personal items only'}
+                    </p>
+                  </div>
+                  {isSoloMode && <Check className="w-4 h-4 text-primary" />}
+                </button>
                 <div className="border-t border-border my-1"></div>
                 <button
                   onClick={handleLeaveRoom}

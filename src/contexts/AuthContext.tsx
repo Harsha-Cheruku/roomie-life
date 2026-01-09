@@ -24,6 +24,7 @@ interface AuthContextType {
   currentRoom: Room | null;
   userRooms: Room[];
   loading: boolean;
+  isSoloMode: boolean;
   signUp: (email: string, password: string, displayName: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -32,11 +33,13 @@ interface AuthContextType {
   leaveRoom: () => Promise<{ error: Error | null }>;
   setCurrentRoom: (room: Room | null) => void;
   switchRoom: (room: Room) => void;
+  toggleSoloMode: () => void;
   refreshProfile: () => Promise<void>;
   refreshRooms: () => Promise<void>;
 }
 
 const LAST_ROOM_KEY = 'roommate_last_room_id';
+const SOLO_MODE_KEY = 'roommate_solo_mode';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -47,6 +50,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [currentRoom, setCurrentRoom] = useState<Room | null>(null);
   const [userRooms, setUserRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSoloMode, setIsSoloMode] = useState(() => {
+    return localStorage.getItem(SOLO_MODE_KEY) === 'true';
+  });
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -302,6 +308,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const switchRoom = (room: Room) => {
     setCurrentRoom(room);
     localStorage.setItem(LAST_ROOM_KEY, room.id);
+    // Disable solo mode when switching rooms
+    setIsSoloMode(false);
+    localStorage.setItem(SOLO_MODE_KEY, 'false');
+  };
+
+  const toggleSoloMode = () => {
+    setIsSoloMode(prev => {
+      const newValue = !prev;
+      localStorage.setItem(SOLO_MODE_KEY, String(newValue));
+      return newValue;
+    });
   };
 
   const refreshProfile = async () => {
@@ -325,6 +342,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         currentRoom,
         userRooms,
         loading,
+        isSoloMode,
         signUp,
         signIn,
         signOut,
@@ -333,6 +351,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         leaveRoom,
         setCurrentRoom,
         switchRoom,
+        toggleSoloMode,
         refreshProfile,
         refreshRooms,
       }}
