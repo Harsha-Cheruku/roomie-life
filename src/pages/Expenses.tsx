@@ -526,7 +526,7 @@ export const Expenses = () => {
             <div className="bg-primary-foreground/10 rounded-xl p-3">
               <div className="flex items-center gap-1 mb-1">
                 <TrendingDown className="w-3 h-3 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">You Owe</span>
+                <span className="text-xs text-primary-foreground/70">Will Pay</span>
               </div>
               <p className="text-base font-bold text-primary-foreground">
                 ₹{stats.youOwe.toLocaleString()}
@@ -535,7 +535,7 @@ export const Expenses = () => {
             <div className="bg-primary-foreground/10 rounded-xl p-3">
               <div className="flex items-center gap-1 mb-1">
                 <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">Owed</span>
+                <span className="text-xs text-primary-foreground/70">Will Get</span>
               </div>
               <p className="text-base font-bold text-primary-foreground">
                 ₹{stats.youAreOwed.toLocaleString()}
@@ -696,7 +696,7 @@ export const Expenses = () => {
                 <div className="text-3xl mb-2">{person.avatar}</div>
                 <p className="text-sm font-medium text-foreground">{person.name}</p>
                 <p className={cn("text-sm font-bold", person.owes > 0 ? "text-coral" : "text-mint")}>
-                  {person.owes > 0 ? `Owes ₹${person.owes.toFixed(0)}` : `Gets ₹${Math.abs(person.owes).toFixed(0)}`}
+                  {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(0)}` : `Will Get ₹${Math.abs(person.owes).toFixed(0)}`}
                 </p>
               </div>
             ))}
