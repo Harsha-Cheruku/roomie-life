@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -63,7 +63,7 @@ export const Tasks = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const { navigate, navigateToTab, goBack } = useNavigation();
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
 
   // Real-time KPI counts
@@ -248,6 +248,17 @@ export const Tasks = () => {
           </div>
         }
       />
+
+      {/* Solo Mode Indicator */}
+      {isSoloMode && (
+        <div className="px-4 mb-4">
+          <div className="flex items-center gap-2 bg-lavender/10 text-lavender rounded-xl px-4 py-2">
+            <User className="w-4 h-4" />
+            <span className="text-sm font-medium">Solo Mode Active</span>
+            <span className="text-xs text-lavender/70">- Showing only your tasks</span>
+          </div>
+        </div>
+      )}
 
       {/* KPI Summary Cards - Real-time Updates */}
       <div className="px-4 mb-4">

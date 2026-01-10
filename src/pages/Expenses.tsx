@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { SettleUpDialog } from "@/components/expenses/SettleUpDialog";
 import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
 import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
+import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -702,6 +703,22 @@ export const Expenses = () => {
             ))}
           </div>
         </section>
+      )}
+
+      {/* Monthly Expense Chart */}
+      <section className="px-4 mb-6">
+        <MonthlyExpenseChart />
+      </section>
+
+      {/* Solo Mode Indicator */}
+      {isSoloMode && (
+        <div className="px-4 mb-4">
+          <div className="flex items-center gap-2 bg-lavender/10 text-lavender rounded-xl px-4 py-2">
+            <User className="w-4 h-4" />
+            <span className="text-sm font-medium">Solo Mode Active</span>
+            <span className="text-xs text-lavender/70">- Showing only your expenses</span>
+          </div>
+        </div>
       )}
 
       {/* Tabs */}
