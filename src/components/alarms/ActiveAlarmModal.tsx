@@ -50,26 +50,38 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
   };
 
   useEffect(() => {
-    // Play alarm sound with fallback
-    playAlarm();
+    // Play alarm sound immediately with user interaction workaround
+    const startAlarm = async () => {
+      try {
+        await playAlarm();
+        console.log("Alarm sound started successfully");
+      } catch (error) {
+        console.error("Failed to start alarm sound:", error);
+      }
+    };
+
+    startAlarm();
     
     // Send notification for background/locked screen
     sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
 
     // Increment ring count every 5 seconds
     const ringInterval = setInterval(async () => {
-      const newCount = ringCount + 1;
-      setRingCount(newCount);
-      
-      await supabase
-        .from('alarm_triggers')
-        .update({ ring_count: newCount })
-        .eq('id', trigger.id);
+      setRingCount(prev => {
+        const newCount = prev + 1;
+        // Update in database
+        supabase
+          .from('alarm_triggers')
+          .update({ ring_count: newCount })
+          .eq('id', trigger.id)
+          .then(() => console.log(`Ring count updated to ${newCount}`));
+        return newCount;
+      });
     }, 5000);
 
     // Subscribe to acknowledgments
     const ackChannel = supabase
-      .channel('ack-changes')
+      .channel(`ack-changes-${trigger.id}`)
       .on('postgres_changes', {
         event: 'INSERT',
         schema: 'public',
@@ -87,7 +99,7 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       clearInterval(ringInterval);
       supabase.removeChannel(ackChannel);
     };
-  }, [trigger.id]);
+  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, stopAlarm, sendAlarmNotification]);
 
   useEffect(() => {
     // Check if user can dismiss based on conditions

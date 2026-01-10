@@ -10,6 +10,7 @@ import { ReminderCard } from '@/components/reminders/ReminderCard';
 import { Bell, Plus, BellOff, Clock, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface Reminder {
   id: string;
@@ -35,6 +36,7 @@ interface RoomMember {
 export default function Reminders() {
   const { user, currentRoom } = useAuth();
   const navigate = useNavigate();
+  const { sendReminderNotification } = useNotifications();
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [members, setMembers] = useState<RoomMember[]>([]);
   const [memberProfiles, setMemberProfiles] = useState<Record<string, { display_name: string; avatar: string }>>({});
@@ -135,25 +137,14 @@ export default function Reminders() {
         .update({ status: 'notified' })
         .eq('id', reminder.id);
 
-      // Show notification (browser notification if permitted)
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`🔔 Reminder: ${reminder.title}`, {
-          body: reminder.description || 'Time for your reminder!',
-          icon: '/favicon.ico',
-          tag: reminder.id
-        });
-      } else {
-        toast.info(`🔔 Reminder: ${reminder.title}`, {
-          description: reminder.description || undefined,
-          duration: 10000
-        });
-      }
+      // Send notification with sound using our hook
+      sendReminderNotification(reminder.title, reminder.description || undefined);
     }
 
     if (scheduledReminders.length > 0) {
       fetchReminders();
     }
-  }, [reminders, user?.id, fetchReminders]);
+  }, [reminders, user?.id, fetchReminders, sendReminderNotification]);
 
   useEffect(() => {
     fetchReminders();
