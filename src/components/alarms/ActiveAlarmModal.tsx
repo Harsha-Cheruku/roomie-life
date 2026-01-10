@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, BellOff, Users, Volume2 } from "lucide-react";
 import { toast } from "sonner";
+import { useAlarmSound } from "@/hooks/useAlarmSound";
+import { useNotifications } from "@/hooks/useNotifications";
 
 interface AlarmTrigger {
   id: string;
@@ -36,13 +38,23 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
   const [acknowledgments, setAcknowledgments] = useState<string[]>([]);
   const [canDismiss, setCanDismiss] = useState(false);
   const [dismissing, setDismissing] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { playAlarm, stopAlarm } = useAlarmSound();
+  const { sendAlarmNotification } = useNotifications();
+
+  const formatTime = (time: string) => {
+    const [hours, minutes] = time.split(':');
+    const h = parseInt(hours);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 || 12;
+    return `${hour12}:${minutes} ${ampm}`;
+  };
 
   useEffect(() => {
-    // Play alarm sound
-    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audioRef.current.loop = true;
-    audioRef.current.play().catch(console.error);
+    // Play alarm sound with fallback
+    playAlarm();
+    
+    // Send notification for background/locked screen
+    sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
 
     // Increment ring count every 5 seconds
     const ringInterval = setInterval(async () => {
@@ -71,10 +83,7 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
     fetchAcknowledgments();
 
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      stopAlarm();
       clearInterval(ringInterval);
       supabase.removeChannel(ackChannel);
     };
@@ -152,21 +161,12 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       return;
     }
 
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+    stopAlarm();
 
     toast.success('Alarm dismissed!');
     onDismissed();
   };
 
-  const formatTime = (time: string) => {
-    const [hours, minutes] = time.split(':');
-    const h = parseInt(hours);
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour12 = h % 12 || 12;
-    return `${hour12}:${minutes} ${ampm}`;
-  };
 
   const getStatusMessage = () => {
     if (alarm.condition_type === 'after_rings' && !canDismiss) {

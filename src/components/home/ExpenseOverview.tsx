@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, TrendingDown, Wallet, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,6 +9,9 @@ interface ExpenseData {
   total: number;
   pending: number;
   settled: number;
+  willPay: number;
+  willGet: number;
+  todaySpending: number;
   members: { name: string; avatar: string; amount: number; color: string }[];
 }
 
@@ -16,8 +19,8 @@ const memberColors = ['bg-primary', 'bg-coral', 'bg-mint', 'bg-lavender', 'bg-ac
 
 export const ExpenseOverview = () => {
   const navigate = useNavigate();
-  const { user, currentRoom } = useAuth();
-  const [data, setData] = useState<ExpenseData>({ total: 0, pending: 0, settled: 0, members: [] });
+  const { user, currentRoom, isSoloMode } = useAuth();
+  const [data, setData] = useState<ExpenseData>({ total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0, members: [] });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -57,6 +60,7 @@ export const ExpenseOverview = () => {
           total_amount,
           created_by,
           status,
+          created_at,
           expense_splits (
             user_id,
             amount,
@@ -80,18 +84,40 @@ export const ExpenseOverview = () => {
         `)
         .eq('room_id', currentRoom.id);
 
-      // Calculate totals
+      // Calculate totals with new labels
       let total = 0;
       let pending = 0;
       let settled = 0;
+      let willPay = 0; // Amount current user owes others
+      let willGet = 0; // Amount others owe current user
+      let todaySpending = 0;
       const memberAmounts = new Map<string, number>();
+      const today = new Date().toDateString();
 
-      expenses?.forEach(expense => {
+      expenses?.forEach((expense: any) => {
+        // In solo mode, only count expenses created by current user
+        if (isSoloMode && expense.created_by !== user?.id) return;
+        
         total += expense.total_amount;
+        
+        // Check if expense is from today
+        if (expense.created_at) {
+          const expenseDate = new Date(expense.created_at).toDateString();
+          if (expenseDate === today) {
+            todaySpending += expense.total_amount;
+          }
+        }
         
         expense.expense_splits?.forEach((split: any) => {
           if (split.status === 'accepted' && !split.is_paid) {
             pending += split.amount;
+            
+            // Calculate will pay / will get
+            if (split.user_id === user?.id) {
+              willPay += split.amount; // Current user owes this
+            } else if (expense.created_by === user?.id) {
+              willGet += split.amount; // Others owe current user
+            }
           } else if (split.is_paid) {
             settled += split.amount;
           }
@@ -117,6 +143,9 @@ export const ExpenseOverview = () => {
         total,
         pending,
         settled,
+        willPay,
+        willGet,
+        todaySpending,
         members: memberData,
       });
     } catch (error) {
@@ -164,23 +193,32 @@ export const ExpenseOverview = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <div className="bg-primary-foreground/10 rounded-2xl p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-mint" />
-              <span className="text-xs text-primary-foreground/70">Settled</span>
+            <div className="flex items-center gap-1 mb-1">
+              <ArrowUpCircle className="w-4 h-4 text-coral" />
+              <span className="text-xs text-primary-foreground/70">Will Pay</span>
             </div>
             <p className="text-lg font-bold text-primary-foreground">
-              ₹{data.settled.toLocaleString()}
+              ₹{data.willPay.toLocaleString()}
             </p>
           </div>
           <div className="bg-primary-foreground/10 rounded-2xl p-3">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingDown className="w-4 h-4 text-coral" />
-              <span className="text-xs text-primary-foreground/70">Pending</span>
+            <div className="flex items-center gap-1 mb-1">
+              <ArrowDownCircle className="w-4 h-4 text-mint" />
+              <span className="text-xs text-primary-foreground/70">Will Get</span>
             </div>
             <p className="text-lg font-bold text-primary-foreground">
-              ₹{data.pending.toLocaleString()}
+              ₹{data.willGet.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-primary-foreground/10 rounded-2xl p-3">
+            <div className="flex items-center gap-1 mb-1">
+              <Calendar className="w-4 h-4 text-lavender" />
+              <span className="text-xs text-primary-foreground/70">Today</span>
+            </div>
+            <p className="text-lg font-bold text-primary-foreground">
+              ₹{data.todaySpending.toLocaleString()}
             </p>
           </div>
         </div>
