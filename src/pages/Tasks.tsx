@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -7,6 +7,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
+import { TaskDashboard } from "@/components/tasks/TaskDashboard";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -53,7 +54,7 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 };
 
 export const Tasks = () => {
-  const [view, setView] = useState<"board" | "list">("list");
+  const [view, setView] = useState<"list" | "dashboard">("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -239,8 +240,13 @@ export const Tasks = () => {
         hint="Everything here is shared with your room ❤️"
         rightContent={
           <div className="flex gap-2">
-            <Button variant="glass" size="iconSm" className="press-effect">
-              <Calendar className="w-4 h-4" />
+            <Button 
+              variant={view === 'dashboard' ? 'default' : 'glass'} 
+              size="iconSm" 
+              className="press-effect"
+              onClick={() => setView(view === 'dashboard' ? 'list' : 'dashboard')}
+            >
+              <BarChart3 className="w-4 h-4" />
             </Button>
             <Button variant="glass" size="iconSm" className="press-effect">
               <Filter className="w-4 h-4" />
@@ -260,34 +266,41 @@ export const Tasks = () => {
         </div>
       )}
 
-      {/* KPI Summary Cards - Real-time Updates */}
-      <div className="px-4 mb-4">
-        <div className="bg-card rounded-2xl p-4 shadow-card">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium text-muted-foreground">Task Overview</span>
-            <span className="text-xs text-primary font-medium">{statusCounts.total} Total</span>
-          </div>
-          
-          <div className="grid grid-cols-4 gap-2">
-            <div className="bg-muted/50 rounded-xl p-3 text-center">
-              <p className="text-xl font-bold text-foreground">{statusCounts.todo}</p>
-              <p className="text-xs text-muted-foreground">To Do</p>
-            </div>
-            <div className="bg-primary/10 rounded-xl p-3 text-center">
-              <p className="text-xl font-bold text-primary">{statusCounts.inProgress}</p>
-              <p className="text-xs text-muted-foreground">In Progress</p>
-            </div>
-            <div className="bg-mint/10 rounded-xl p-3 text-center">
-              <p className="text-xl font-bold text-mint">{statusCounts.done}</p>
-              <p className="text-xs text-muted-foreground">Done</p>
-            </div>
-            <div className="bg-coral/10 rounded-xl p-3 text-center">
-              <p className="text-xl font-bold text-coral">{statusCounts.rejected}</p>
-              <p className="text-xs text-muted-foreground">Rejected</p>
-            </div>
-          </div>
+      {/* Dashboard View */}
+      {view === 'dashboard' ? (
+        <div className="px-4 mb-4">
+          <TaskDashboard tasks={tasks} />
         </div>
-      </div>
+      ) : (
+        <>
+          {/* KPI Summary Cards - Real-time Updates */}
+          <div className="px-4 mb-4">
+            <div className="bg-card rounded-2xl p-4 shadow-card">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-muted-foreground">Task Overview</span>
+                <span className="text-xs text-primary font-medium">{statusCounts.total} Total</span>
+              </div>
+              
+              <div className="grid grid-cols-4 gap-2">
+                <div className="bg-muted/50 rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold text-foreground">{statusCounts.todo}</p>
+                  <p className="text-xs text-muted-foreground">To Do</p>
+                </div>
+                <div className="bg-primary/10 rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold text-primary">{statusCounts.inProgress}</p>
+                  <p className="text-xs text-muted-foreground">In Progress</p>
+                </div>
+                <div className="bg-mint/10 rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold text-mint">{statusCounts.done}</p>
+                  <p className="text-xs text-muted-foreground">Done</p>
+                </div>
+                <div className="bg-coral/10 rounded-xl p-3 text-center">
+                  <p className="text-xl font-bold text-coral">{statusCounts.rejected}</p>
+                  <p className="text-xs text-muted-foreground">Rejected</p>
+                </div>
+              </div>
+            </div>
+          </div>
 
       {/* Created by You Section */}
       <div className="px-4 mb-4">
@@ -652,6 +665,8 @@ export const Tasks = () => {
           })
         )}
       </div>
+        </>
+      )}
 
       {/* FAB */}
       <button 
