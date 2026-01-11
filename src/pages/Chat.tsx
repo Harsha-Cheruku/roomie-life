@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
 import { AttachmentPicker, AttachmentPreview } from '@/components/chat/AttachmentPicker';
+import { SecureAttachment } from '@/components/chat/SecureAttachment';
 import { toast } from 'sonner';
 
 interface Message {
@@ -202,11 +203,8 @@ export const Chat = () => {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('chat-attachments')
-        .getPublicUrl(fileName);
-
-      await sendMessageWithAttachment(publicUrl, 'voice', `Voice note (${duration}s)`);
+      // Store file path instead of public URL for private bucket
+      await sendMessageWithAttachment(fileName, 'voice', `Voice note (${duration}s)`);
     } catch (error) {
       console.error('Error uploading voice note:', error);
       toast.error('Failed to send voice note');
@@ -215,14 +213,28 @@ export const Chat = () => {
     }
   };
 
-  const handleAttachmentUploaded = (url: string, type: 'image' | 'file' | 'voice', fileName: string) => {
-    setPendingAttachment({ url, type, fileName });
+  // Generate signed URL for private storage bucket
+  const getSignedUrl = async (filePath: string): Promise<string | null> => {
+    const { data, error } = await supabase.storage
+      .from('chat-attachments')
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    
+    if (error || !data?.signedUrl) {
+      console.error('Error generating signed URL:', error);
+      return null;
+    }
+    return data.signedUrl;
   };
 
-  const sendMessageWithAttachment = async (attachmentUrl: string, type: string, fileName: string) => {
+  const handleAttachmentUploaded = (filePath: string, type: 'image' | 'file' | 'voice', fileName: string) => {
+    setPendingAttachment({ url: filePath, type, fileName });
+  };
+
+  const sendMessageWithAttachment = async (filePath: string, type: string, fileName: string) => {
     if (!user || !currentRoom) return;
 
-    const content = JSON.stringify({ url: attachmentUrl, fileName });
+    // Store the file path (not URL) - client will generate signed URLs when displaying
+    const content = JSON.stringify({ filePath, fileName });
 
     const { error } = await supabase.from('messages').insert({
       room_id: currentRoom.id,
@@ -339,9 +351,14 @@ export const Chat = () => {
 
   const parseAttachmentContent = (content: string) => {
     try {
-      return JSON.parse(content);
+      const parsed = JSON.parse(content);
+      // Support both old format (url) and new format (filePath)
+      return { 
+        filePath: parsed.filePath || parsed.url, 
+        fileName: parsed.fileName || 'attachment' 
+      };
     } catch {
-      return { url: content, fileName: 'attachment' };
+      return { filePath: content, fileName: 'attachment' };
     }
   };
 
@@ -352,36 +369,14 @@ export const Chat = () => {
 
     const attachment = parseAttachmentContent(message.content);
 
-    if (message.message_type === 'image') {
+    if (message.message_type === 'image' || message.message_type === 'voice' || message.message_type === 'file') {
       return (
-        <img
-          src={attachment.url}
-          alt="Image"
-          className="max-w-[250px] max-h-[200px] rounded-lg object-cover cursor-pointer"
-          onClick={() => window.open(attachment.url, '_blank')}
+        <SecureAttachment
+          filePath={attachment.filePath}
+          type={message.message_type as 'image' | 'voice' | 'file'}
+          fileName={attachment.fileName}
+          isOwnMessage={isOwnMessage}
         />
-      );
-    }
-
-    if (message.message_type === 'voice') {
-      return (
-        <audio controls src={attachment.url} className="max-w-[200px]" />
-      );
-    }
-
-    if (message.message_type === 'file') {
-      return (
-        <a
-          href={attachment.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={cn(
-            "flex items-center gap-2 text-sm hover:underline",
-            isOwnMessage ? "text-primary-foreground" : "text-primary"
-          )}
-        >
-          📎 {attachment.fileName || 'Download file'}
-        </a>
       );
     }
 
