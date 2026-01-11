@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,10 +7,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { BottomNav } from "@/components/layout/BottomNav";
-import { AlarmClock, Plus, Trash2, Users } from "lucide-react";
+import { AlarmClock, Plus, Trash2, Users, Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useAlarmSound } from "@/hooks/useAlarmSound";
 
 interface Alarm {
   id: string;
@@ -51,6 +53,13 @@ export default function Alarms() {
   const [activeAlarm, setActiveAlarm] = useState<Alarm | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { requestPermission, hasPermission, sendAlarmNotification } = useNotifications();
+  const { preloadAudio } = useAlarmSound();
+
+  // Preload alarm sound on mount
+  useEffect(() => {
+    preloadAudio();
+  }, [preloadAudio]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -77,15 +86,18 @@ export default function Alarms() {
       }, () => checkActiveAlarms())
       .subscribe();
 
-    // Check for alarms every minute
-    const interval = setInterval(checkAndTriggerAlarms, 60000);
+    // Check for alarms every 30 seconds for more accuracy
+    const interval = setInterval(checkAndTriggerAlarms, 30000);
+    
+    // Also run immediately
+    checkAndTriggerAlarms();
 
     return () => {
       supabase.removeChannel(alarmsChannel);
       supabase.removeChannel(triggersChannel);
       clearInterval(interval);
     };
-  }, [roomId]);
+  }, [roomId, alarms]);
 
   const fetchAlarms = async () => {
     if (!roomId) return;
@@ -138,8 +150,8 @@ export default function Alarms() {
     }
   };
 
-  const checkAndTriggerAlarms = async () => {
-    if (!roomId || !user) return;
+  const checkAndTriggerAlarms = useCallback(async () => {
+    if (!roomId || !user || alarms.length === 0) return;
 
     const now = new Date();
     const currentTime = now.toTimeString().slice(0, 5);
@@ -152,15 +164,17 @@ export default function Alarms() {
       const alarmTime = alarm.alarm_time.slice(0, 5);
       if (alarmTime !== currentTime) continue;
 
-      // Check if already triggered in the last minute
+      // Check if already triggered in the last 2 minutes
       const { data: existingTrigger } = await supabase
         .from('alarm_triggers')
         .select('*')
         .eq('alarm_id', alarm.id)
-        .gte('triggered_at', new Date(now.getTime() - 60000).toISOString())
+        .gte('triggered_at', new Date(now.getTime() - 120000).toISOString())
         .maybeSingle();
 
       if (existingTrigger) continue;
+
+      console.log("Triggering alarm:", alarm.title);
 
       // Create new trigger
       const { error } = await supabase
@@ -174,12 +188,14 @@ export default function Alarms() {
       if (error) {
         console.error('Error triggering alarm:', error);
       } else {
-        toast.info(`🔔 Alarm: ${alarm.title}`, {
-          duration: 10000
-        });
+        // Send notification with sound
+        sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
+        
+        // Refresh to show the modal
+        checkActiveAlarms();
       }
     }
-  };
+  }, [roomId, user, alarms, sendAlarmNotification]);
 
   const toggleAlarm = async (alarm: Alarm) => {
     const { error } = await supabase
@@ -249,10 +265,18 @@ export default function Alarms() {
             <AlarmClock className="h-6 w-6 text-primary" />
             <h1 className="text-2xl font-bold">Shared Alarms</h1>
           </div>
-          <Button onClick={() => setShowCreateDialog(true)} size="sm">
-            <Plus className="h-4 w-4 mr-1" />
-            Add Alarm
-          </Button>
+          <div className="flex gap-2">
+            {!hasPermission && (
+              <Button onClick={requestPermission} variant="outline" size="sm">
+                <Bell className="h-4 w-4 mr-1" />
+                Enable
+              </Button>
+            )}
+            <Button onClick={() => setShowCreateDialog(true)} size="sm">
+              <Plus className="h-4 w-4 mr-1" />
+              Add
+            </Button>
+          </div>
         </div>
 
         {loading ? (

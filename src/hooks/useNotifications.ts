@@ -1,6 +1,5 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
 
 interface CustomNotificationOptions {
   title: string;
@@ -21,18 +20,24 @@ const NOTIFICATION_SOUNDS = {
 };
 
 export const useNotifications = () => {
-  const permissionRef = useRef<NotificationPermission>("default");
+  const [permission, setPermission] = useState<NotificationPermission>("default");
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     // Check and request notification permission
     if ("Notification" in window) {
-      permissionRef.current = Notification.permission;
+      setPermission(Notification.permission);
       
+      // Auto-request permission if not decided
       if (Notification.permission === "default") {
-        Notification.requestPermission().then((permission) => {
-          permissionRef.current = permission;
-        });
+        // Wait for user interaction before requesting
+        const handleInteraction = () => {
+          Notification.requestPermission().then((perm) => {
+            setPermission(perm);
+          });
+          window.removeEventListener('click', handleInteraction);
+        };
+        window.addEventListener('click', handleInteraction, { once: true });
       }
     }
   }, []);
@@ -53,6 +58,7 @@ export const useNotifications = () => {
       await audio.play();
       
       console.log(`Notification sound playing: ${type}`);
+      return true;
     } catch (error) {
       console.warn("Failed to play notification sound:", error);
       
@@ -78,8 +84,10 @@ export const useNotifications = () => {
         
         // Clean up after sound finishes
         setTimeout(() => audioContext.close(), 500);
+        return true;
       } catch (e) {
         console.warn("Web Audio API fallback also failed:", e);
+        return false;
       }
     }
   }, []);
@@ -90,9 +98,22 @@ export const useNotifications = () => {
       return false;
     }
 
-    const permission = await Notification.requestPermission();
-    permissionRef.current = permission;
-    return permission === "granted";
+    try {
+      const perm = await Notification.requestPermission();
+      setPermission(perm);
+      
+      if (perm === "granted") {
+        toast.success("Notifications enabled!");
+        return true;
+      } else if (perm === "denied") {
+        toast.error("Notifications blocked. Please enable in browser settings.");
+        return false;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error requesting permission:", error);
+      return false;
+    }
   }, []);
 
   const sendNotification = useCallback((options: CustomNotificationOptions) => {
@@ -101,7 +122,7 @@ export const useNotifications = () => {
     // Always show in-app toast with click handler
     toast(title, {
       description: body,
-      duration: requireInteraction ? 10000 : 5000,
+      duration: requireInteraction ? 15000 : 5000,
       action: route ? {
         label: "View",
         onClick: () => {
@@ -114,7 +135,7 @@ export const useNotifications = () => {
     });
 
     // Try to send browser notification for background/locked screen
-    if ("Notification" in window && permissionRef.current === "granted") {
+    if ("Notification" in window && permission === "granted") {
       try {
         const notification = new Notification(title, {
           body,
@@ -147,11 +168,20 @@ export const useNotifications = () => {
     }
 
     return null;
-  }, []);
+  }, [permission]);
 
   const sendAlarmNotification = useCallback((title: string, alarmTime: string) => {
-    // Play alarm sound
+    // Play alarm sound first
     playNotificationSound('alarm');
+    
+    // Vibrate if supported
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([500, 200, 500, 200, 500]);
+      } catch (e) {
+        // Ignore
+      }
+    }
     
     return sendNotification({
       title: `🔔 Alarm: ${title}`,
@@ -166,6 +196,15 @@ export const useNotifications = () => {
   const sendReminderNotification = useCallback((title: string, description?: string) => {
     // Play reminder sound
     playNotificationSound('reminder');
+    
+    // Vibrate if supported
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate([200, 100, 200]);
+      } catch (e) {
+        // Ignore
+      }
+    }
     
     return sendNotification({
       title: `⏰ Reminder: ${title}`,
@@ -225,6 +264,7 @@ export const useNotifications = () => {
   }, [sendNotification, playNotificationSound]);
 
   return {
+    permission,
     requestPermission,
     sendNotification,
     sendAlarmNotification,
@@ -232,6 +272,6 @@ export const useNotifications = () => {
     sendExpenseNotification,
     sendTaskNotification,
     playNotificationSound,
-    hasPermission: permissionRef.current === "granted",
+    hasPermission: permission === "granted",
   };
 };
