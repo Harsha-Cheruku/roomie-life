@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Paperclip, Image, File, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,11 +42,17 @@ export function AttachmentPicker({ userId, onAttachmentUploaded, disabled }: Att
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
+      // Use signed URL for private bucket (1 hour expiry)
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from('chat-attachments')
-        .getPublicUrl(fileName);
+        .createSignedUrl(fileName, 3600);
 
-      onAttachmentUploaded(publicUrl, type, file.name);
+      if (signedUrlError || !signedUrlData?.signedUrl) {
+        throw new Error('Failed to generate signed URL');
+      }
+
+      // Store the file path for later signed URL generation
+      onAttachmentUploaded(fileName, type, file.name);
       toast.success('File uploaded!');
     } catch (error) {
       console.error('Upload error:', error);
@@ -116,7 +122,7 @@ export function AttachmentPicker({ userId, onAttachmentUploaded, disabled }: Att
 }
 
 interface AttachmentPreviewProps {
-  url: string;
+  url: string; // This is now a file path for private storage
   type: 'image' | 'file' | 'voice';
   fileName?: string;
   onRemove?: () => void;
@@ -124,11 +130,55 @@ interface AttachmentPreviewProps {
 }
 
 export function AttachmentPreview({ url, type, fileName, onRemove, isPreview }: AttachmentPreviewProps) {
+  const [signedUrl, setSignedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const generateSignedUrl = async () => {
+      // Check if this is already a full URL (legacy data or external URL)
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        setSignedUrl(url);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.storage
+          .from('chat-attachments')
+          .createSignedUrl(url, 3600); // 1 hour expiry
+
+        if (error || !data?.signedUrl) {
+          throw new Error('Failed to generate signed URL');
+        }
+
+        setSignedUrl(data.signedUrl);
+      } catch (err) {
+        console.error('Error generating signed URL for preview:', err);
+        // Fallback to the original URL if signed URL generation fails
+        setSignedUrl(url);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    generateSignedUrl();
+  }, [url]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-4 bg-muted/50 rounded-lg">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const displayUrl = signedUrl || url;
+
   if (type === 'image') {
     return (
       <div className="relative inline-block">
         <img
-          src={url}
+          src={displayUrl}
           alt="Attachment"
           className={`rounded-lg object-cover ${isPreview ? 'max-w-[200px] max-h-[150px]' : 'max-w-[250px] max-h-[200px]'}`}
         />
@@ -150,7 +200,7 @@ export function AttachmentPreview({ url, type, fileName, onRemove, isPreview }: 
   if (type === 'voice') {
     return (
       <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
-        <audio controls src={url} className="h-10 max-w-[200px]" />
+        <audio controls src={displayUrl} className="h-10 max-w-[200px]" />
         {onRemove && (
           <Button
             type="button"
@@ -169,14 +219,9 @@ export function AttachmentPreview({ url, type, fileName, onRemove, isPreview }: 
   return (
     <div className="flex items-center gap-2 p-2 bg-muted/50 rounded-lg">
       <File className="w-5 h-5 text-primary" />
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-sm text-primary hover:underline truncate max-w-[150px]"
-      >
+      <span className="text-sm text-primary truncate max-w-[150px]">
         {fileName || 'Document'}
-      </a>
+      </span>
       {onRemove && (
         <Button
           type="button"
