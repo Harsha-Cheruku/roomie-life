@@ -83,6 +83,9 @@ export const Expenses = () => {
   const [kpiFilter, setKpiFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'settled' | null>(null);
   const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
   const [markingPaidSplit, setMarkingPaidSplit] = useState<{ id: string; amount: number; title: string } | null>(null);
+  
+  // Date filtering
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
 
   // Expense KPIs - Real-time updates
   const [stats, setStats] = useState({ 
@@ -459,8 +462,31 @@ export const Expenses = () => {
     return mySplit && mySplit.status === 'accepted' && !mySplit.is_paid && exp.paid_by !== user?.id;
   });
 
-  // Filter expenses based on KPI filter
+  // Filter expenses based on KPI filter and date filter
   const filteredExpenses = expenses.filter(exp => {
+    // Date filter
+    const expDate = new Date(exp.created_at);
+    const now = new Date();
+    
+    if (dateFilter === 'today') {
+      const isToday = expDate.toDateString() === now.toDateString();
+      if (!isToday) return false;
+    } else if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      if (expDate < weekAgo) return false;
+    } else if (dateFilter === 'month') {
+      const isThisMonth = expDate.getMonth() === now.getMonth() && expDate.getFullYear() === now.getFullYear();
+      if (!isThisMonth) return false;
+    }
+    
+    // Solo mode filter - only show expenses created by or paid by the user
+    if (isSoloMode) {
+      if (exp.created_by !== user?.id && exp.paid_by !== user?.id) {
+        return false;
+      }
+    }
+    
+    // KPI filter
     if (!kpiFilter || kpiFilter === 'all') return true;
     
     if (kpiFilter === 'settled') return exp.status === 'settled';
@@ -720,6 +746,31 @@ export const Expenses = () => {
           </div>
         </div>
       )}
+
+      {/* Date Filter */}
+      <div className="px-4 mb-4">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {([
+            { key: 'today' as const, label: 'Today' },
+            { key: 'week' as const, label: 'This Week' },
+            { key: 'month' as const, label: 'This Month' },
+            { key: 'all' as const, label: 'All Time' },
+          ]).map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => setDateFilter(filter.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                dateFilter === filter.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {/* Tabs */}
       <div className="px-4 mb-4">

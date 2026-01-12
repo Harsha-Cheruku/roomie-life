@@ -206,26 +206,20 @@ export default function Reminders() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <TopBar title="Reminders" />
-
-      <div className="p-4 max-w-2xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Bell className="h-6 w-6 text-primary" />
-              Shared Reminders
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Gentle nudges for you, completable by roommates
-            </p>
-          </div>
+      <TopBar 
+        title="Reminders" 
+        showBack={true}
+        onBack={() => navigate('/')}
+        hint="Gentle nudges for you and your roommates ⏰"
+        rightContent={
           <Button onClick={() => setShowCreateDialog(true)} size="sm">
             <Plus className="h-4 w-4 mr-1" />
             New
           </Button>
-        </div>
+        }
+      />
 
+      <div className="p-4 max-w-2xl mx-auto">
         {/* Stats */}
         <div className="grid grid-cols-3 gap-3 mb-6">
           <div className="bg-primary/10 rounded-xl p-3 text-center">

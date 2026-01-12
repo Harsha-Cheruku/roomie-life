@@ -66,21 +66,51 @@ export const Tasks = () => {
   const { navigate, navigateToTab, goBack } = useNavigation();
   const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
+  
+  // Date filtering
+  const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
 
-  // Real-time KPI counts
+  // Filter tasks by date and solo mode
+  const filteredByDateAndMode = tasks.filter(task => {
+    // Solo mode filter - only show tasks created by or assigned to the user
+    if (isSoloMode) {
+      if (task.created_by !== user?.id && task.assigned_to !== user?.id) {
+        return false;
+      }
+    }
+    
+    // Date filter
+    if (dateFilter === 'all') return true;
+    
+    const taskDate = new Date(task.created_at);
+    const now = new Date();
+    
+    if (dateFilter === 'today') {
+      return taskDate.toDateString() === now.toDateString();
+    } else if (dateFilter === 'week') {
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      return taskDate >= weekAgo;
+    } else if (dateFilter === 'month') {
+      return taskDate.getMonth() === now.getMonth() && taskDate.getFullYear() === now.getFullYear();
+    }
+    
+    return true;
+  });
+
+  // Real-time KPI counts (based on filtered tasks)
   const statusCounts = {
-    total: tasks.length,
-    todo: tasks.filter(t => t.status === 'pending' || t.status === 'accepted').length,
-    inProgress: tasks.filter(t => t.status === 'in_progress').length,
-    done: tasks.filter(t => t.status === 'done').length,
-    rejected: tasks.filter(t => t.status === 'rejected').length,
+    total: filteredByDateAndMode.length,
+    todo: filteredByDateAndMode.filter(t => t.status === 'pending' || t.status === 'accepted').length,
+    inProgress: filteredByDateAndMode.filter(t => t.status === 'in_progress').length,
+    done: filteredByDateAndMode.filter(t => t.status === 'done').length,
+    rejected: filteredByDateAndMode.filter(t => t.status === 'rejected').length,
   };
 
   // Tasks created by current user
-  const tasksCreatedByMe = tasks.filter(t => t.created_by === user?.id);
+  const tasksCreatedByMe = filteredByDateAndMode.filter(t => t.created_by === user?.id);
   
   // Tasks assigned to current user by others
-  const tasksAssignedToMe = tasks.filter(t => t.assigned_to === user?.id && t.created_by !== user?.id);
+  const tasksAssignedToMe = filteredByDateAndMode.filter(t => t.assigned_to === user?.id && t.created_by !== user?.id);
 
   // Active filter for created-by-me section
   const [createdByMeFilter, setCreatedByMeFilter] = useState<'todo' | 'in_progress' | 'done' | 'rejected'>('todo');
@@ -266,10 +296,35 @@ export const Tasks = () => {
         </div>
       )}
 
+      {/* Date Filter */}
+      <div className="px-4 mb-4">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {([
+            { key: 'today' as const, label: 'Today' },
+            { key: 'week' as const, label: 'This Week' },
+            { key: 'month' as const, label: 'This Month' },
+            { key: 'all' as const, label: 'All Time' },
+          ]).map((filter) => (
+            <button
+              key={filter.key}
+              onClick={() => setDateFilter(filter.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
+                dateFilter === filter.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Dashboard View */}
       {view === 'dashboard' ? (
         <div className="px-4 mb-4">
-          <TaskDashboard tasks={tasks} />
+          <TaskDashboard tasks={filteredByDateAndMode} />
         </div>
       ) : (
         <>

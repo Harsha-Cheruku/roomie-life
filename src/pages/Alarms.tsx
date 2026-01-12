@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,13 +7,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { BottomNav } from "@/components/layout/BottomNav";
+import { TopBar } from "@/components/layout/TopBar";
 import { AlarmClock, Plus, Trash2, Users, Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAlarmSound } from "@/hooks/useAlarmSound";
-
 interface Alarm {
   id: string;
   title: string;
@@ -55,11 +55,17 @@ export default function Alarms() {
   const [loading, setLoading] = useState(true);
   const { requestPermission, hasPermission, sendAlarmNotification } = useNotifications();
   const { preloadAudio } = useAlarmSound();
+  const lastTriggeredRef = useRef<Map<string, number>>(new Map());
 
   // Preload alarm sound on mount
   useEffect(() => {
     preloadAudio();
-  }, [preloadAudio]);
+    
+    // Request notification permission on mount
+    if (!hasPermission) {
+      requestPermission();
+    }
+  }, [preloadAudio, hasPermission, requestPermission]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -164,7 +170,13 @@ export default function Alarms() {
       const alarmTime = alarm.alarm_time.slice(0, 5);
       if (alarmTime !== currentTime) continue;
 
-      // Check if already triggered in the last 2 minutes
+      // Local debounce - prevent triggering same alarm within 2 minutes
+      const lastTriggered = lastTriggeredRef.current.get(alarm.id);
+      if (lastTriggered && now.getTime() - lastTriggered < 120000) {
+        continue;
+      }
+
+      // Check if already triggered in the database in the last 2 minutes
       const { data: existingTrigger } = await supabase
         .from('alarm_triggers')
         .select('*')
@@ -172,9 +184,16 @@ export default function Alarms() {
         .gte('triggered_at', new Date(now.getTime() - 120000).toISOString())
         .maybeSingle();
 
-      if (existingTrigger) continue;
+      if (existingTrigger) {
+        // Mark as triggered locally too
+        lastTriggeredRef.current.set(alarm.id, now.getTime());
+        continue;
+      }
 
       console.log("Triggering alarm:", alarm.title);
+
+      // Mark as triggered locally
+      lastTriggeredRef.current.set(alarm.id, now.getTime());
 
       // Create new trigger
       const { error } = await supabase
@@ -187,6 +206,8 @@ export default function Alarms() {
 
       if (error) {
         console.error('Error triggering alarm:', error);
+        // Remove local trigger mark on error
+        lastTriggeredRef.current.delete(alarm.id);
       } else {
         // Send notification with sound
         sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
@@ -259,12 +280,12 @@ export default function Alarms() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <div className="p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlarmClock className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold">Shared Alarms</h1>
-          </div>
+      <TopBar
+        title="Shared Alarms"
+        showBack={true}
+        onBack={() => navigate('/')}
+        hint="Wake up together with your roommates 🔔"
+        rightContent={
           <div className="flex gap-2">
             {!hasPermission && (
               <Button onClick={requestPermission} variant="outline" size="sm">
@@ -277,7 +298,10 @@ export default function Alarms() {
               Add
             </Button>
           </div>
-        </div>
+        }
+      />
+
+      <div className="p-4 space-y-4">
 
         {loading ? (
           <div className="flex justify-center py-8">
