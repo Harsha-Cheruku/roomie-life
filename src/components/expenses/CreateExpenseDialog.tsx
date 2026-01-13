@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Users, Percent, Calculator, Equal } from 'lucide-react';
+import { Save, Loader2, Users, Percent, Calculator, Equal, Bell, Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -49,7 +50,7 @@ export const CreateExpenseDialog = ({
   onOpenChange, 
   onComplete 
 }: CreateExpenseDialogProps) => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   
   const [title, setTitle] = useState('');
@@ -61,6 +62,10 @@ export const CreateExpenseDialog = ({
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [memberSplits, setMemberSplits] = useState<MemberSplit[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Reminder fields
+  const [enableReminder, setEnableReminder] = useState(false);
+  const [reminderDate, setReminderDate] = useState('');
 
   useEffect(() => {
     if (currentRoom && open) {
@@ -259,7 +264,18 @@ export const CreateExpenseDialog = ({
       return;
     }
 
-    const selectedSplits = memberSplits.filter(m => m.selected && m.amount > 0);
+    // In solo mode, the expense is just for the user (no split needed)
+    let selectedSplits = memberSplits.filter(m => m.selected && m.amount > 0);
+
+    // Solo mode: auto-select only user
+    if (isSoloMode) {
+      selectedSplits = [{
+        user_id: user.id,
+        amount: totalAmount,
+        percentage: 100,
+        selected: true,
+      }];
+    }
 
     if (selectedSplits.length === 0) {
       toast({
@@ -270,23 +286,25 @@ export const CreateExpenseDialog = ({
       return;
     }
 
-    // Validate split totals
-    if (splitType === 'percentage' && Math.abs(getTotalPercentage() - 100) >= 0.01) {
-      toast({
-        title: 'Invalid percentages',
-        description: 'Percentages must add up to 100%',
-        variant: 'destructive',
-      });
-      return;
-    }
+    // Validate split totals (only in non-solo mode)
+    if (!isSoloMode) {
+      if (splitType === 'percentage' && Math.abs(getTotalPercentage() - 100) >= 0.01) {
+        toast({
+          title: 'Invalid percentages',
+          description: 'Percentages must add up to 100%',
+          variant: 'destructive',
+        });
+        return;
+      }
 
-    if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
-      toast({
-        title: 'Invalid split amounts',
-        description: `Split amounts must total ₹${totalAmount.toFixed(0)}`,
-        variant: 'destructive',
-      });
-      return;
+      if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
+        toast({
+          title: 'Invalid split amounts',
+          description: `Split amounts must total ₹${totalAmount.toFixed(0)}`,
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -297,13 +315,13 @@ export const CreateExpenseDialog = ({
         .insert({
           room_id: currentRoom.id,
           created_by: user.id,
-          paid_by: paidBy,
+          paid_by: isSoloMode ? user.id : paidBy,
           title: title.trim(),
           total_amount: totalAmount,
           category,
-          split_type: splitType,
+          split_type: isSoloMode ? 'equal' : splitType,
           notes: notes.trim() || null,
-          status: 'pending',
+          status: isSoloMode ? 'settled' : 'pending', // Solo mode expenses are auto-settled
         })
         .select()
         .single();
@@ -315,8 +333,8 @@ export const CreateExpenseDialog = ({
         expense_id: expense.id,
         user_id: split.user_id,
         amount: split.amount,
-        is_paid: split.user_id === paidBy, // Payer already paid their share
-        status: split.user_id === paidBy ? 'accepted' : 'pending',
+        is_paid: isSoloMode ? true : split.user_id === paidBy, // Solo mode: auto-paid
+        status: isSoloMode ? 'accepted' : (split.user_id === paidBy ? 'accepted' : 'pending'),
       }));
 
       const { error: splitsError } = await supabase
@@ -325,9 +343,32 @@ export const CreateExpenseDialog = ({
 
       if (splitsError) throw splitsError;
 
+      // Create reminder if enabled
+      if (enableReminder && reminderDate) {
+        const { error: reminderError } = await supabase
+          .from('reminders')
+          .insert({
+            room_id: currentRoom.id,
+            created_by: user.id,
+            title: `Bill Reminder: ${title.trim()}`,
+            description: `Reminder for expense of ₹${totalAmount.toFixed(0)}`,
+            remind_at: new Date(reminderDate).toISOString(),
+            condition_type: 'expense',
+            condition_ref_id: expense.id,
+            status: 'scheduled',
+          });
+
+        if (reminderError) {
+          console.error('Error creating reminder:', reminderError);
+          // Don't fail the expense creation if reminder fails
+        }
+      }
+
       toast({
-        title: 'Expense created! 🎉',
-        description: `Split ₹${totalAmount.toFixed(0)} between ${selectedSplits.length} people`,
+        title: isSoloMode ? 'Expense recorded! 💰' : 'Expense created! 🎉',
+        description: isSoloMode 
+          ? `₹${totalAmount.toFixed(0)} expense saved`
+          : `Split ₹${totalAmount.toFixed(0)} between ${selectedSplits.length} people`,
       });
 
       // Reset form
@@ -336,6 +377,8 @@ export const CreateExpenseDialog = ({
       setCategory('general');
       setNotes('');
       setSplitType('equal');
+      setEnableReminder(false);
+      setReminderDate('');
       
       onComplete();
       onOpenChange(false);
@@ -407,66 +450,71 @@ export const CreateExpenseDialog = ({
             </Select>
           </div>
 
-          {/* Paid By */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Paid By</label>
-            <Select value={paidBy} onValueChange={setPaidBy}>
-              <SelectTrigger className="mt-1 rounded-xl h-12">
-                <SelectValue>
-                  {roomMembers.find(m => m.user_id === paidBy)?.profile.display_name || 'Select payer'}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {roomMembers.map(member => (
-                  <SelectItem key={member.user_id} value={member.user_id}>
-                    <div className="flex items-center gap-2">
-                      <span>{member.profile.avatar}</span>
-                      <span>{member.profile.display_name}</span>
-                      {member.user_id === user?.id && <span className="text-xs text-primary">(You)</span>}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Split Type */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground">Split Type</label>
-            <div className="grid grid-cols-3 gap-2 mt-2">
-              <button
-                onClick={() => setSplitType('equal')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
-                  splitType === 'equal' ? 'border-primary bg-primary/10' : 'border-border'
-                }`}
-              >
-                <Equal className="w-5 h-5" />
-                <span className="text-xs font-medium">Equal</span>
-              </button>
-              <button
-                onClick={() => setSplitType('percentage')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
-                  splitType === 'percentage' ? 'border-primary bg-primary/10' : 'border-border'
-                }`}
-              >
-                <Percent className="w-5 h-5" />
-                <span className="text-xs font-medium">Percentage</span>
-              </button>
-              <button
-                onClick={() => setSplitType('custom')}
-                className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
-                  splitType === 'custom' ? 'border-primary bg-primary/10' : 'border-border'
-                }`}
-              >
-                <Calculator className="w-5 h-5" />
-                <span className="text-xs font-medium">Custom</span>
-              </button>
+          {/* Paid By - Hidden in Solo Mode */}
+          {!isSoloMode && (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Paid By</label>
+              <Select value={paidBy} onValueChange={setPaidBy}>
+                <SelectTrigger className="mt-1 rounded-xl h-12">
+                  <SelectValue>
+                    {roomMembers.find(m => m.user_id === paidBy)?.profile.display_name || 'Select payer'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {roomMembers.map(member => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      <div className="flex items-center gap-2">
+                        <span>{member.profile.avatar}</span>
+                        <span>{member.profile.display_name}</span>
+                        {member.user_id === user?.id && <span className="text-xs text-primary">(You)</span>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
+          )}
 
-          {/* Assign To */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+          {/* Split Type - Hidden in Solo Mode */}
+          {!isSoloMode && (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground">Split Type</label>
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                <button
+                  onClick={() => setSplitType('equal')}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    splitType === 'equal' ? 'border-primary bg-primary/10' : 'border-border'
+                  }`}
+                >
+                  <Equal className="w-5 h-5" />
+                  <span className="text-xs font-medium">Equal</span>
+                </button>
+                <button
+                  onClick={() => setSplitType('percentage')}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    splitType === 'percentage' ? 'border-primary bg-primary/10' : 'border-border'
+                  }`}
+                >
+                  <Percent className="w-5 h-5" />
+                  <span className="text-xs font-medium">Percentage</span>
+                </button>
+                <button
+                  onClick={() => setSplitType('custom')}
+                  className={`p-3 rounded-xl border flex flex-col items-center gap-1 transition-all ${
+                    splitType === 'custom' ? 'border-primary bg-primary/10' : 'border-border'
+                  }`}
+                >
+                  <Calculator className="w-5 h-5" />
+                  <span className="text-xs font-medium">Custom</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Assign To - Hidden in Solo Mode */}
+          {!isSoloMode && (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
               <Users className="w-4 h-4" />
               Split Between
             </label>
@@ -552,6 +600,37 @@ export const CreateExpenseDialog = ({
                     Total: ₹{getTotalSplitAmount().toFixed(0)} of ₹{parseFloat(amount).toFixed(0)}
                   </p>
                 )}
+              </div>
+            )}
+            </div>
+          )}
+
+          {/* Reminder Option */}
+          <div className="bg-muted/30 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Bell className="w-4 h-4 text-primary" />
+                <label className="text-sm font-medium">Set Reminder</label>
+              </div>
+              <Switch
+                checked={enableReminder}
+                onCheckedChange={setEnableReminder}
+              />
+            </div>
+            
+            {enableReminder && (
+              <div>
+                <label className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+                  <Calendar className="w-3 h-3" />
+                  Reminder Date & Time
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={reminderDate}
+                  onChange={(e) => setReminderDate(e.target.value)}
+                  className="rounded-xl"
+                  min={new Date().toISOString().slice(0, 16)}
+                />
               </div>
             )}
           </div>
