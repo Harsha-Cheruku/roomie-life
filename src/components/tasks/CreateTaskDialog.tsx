@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Plus, Calendar, Clock, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,7 @@ interface CreateTaskDialogProps {
 }
 
 export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTaskDialogProps) => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   const { members } = useRoomMembers();
   const [title, setTitle] = useState('');
@@ -28,6 +28,13 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
   const [dueDate, setDueDate] = useState('');
   const [reminderTime, setReminderTime] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-assign to self in solo mode
+  useEffect(() => {
+    if (isSoloMode && user && !assignedTo) {
+      setAssignedTo(user.id);
+    }
+  }, [isSoloMode, user, assignedTo]);
 
   const handleSubmit = async () => {
     if (!user || !currentRoom || !title.trim() || !assignedTo) {
@@ -116,36 +123,45 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
             />
           </div>
 
-          {/* Assign to - Second */}
-          <div>
-            <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Users className="w-4 h-4" />
-              Assign to
-            </label>
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {members.map(member => (
-                <button
-                  key={member.user_id}
-                  onClick={() => setAssignedTo(member.user_id)}
-                  className={cn(
-                    "flex items-center gap-2 p-3 rounded-xl border transition-colors press-effect",
-                    assignedTo === member.user_id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-border hover:border-primary/50'
-                  )}
-                >
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-primary/20">
-                      {member.avatar}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="flex-1 text-left text-sm truncate">
-                    {member.user_id === user?.id ? 'Myself' : member.display_name}
-                  </span>
-                </button>
-              ))}
+          {/* Assign to - Hidden in Solo Mode */}
+          {!isSoloMode && (
+            <div>
+              <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Users className="w-4 h-4" />
+                Assign to
+              </label>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                {members.map(member => (
+                  <button
+                    key={member.user_id}
+                    onClick={() => setAssignedTo(member.user_id)}
+                    className={cn(
+                      "flex items-center gap-2 p-3 rounded-xl border transition-colors press-effect",
+                      assignedTo === member.user_id
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    )}
+                  >
+                    <Avatar className="w-8 h-8">
+                      <AvatarFallback className="bg-primary/20">
+                        {member.avatar}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="flex-1 text-left text-sm truncate">
+                      {member.user_id === user?.id ? 'Myself' : member.display_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Solo Mode Info */}
+          {isSoloMode && (
+            <div className="bg-lavender/10 rounded-xl p-3 flex items-center gap-2">
+              <span className="text-lavender text-sm">📝 Solo Mode: Task will be assigned to you</span>
+            </div>
+          )}
 
           {/* Priority - Third */}
           <div>
