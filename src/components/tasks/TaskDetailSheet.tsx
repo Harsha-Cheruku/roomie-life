@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, X, Loader2, Calendar, Clock, User, Flag, ArrowLeft, Play, CheckCircle2 } from 'lucide-react';
+import { Check, X, Loader2, Calendar, Clock, User, Flag, ArrowLeft, Play, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -9,6 +9,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { RejectCommentDialog } from './RejectCommentDialog';
+import { EditTaskDialog } from './EditTaskDialog';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -74,6 +76,9 @@ export const TaskDetailSheet = ({
   const { toast } = useToast();
   const [updatingAction, setUpdatingAction] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (!task) return null;
 
@@ -153,11 +158,33 @@ export const TaskDetailSheet = ({
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="bottom" className="h-[85vh] rounded-t-3xl overflow-hidden flex flex-col">
-          <SheetHeader className="shrink-0 flex flex-row items-center gap-3 pb-2">
-            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <SheetTitle className="text-xl font-bold">Task Details</SheetTitle>
+          <SheetHeader className="shrink-0 flex flex-row items-center justify-between pb-2">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+              <SheetTitle className="text-xl font-bold">Task Details</SheetTitle>
+            </div>
+            {isCreatedByMe && (
+              <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-muted-foreground hover:text-primary"
+                  onClick={() => setShowEditDialog(true)}
+                >
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-muted-foreground hover:text-coral"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto space-y-4 pb-4">
@@ -332,6 +359,39 @@ export const TaskDetailSheet = ({
         onConfirm={handleReject}
         title="Reject Task"
         description={`Please provide a reason for rejecting "${task.title}". This will be sent to ${task.creator_profile?.display_name || 'the creator'}.`}
+      />
+
+      <EditTaskDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        task={task}
+        onComplete={() => {
+          onUpdate();
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Task"
+        description="This will permanently delete this task. This action cannot be undone."
+        itemName={task.title}
+        isLoading={isDeleting}
+        onConfirm={async () => {
+          setIsDeleting(true);
+          try {
+            const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+            if (error) throw error;
+            toast({ title: 'Task deleted' });
+            onOpenChange(false);
+            onUpdate();
+          } catch (error) {
+            console.error('Error deleting task:', error);
+            toast({ title: 'Failed to delete', variant: 'destructive' });
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
       />
     </>
   );
