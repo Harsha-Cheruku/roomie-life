@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download } from 'lucide-react';
+import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { RejectCommentDialog } from '@/components/tasks/RejectCommentDialog';
+import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 
 interface ExpenseSplit {
   id: string;
@@ -65,6 +67,9 @@ export const ExpenseDetailSheet = ({
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   if (!expense) return null;
 
@@ -181,11 +186,33 @@ export const ExpenseDetailSheet = ({
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="bottom" className="h-[90vh] rounded-t-3xl overflow-hidden flex flex-col">
-          <SheetHeader className="shrink-0 flex flex-row items-center gap-3 pb-2">
-            <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <SheetTitle className="text-xl font-bold">Expense Details</SheetTitle>
+          <SheetHeader className="shrink-0 flex flex-row items-center justify-between pb-2">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)}>
+                <ArrowLeft className="w-5 h-5" />
+              </Button>
+              <SheetTitle className="text-xl font-bold">Expense Details</SheetTitle>
+            </div>
+            {isCreator && (
+              <div className="flex gap-2">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-muted-foreground hover:text-primary"
+                  onClick={() => setShowEditDialog(true)}
+                >
+                  <Edit2 className="w-4 h-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-muted-foreground hover:text-coral"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            )}
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto space-y-5 pb-4">
@@ -370,6 +397,42 @@ export const ExpenseDetailSheet = ({
         onConfirm={handleRejectConfirm}
         title="Reject Expense Split"
         description={`Please provide a reason for rejecting this expense split for "${expense.title}".`}
+      />
+
+      <EditExpenseDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        expense={expense}
+        onComplete={() => {
+          onUpdate();
+        }}
+      />
+
+      <DeleteConfirmDialog
+        open={showDeleteDialog}
+        onOpenChange={setShowDeleteDialog}
+        title="Delete Expense"
+        description="This will permanently delete this expense and all associated splits. This action cannot be undone."
+        itemName={expense.title}
+        isLoading={isDeleting}
+        onConfirm={async () => {
+          setIsDeleting(true);
+          try {
+            // Delete splits first
+            await supabase.from('expense_splits').delete().eq('expense_id', expense.id);
+            // Then delete expense
+            const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
+            if (error) throw error;
+            toast({ title: 'Expense deleted' });
+            onOpenChange(false);
+            onUpdate();
+          } catch (error) {
+            console.error('Error deleting expense:', error);
+            toast({ title: 'Failed to delete', variant: 'destructive' });
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
       />
     </>
   );
