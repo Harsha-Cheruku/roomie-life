@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface RoomMember {
   user_id: string;
@@ -52,6 +53,7 @@ export const CreateExpenseDialog = ({
 }: CreateExpenseDialogProps) => {
   const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
+  const { createExpenseNotification } = useCreateNotification();
   
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
@@ -342,6 +344,19 @@ export const CreateExpenseDialog = ({
         .insert(splits);
 
       if (splitsError) throw splitsError;
+
+      // Create notifications for assigned users (non-solo mode only)
+      if (!isSoloMode) {
+        await createExpenseNotification(
+          { 
+            id: expense.id, 
+            title: title.trim(), 
+            total_amount: totalAmount, 
+            created_by: user.id 
+          },
+          selectedSplits.map(s => s.user_id)
+        );
+      }
 
       // Create reminder if enabled
       if (enableReminder && reminderDate) {
