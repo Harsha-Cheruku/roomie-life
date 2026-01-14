@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useNotificationBell } from "@/hooks/useNotificationBell";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -20,6 +21,7 @@ export const RoomHeader = () => {
   const { currentRoom, profile, signOut, leaveRoom, userRooms, switchRoom, user, isSoloMode, toggleSoloMode } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { unreadCount } = useNotificationBell();
   const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -180,11 +182,18 @@ export const RoomHeader = () => {
           </button>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="glass" size="icon" className="relative press-effect">
+          <Button 
+            variant="glass" 
+            size="icon" 
+            className="relative press-effect"
+            onClick={() => navigate('/notifications')}
+          >
             <Bell className="w-5 h-5 text-foreground" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center animate-bounce-soft">
-              3
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center animate-bounce-soft">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
           </Button>
           <div className="relative">
             <Button variant="glass" size="icon" onClick={() => setShowMenu(!showMenu)} className="press-effect">

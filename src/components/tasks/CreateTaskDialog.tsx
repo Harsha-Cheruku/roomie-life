@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useRoomMembers } from '@/hooks/useRoomMembers';
 import { cn } from '@/lib/utils';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface CreateTaskDialogProps {
   open: boolean;
@@ -21,6 +22,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
   const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   const { members } = useRoomMembers();
+  const { createTaskNotification } = useCreateNotification();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [assignedTo, setAssignedTo] = useState<string | null>(null);
@@ -52,7 +54,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
       const isSelfAssigned = assignedTo === user.id;
       const initialStatus = isSelfAssigned ? 'accepted' : 'pending';
       
-      const { error } = await supabase
+      const { data: task, error } = await supabase
         .from('tasks')
         .insert({
           room_id: currentRoom.id,
@@ -64,9 +66,21 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
           status: initialStatus,
           due_date: dueDate ? new Date(dueDate).toISOString() : null,
           reminder_time: reminderTime ? new Date(reminderTime).toISOString() : null,
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
+
+      // Create notification for assigned user (if not self-assigned)
+      if (!isSelfAssigned && task) {
+        await createTaskNotification({
+          id: task.id,
+          title: title.trim(),
+          created_by: user.id,
+          assigned_to: assignedTo,
+        });
+      }
 
       toast({
         title: 'Task created!',
