@@ -92,8 +92,8 @@ export default function Alarms() {
       }, () => checkActiveAlarms())
       .subscribe();
 
-    // Check for alarms every 30 seconds for more accuracy
-    const interval = setInterval(checkAndTriggerAlarms, 30000);
+    // Check for alarms every 10 seconds for better accuracy (still debounced)
+    const interval = setInterval(checkAndTriggerAlarms, 10000);
     
     // Also run immediately
     checkAndTriggerAlarms();
@@ -159,16 +159,24 @@ export default function Alarms() {
   const checkAndTriggerAlarms = useCallback(async () => {
     if (!roomId || !user || alarms.length === 0) return;
 
-    const now = new Date();
-    const currentTime = now.toTimeString().slice(0, 5);
-    const currentDay = now.getDay();
+     const now = new Date();
+     const currentDay = now.getDay();
+ 
+     for (const alarm of alarms) {
+       if (!alarm.is_active) continue;
+       if (!alarm.days_of_week.includes(currentDay)) continue;
+ 
+       const [hh, mm] = alarm.alarm_time
+         .slice(0, 5)
+         .split(':')
+         .map((v) => parseInt(v, 10));
 
-    for (const alarm of alarms) {
-      if (!alarm.is_active) continue;
-      if (!alarm.days_of_week.includes(currentDay)) continue;
-      
-      const alarmTime = alarm.alarm_time.slice(0, 5);
-      if (alarmTime !== currentTime) continue;
+       const alarmDate = new Date(now);
+       alarmDate.setHours(hh, mm, 0, 0);
+
+       const diffMs = now.getTime() - alarmDate.getTime();
+       // Trigger if we are within the first minute after the alarm time
+       if (diffMs < 0 || diffMs > 60_000) continue;
 
       // Local debounce - prevent triggering same alarm within 2 minutes
       const lastTriggered = lastTriggeredRef.current.get(alarm.id);

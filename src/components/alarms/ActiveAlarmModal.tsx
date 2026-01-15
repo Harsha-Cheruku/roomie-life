@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -34,7 +34,13 @@ interface ActiveAlarmModalProps {
 }
 
 export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: ActiveAlarmModalProps) {
-  const [ringCount, setRingCount] = useState(trigger.ring_count);
+  const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
+  const ringIntervalRef = useRef<number | null>(null);
+
+  const [ringCount, setRingCount] = useState<number>(() => {
+    const diff = Date.now() - triggeredAtMs;
+    return Math.max(1, Math.floor(diff / 5000) + 1);
+  });
   const [acknowledgments, setAcknowledgments] = useState<string[]>([]);
   const [canDismiss, setCanDismiss] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -61,23 +67,14 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
     };
 
     startAlarm();
-    
+
     // Send notification for background/locked screen
     sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
 
-    // Increment ring count every 5 seconds
-    const ringInterval = setInterval(async () => {
-      setRingCount(prev => {
-        const newCount = prev + 1;
-        // Update in database
-        supabase
-          .from('alarm_triggers')
-          .update({ ring_count: newCount })
-          .eq('id', trigger.id)
-          .then(() => console.log(`Ring count updated to ${newCount}`));
-        return newCount;
-      });
-    }, 5000);
+    // Keep ring count consistent across devices based on triggered_at
+    ringIntervalRef.current = window.setInterval(() => {
+      setRingCount(Math.max(1, Math.floor((Date.now() - triggeredAtMs) / 5000) + 1));
+    }, 1000);
 
     // Subscribe to acknowledgments
     const ackChannel = supabase
@@ -96,10 +93,13 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
 
     return () => {
       stopAlarm();
-      clearInterval(ringInterval);
+      if (ringIntervalRef.current) {
+        clearInterval(ringIntervalRef.current);
+        ringIntervalRef.current = null;
+      }
       supabase.removeChannel(ackChannel);
     };
-  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, stopAlarm, sendAlarmNotification]);
+  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, stopAlarm, sendAlarmNotification, triggeredAtMs]);
 
   useEffect(() => {
     // Check if user can dismiss based on conditions
@@ -173,19 +173,23 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       return;
     }
 
+    // Stop immediately (don’t wait for unmount)
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
     stopAlarm();
 
     toast.success('Alarm dismissed!');
     onDismissed();
   };
 
-
   const getStatusMessage = () => {
     if (alarm.condition_type === 'after_rings' && !canDismiss) {
-      return `Wait for ${alarm.condition_value - ringCount} more rings`;
+      return `Wait for ${Math.max(0, alarm.condition_value - ringCount)} more rings`;
     }
     if (alarm.condition_type === 'multiple_ack' && !canDismiss) {
-      return `Need ${alarm.condition_value - acknowledgments.length} more people to acknowledge`;
+      return `Need ${Math.max(0, alarm.condition_value - acknowledgments.length)} more people to acknowledge`;
     }
     if (alarm.condition_type === 'owner_only' && !canDismiss) {
       return 'Only the owner can dismiss this alarm';
