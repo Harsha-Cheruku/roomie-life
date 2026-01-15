@@ -12,6 +12,7 @@ import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
 import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
+import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";

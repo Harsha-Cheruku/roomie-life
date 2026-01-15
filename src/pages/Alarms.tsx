@@ -12,6 +12,7 @@ import { AlarmClock, Plus, Trash2, Users, Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
+import { AlarmDebugPanel } from "@/components/alarms/AlarmDebugPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAlarmSound } from "@/hooks/useAlarmSound";
 interface Alarm {
@@ -310,6 +311,8 @@ export default function Alarms() {
       />
 
       <div className="p-4 space-y-4">
+        {/* Debug Panel */}
+        <AlarmDebugPanel roomId={roomId} />
 
         {loading ? (
           <div className="flex justify-center py-8">

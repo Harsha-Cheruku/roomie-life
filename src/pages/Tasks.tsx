@@ -8,6 +8,7 @@ import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { TaskDashboard } from "@/components/tasks/TaskDashboard";
+import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -320,6 +321,9 @@ export const Tasks = () => {
           ))}
         </div>
       </div>
+
+      {/* Follow-ups Section (Reminders merged here) */}
+      {currentRoom && <FollowUpsSection roomId={currentRoom.id} />}
 
       {/* Dashboard View */}
       {view === 'dashboard' ? (
