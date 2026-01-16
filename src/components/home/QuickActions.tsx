@@ -14,7 +14,7 @@ interface QuickAction {
 
 const actions: QuickAction[] = [
   { icon: Music, label: "Music Sync", gradient: "gradient-ocean", delay: 0, route: "/music" },
-  { icon: ListTodo, label: "Tasks", gradient: "gradient-sunset", delay: 50, route: "/tasks" },
+  { icon: Gamepad2, label: "Games", gradient: "gradient-lavender", delay: 50, route: "/games" },
   { icon: Clock, label: "Alarms", gradient: "gradient-mint", delay: 100, route: "/alarms", soloHidden: true },
   { icon: Receipt, label: "Expenses", gradient: "gradient-coral", delay: 150, route: "/expenses" },
   { icon: Cloud, label: "Storage", gradient: "gradient-primary", delay: 200, route: "/storage" },
