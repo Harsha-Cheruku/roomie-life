@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,8 @@ interface ActiveAlarmModalProps {
 export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: ActiveAlarmModalProps) {
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
   const ringIntervalRef = useRef<number | null>(null);
+  const hasStartedRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   const [ringCount, setRingCount] = useState<number>(() => {
     const diff = Date.now() - triggeredAtMs;
@@ -55,8 +57,24 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
     return `${hour12}:${minutes} ${ampm}`;
   };
 
+  // Cleanup function to stop everything
+  const cleanupAlarm = useCallback(() => {
+    console.log("Alarm: Cleaning up...");
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    stopAlarm();
+  }, [stopAlarm]);
+
   useEffect(() => {
-    // Play alarm sound immediately with user interaction workaround
+    isMountedRef.current = true;
+    
+    // Prevent double-start
+    if (hasStartedRef.current) return;
+    hasStartedRef.current = true;
+
+    // Play alarm sound immediately
     const startAlarm = async () => {
       try {
         await playAlarm();
@@ -73,7 +91,9 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
 
     // Keep ring count consistent across devices based on triggered_at
     ringIntervalRef.current = window.setInterval(() => {
-      setRingCount(Math.max(1, Math.floor((Date.now() - triggeredAtMs) / 5000) + 1));
+      if (isMountedRef.current) {
+        setRingCount(Math.max(1, Math.floor((Date.now() - triggeredAtMs) / 5000) + 1));
+      }
     }, 1000);
 
     // Subscribe to acknowledgments
@@ -85,21 +105,20 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
         table: 'alarm_acknowledgments',
         filter: `trigger_id=eq.${trigger.id}`
       }, (payload) => {
-        setAcknowledgments(prev => [...prev, payload.new.user_id]);
+        if (isMountedRef.current) {
+          setAcknowledgments(prev => [...prev, payload.new.user_id]);
+        }
       })
       .subscribe();
 
     fetchAcknowledgments();
 
     return () => {
-      stopAlarm();
-      if (ringIntervalRef.current) {
-        clearInterval(ringIntervalRef.current);
-        ringIntervalRef.current = null;
-      }
+      isMountedRef.current = false;
+      cleanupAlarm();
       supabase.removeChannel(ackChannel);
     };
-  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, stopAlarm, sendAlarmNotification, triggeredAtMs]);
+  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, sendAlarmNotification, triggeredAtMs, cleanupAlarm]);
 
   useEffect(() => {
     // Check if user can dismiss based on conditions
@@ -153,35 +172,37 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
   };
 
   const handleDismiss = async () => {
-    if (!userId || !canDismiss) return;
+    if (!userId || !canDismiss || dismissing) return;
 
     setDismissing(true);
+    
+    // IMMEDIATELY stop everything before any async operation
+    console.log("Alarm: Dismissing - stopping immediately");
+    cleanupAlarm();
 
-    const { error } = await supabase
-      .from('alarm_triggers')
-      .update({
-        status: 'dismissed',
-        dismissed_by: userId,
-        dismissed_at: new Date().toISOString()
-      })
-      .eq('id', trigger.id);
+    try {
+      const { error } = await supabase
+        .from('alarm_triggers')
+        .update({
+          status: 'dismissed',
+          dismissed_by: userId,
+          dismissed_at: new Date().toISOString()
+        })
+        .eq('id', trigger.id);
 
-    setDismissing(false);
+      if (error) {
+        toast.error('Failed to dismiss alarm');
+        setDismissing(false);
+        return;
+      }
 
-    if (error) {
+      toast.success('Alarm dismissed!');
+      onDismissed();
+    } catch (err) {
+      console.error('Error dismissing alarm:', err);
       toast.error('Failed to dismiss alarm');
-      return;
+      setDismissing(false);
     }
-
-    // Stop immediately (don’t wait for unmount)
-    if (ringIntervalRef.current) {
-      clearInterval(ringIntervalRef.current);
-      ringIntervalRef.current = null;
-    }
-    stopAlarm();
-
-    toast.success('Alarm dismissed!');
-    onDismissed();
   };
 
   const getStatusMessage = () => {

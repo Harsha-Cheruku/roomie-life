@@ -33,13 +33,69 @@ export const useAlarmSound = () => {
   const beepIntervalRef = useRef<number | null>(null);
   const isPlayingRef = useRef(false);
   const vibrationIntervalRef = useRef<number | null>(null);
+  const cleanupCalledRef = useRef(false);
+
+  // Full cleanup function
+  const fullCleanup = useCallback(() => {
+    if (cleanupCalledRef.current) return;
+    cleanupCalledRef.current = true;
+    
+    console.log("Alarm: Full cleanup called");
+    isPlayingRef.current = false;
+
+    // Stop audio element
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+        audioRef.current.src = '';
+        audioRef.current = null;
+      } catch (e) {
+        console.warn("Error stopping audio element:", e);
+      }
+    }
+
+    // Stop beep interval
+    if (beepIntervalRef.current) {
+      clearInterval(beepIntervalRef.current);
+      beepIntervalRef.current = null;
+    }
+
+    // Close audio context
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      try {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      } catch (e) {
+        console.warn("Error closing audio context:", e);
+      }
+    }
+
+    // Stop vibration
+    if (vibrationIntervalRef.current) {
+      clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = null;
+    }
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(0);
+      } catch (e) {
+        // Ignore
+      }
+    }
+    
+    // Reset cleanup flag after a delay
+    setTimeout(() => {
+      cleanupCalledRef.current = false;
+    }, 100);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      stopAlarm();
+      fullCleanup();
     };
-  }, []);
+  }, [fullCleanup]);
 
   const startVibration = useCallback(() => {
     // Vibration API for mobile devices
@@ -182,22 +238,8 @@ export const useAlarmSound = () => {
 
   const stopAlarm = useCallback(() => {
     console.log("Alarm: Stopping sound");
-    isPlayingRef.current = false;
-
-    // Stop audio element if playing
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-      audioRef.current.src = ''; // Release the resource
-      audioRef.current = null;
-    }
-
-    // Stop beep pattern
-    stopBeepPattern();
-    
-    // Stop vibration
-    stopVibration();
-  }, [stopBeepPattern, stopVibration]);
+    fullCleanup();
+  }, [fullCleanup]);
 
   const setVolume = useCallback((volume: number) => {
     const clampedVolume = Math.max(0, Math.min(1, volume));

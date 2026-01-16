@@ -16,6 +16,7 @@ import { Chat } from "./pages/Chat";
 import Alarms from "./pages/Alarms";
 import Reminders from "./pages/Reminders";
 import MusicSync from "./pages/MusicSync";
+import Games from "./pages/Games";
 import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
@@ -121,6 +122,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <MusicSync />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/games"
+              element={
+                <ProtectedRoute>
+                  <Games />
                 </ProtectedRoute>
               }
             />

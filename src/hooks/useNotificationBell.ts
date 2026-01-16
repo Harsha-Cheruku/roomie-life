@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -7,54 +7,68 @@ export const useNotificationBell = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchUnreadCount = async () => {
-    if (!user || !currentRoom) {
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) {
       setUnreadCount(0);
       setIsLoading(false);
       return;
     }
 
     try {
-      const { count, error } = await supabase
+      // Fetch all unread notifications for the user (across all rooms if no currentRoom)
+      let query = supabase
         .from('notifications')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('room_id', currentRoom.id)
         .eq('is_read', false);
 
-      if (error) throw error;
+      // Only filter by room if we have one
+      if (currentRoom?.id) {
+        query = query.eq('room_id', currentRoom.id);
+      }
+
+      const { count, error } = await query;
+
+      if (error) {
+        console.error('Error fetching unread count:', error);
+        return;
+      }
+      
       setUnreadCount(count || 0);
     } catch (error) {
       console.error('Error fetching unread count:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.id, currentRoom?.id]);
 
   useEffect(() => {
-    if (user && currentRoom) {
-      fetchUnreadCount();
+    fetchUnreadCount();
 
-      // Subscribe to realtime updates for notifications
-      const channel = supabase
-        .channel('notifications-bell')
-        .on(
-          'postgres_changes',
-          { 
-            event: '*', 
-            schema: 'public', 
-            table: 'notifications',
-            filter: `user_id=eq.${user.id}`
-          },
-          () => fetchUnreadCount()
-        )
-        .subscribe();
+    if (!user) return;
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [user?.id, currentRoom?.id]);
+    // Subscribe to realtime updates for notifications
+    const channel = supabase
+      .channel(`notifications-bell-${user.id}`)
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          console.log('Notification change detected, refetching...');
+          fetchUnreadCount();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id, currentRoom?.id, fetchUnreadCount]);
 
   return { unreadCount, isLoading, refetch: fetchUnreadCount };
 };

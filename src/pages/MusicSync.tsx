@@ -6,6 +6,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
+import { Badge } from "@/components/ui/badge";
 import { 
   Play, 
   Pause, 
@@ -18,7 +19,10 @@ import {
   List,
   Shuffle,
   Repeat,
-  Heart
+  Heart,
+  ExternalLink,
+  Radio,
+  Headphones
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -30,7 +34,24 @@ interface Track {
   duration: number;
   file?: File;
   url?: string;
+  source?: 'local' | 'spotify' | 'apple';
+  albumArt?: string;
 }
+
+// Demo tracks for streaming services
+const DEMO_SPOTIFY_TRACKS: Track[] = [
+  { id: 'sp-1', name: 'Blinding Lights', artist: 'The Weeknd', duration: 200, source: 'spotify', albumArt: '🎵' },
+  { id: 'sp-2', name: 'Shape of You', artist: 'Ed Sheeran', duration: 234, source: 'spotify', albumArt: '🎶' },
+  { id: 'sp-3', name: 'Dance Monkey', artist: 'Tones and I', duration: 210, source: 'spotify', albumArt: '🎹' },
+  { id: 'sp-4', name: 'Watermelon Sugar', artist: 'Harry Styles', duration: 174, source: 'spotify', albumArt: '🍉' },
+];
+
+const DEMO_APPLE_TRACKS: Track[] = [
+  { id: 'ap-1', name: 'Anti-Hero', artist: 'Taylor Swift', duration: 200, source: 'apple', albumArt: '⭐' },
+  { id: 'ap-2', name: 'Flowers', artist: 'Miley Cyrus', duration: 200, source: 'apple', albumArt: '🌸' },
+  { id: 'ap-3', name: 'As It Was', artist: 'Harry Styles', duration: 167, source: 'apple', albumArt: '💫' },
+  { id: 'ap-4', name: 'Bad Habit', artist: 'Steve Lacy', duration: 232, source: 'apple', albumArt: '🎸' },
+];
 
 export default function MusicSync() {
   const navigate = useNavigate();
@@ -49,6 +70,7 @@ export default function MusicSync() {
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
+  const [activeSource, setActiveSource] = useState<'local' | 'spotify' | 'apple'>('local');
 
   useEffect(() => {
     if (audioRef.current) {
@@ -97,7 +119,8 @@ export default function MusicSync() {
           artist: 'Unknown Artist',
           duration: 0,
           file,
-          url: URL.createObjectURL(file)
+          url: URL.createObjectURL(file),
+          source: 'local'
         };
         newTracks.push(track);
       }
@@ -113,64 +136,93 @@ export default function MusicSync() {
     }
   };
 
+  const connectSpotify = () => {
+    // Add demo Spotify tracks
+    setTracks(prev => [...prev, ...DEMO_SPOTIFY_TRACKS.filter(t => !prev.some(p => p.id === t.id))]);
+    setActiveSource('spotify');
+    toast.success('Spotify tracks loaded! (Demo mode - full integration coming soon)', {
+      description: 'Select a track to simulate playback'
+    });
+  };
+
+  const connectAppleMusic = () => {
+    // Add demo Apple Music tracks
+    setTracks(prev => [...prev, ...DEMO_APPLE_TRACKS.filter(t => !prev.some(p => p.id === t.id))]);
+    setActiveSource('apple');
+    toast.success('Apple Music tracks loaded! (Demo mode - full integration coming soon)', {
+      description: 'Select a track to simulate playback'
+    });
+  };
+
   const playTrack = (track: Track) => {
     if (currentTrack?.id === track.id) {
       togglePlay();
     } else {
       setCurrentTrack(track);
-      setIsPlaying(true);
-      setTimeout(() => audioRef.current?.play(), 100);
+      if (track.source === 'local' && track.url) {
+        setIsPlaying(true);
+        setTimeout(() => audioRef.current?.play(), 100);
+      } else {
+        // Simulated playback for streaming tracks
+        setIsPlaying(true);
+        setDuration(track.duration);
+        setCurrentTime(0);
+        toast.info(`Now playing: ${track.name}`, {
+          description: 'Streaming integration - demo mode'
+        });
+      }
     }
   };
 
   const togglePlay = () => {
     if (!currentTrack) return;
     
-    if (isPlaying) {
-      audioRef.current?.pause();
-    } else {
-      audioRef.current?.play();
+    if (currentTrack.source === 'local') {
+      if (isPlaying) {
+        audioRef.current?.pause();
+      } else {
+        audioRef.current?.play();
+      }
     }
     setIsPlaying(!isPlaying);
   };
 
   const playNext = () => {
-    if (tracks.length === 0) return;
-    const currentIndex = tracks.findIndex(t => t.id === currentTrack?.id);
+    const currentTracks = getFilteredTracks();
+    if (currentTracks.length === 0) return;
+    
+    const currentIndex = currentTracks.findIndex(t => t.id === currentTrack?.id);
     let nextIndex: number;
     
     if (isShuffled) {
-      nextIndex = Math.floor(Math.random() * tracks.length);
+      nextIndex = Math.floor(Math.random() * currentTracks.length);
     } else {
-      nextIndex = (currentIndex + 1) % tracks.length;
+      nextIndex = (currentIndex + 1) % currentTracks.length;
     }
     
-    setCurrentTrack(tracks[nextIndex]);
-    setIsPlaying(true);
-    setTimeout(() => audioRef.current?.play(), 100);
+    playTrack(currentTracks[nextIndex]);
   };
 
   const playPrev = () => {
-    if (tracks.length === 0) return;
-    if (currentTime > 3) {
-      // If more than 3 seconds in, restart current track
+    const currentTracks = getFilteredTracks();
+    if (currentTracks.length === 0) return;
+    
+    if (currentTime > 3 && currentTrack?.source === 'local') {
       if (audioRef.current) audioRef.current.currentTime = 0;
       return;
     }
     
-    const currentIndex = tracks.findIndex(t => t.id === currentTrack?.id);
-    const prevIndex = currentIndex <= 0 ? tracks.length - 1 : currentIndex - 1;
+    const currentIndex = currentTracks.findIndex(t => t.id === currentTrack?.id);
+    const prevIndex = currentIndex <= 0 ? currentTracks.length - 1 : currentIndex - 1;
     
-    setCurrentTrack(tracks[prevIndex]);
-    setIsPlaying(true);
-    setTimeout(() => audioRef.current?.play(), 100);
+    playTrack(currentTracks[prevIndex]);
   };
 
   const seekTo = (value: number[]) => {
-    if (audioRef.current) {
+    if (currentTrack?.source === 'local' && audioRef.current) {
       audioRef.current.currentTime = value[0];
-      setCurrentTime(value[0]);
     }
+    setCurrentTime(value[0]);
   };
 
   const formatTime = (seconds: number) => {
@@ -191,6 +243,13 @@ export default function MusicSync() {
     });
   };
 
+  const getFilteredTracks = () => {
+    if (activeSource === 'local') return tracks.filter(t => t.source === 'local' || !t.source);
+    if (activeSource === 'spotify') return tracks.filter(t => t.source === 'spotify');
+    if (activeSource === 'apple') return tracks.filter(t => t.source === 'apple');
+    return tracks;
+  };
+
   const handleNavChange = (tab: string) => {
     const routes: Record<string, string> = {
       home: '/',
@@ -200,6 +259,14 @@ export default function MusicSync() {
       chat: '/chat',
     };
     navigate(routes[tab] || '/');
+  };
+
+  const getSourceIcon = (source?: string) => {
+    switch (source) {
+      case 'spotify': return '🎧';
+      case 'apple': return '🍎';
+      default: return '📁';
+    }
   };
 
   return (
@@ -231,11 +298,48 @@ export default function MusicSync() {
       />
 
       <div className="p-4 max-w-2xl mx-auto space-y-6">
+        {/* Streaming Service Connections */}
+        <Card className="overflow-hidden">
+          <CardContent className="p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <Headphones className="h-4 w-4" />
+              Connect Streaming Services
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant={activeSource === 'spotify' ? 'default' : 'outline'}
+                className={cn(
+                  "w-full justify-start gap-2",
+                  activeSource === 'spotify' && "bg-green-600 hover:bg-green-700"
+                )}
+                onClick={connectSpotify}
+              >
+                <span className="text-lg">🎧</span>
+                Spotify
+              </Button>
+              <Button
+                variant={activeSource === 'apple' ? 'default' : 'outline'}
+                className={cn(
+                  "w-full justify-start gap-2",
+                  activeSource === 'apple' && "bg-pink-600 hover:bg-pink-700"
+                )}
+                onClick={connectAppleMusic}
+              >
+                <span className="text-lg">🍎</span>
+                Apple Music
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-3 text-center">
+              Full streaming integration coming soon! Currently in demo mode.
+            </p>
+          </CardContent>
+        </Card>
+
         {/* Now Playing Card */}
         <Card className="overflow-hidden">
           <div className="gradient-primary p-8 text-center">
-            <div className="w-32 h-32 mx-auto bg-primary-foreground/20 rounded-2xl flex items-center justify-center mb-4">
-              <Music className="w-16 h-16 text-primary-foreground" />
+            <div className="w-32 h-32 mx-auto bg-primary-foreground/20 rounded-2xl flex items-center justify-center mb-4 text-5xl">
+              {currentTrack?.albumArt || (currentTrack ? <Music className="w-16 h-16 text-primary-foreground" /> : <Radio className="w-16 h-16 text-primary-foreground" />)}
             </div>
             
             {currentTrack ? (
@@ -243,8 +347,13 @@ export default function MusicSync() {
                 <h2 className="text-xl font-bold text-primary-foreground truncate">
                   {currentTrack.name}
                 </h2>
-                <p className="text-primary-foreground/70 text-sm">
+                <p className="text-primary-foreground/70 text-sm flex items-center justify-center gap-1">
                   {currentTrack.artist}
+                  {currentTrack.source && currentTrack.source !== 'local' && (
+                    <Badge variant="secondary" className="ml-2 text-[10px] py-0">
+                      {getSourceIcon(currentTrack.source)} {currentTrack.source}
+                    </Badge>
+                  )}
                 </p>
               </>
             ) : (
@@ -253,7 +362,7 @@ export default function MusicSync() {
                   No Track Playing
                 </h2>
                 <p className="text-primary-foreground/70 text-sm">
-                  Add music to get started
+                  Add music or connect a streaming service
                 </p>
               </>
             )}
@@ -291,7 +400,7 @@ export default function MusicSync() {
                 variant="ghost"
                 size="icon"
                 onClick={playPrev}
-                disabled={tracks.length === 0}
+                disabled={getFilteredTracks().length === 0}
               >
                 <SkipBack className="h-6 w-6" />
               </Button>
@@ -313,7 +422,7 @@ export default function MusicSync() {
                 variant="ghost"
                 size="icon"
                 onClick={playNext}
-                disabled={tracks.length === 0}
+                disabled={getFilteredTracks().length === 0}
               >
                 <SkipForward className="h-6 w-6" />
               </Button>
@@ -362,61 +471,104 @@ export default function MusicSync() {
           </CardContent>
         </Card>
 
+        {/* Source Tabs */}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {[
+            { key: 'local' as const, label: 'My Files', icon: '📁' },
+            { key: 'spotify' as const, label: 'Spotify', icon: '🎧' },
+            { key: 'apple' as const, label: 'Apple', icon: '🍎' },
+          ].map((source) => (
+            <button
+              key={source.key}
+              onClick={() => setActiveSource(source.key)}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap transition-all flex items-center gap-2",
+                activeSource === source.key
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              )}
+            >
+              <span>{source.icon}</span>
+              {source.label}
+            </button>
+          ))}
+        </div>
+
         {/* Add Music Button */}
-        <Button
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full gradient-sunset"
-          size="lg"
-        >
-          <Upload className="h-5 w-5 mr-2" />
-          Add Music Files
-        </Button>
+        {activeSource === 'local' && (
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full gradient-sunset"
+            size="lg"
+          >
+            <Upload className="h-5 w-5 mr-2" />
+            Add Music Files
+          </Button>
+        )}
 
         {/* Playlist */}
-        {(showPlaylist || tracks.length > 0) && (
-          <Card>
-            <CardContent className="p-4">
-              <h3 className="font-semibold mb-3 flex items-center gap-2">
-                <List className="h-4 w-4" />
-                Playlist ({tracks.length} tracks)
-              </h3>
-              
-              {tracks.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Music className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>No tracks added yet</p>
-                  <p className="text-sm">Upload audio files to get started</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-64 overflow-y-auto">
-                  {tracks.map((track, index) => (
-                    <div
-                      key={track.id}
-                      onClick={() => playTrack(track)}
-                      className={cn(
-                        "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors",
-                        currentTrack?.id === track.id 
-                          ? "bg-primary/10 border border-primary/30"
-                          : "bg-muted/30 hover:bg-muted/50"
+        <Card>
+          <CardContent className="p-4">
+            <h3 className="font-semibold mb-3 flex items-center gap-2">
+              <List className="h-4 w-4" />
+              {activeSource === 'spotify' ? 'Spotify Tracks' : 
+               activeSource === 'apple' ? 'Apple Music Tracks' : 
+               'My Playlist'} ({getFilteredTracks().length} tracks)
+            </h3>
+            
+            {getFilteredTracks().length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Music className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                {activeSource === 'local' ? (
+                  <>
+                    <p>No tracks added yet</p>
+                    <p className="text-sm">Upload audio files to get started</p>
+                  </>
+                ) : (
+                  <>
+                    <p>No tracks from {activeSource}</p>
+                    <p className="text-sm">Connect your account to browse tracks</p>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {getFilteredTracks().map((track, index) => (
+                  <div
+                    key={track.id}
+                    onClick={() => playTrack(track)}
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors",
+                      currentTrack?.id === track.id 
+                        ? "bg-primary/10 border border-primary/30"
+                        : "bg-muted/30 hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center text-lg">
+                      {currentTrack?.id === track.id && isPlaying ? (
+                        <div className="flex gap-0.5">
+                          <div className="w-1 h-3 bg-primary animate-pulse rounded" />
+                          <div className="w-1 h-4 bg-primary animate-pulse rounded delay-75" />
+                          <div className="w-1 h-2 bg-primary animate-pulse rounded delay-150" />
+                        </div>
+                      ) : track.albumArt ? (
+                        <span>{track.albumArt}</span>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">{index + 1}</span>
                       )}
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
-                        {currentTrack?.id === track.id && isPlaying ? (
-                          <div className="flex gap-0.5">
-                            <div className="w-1 h-3 bg-primary animate-pulse rounded" />
-                            <div className="w-1 h-4 bg-primary animate-pulse rounded delay-75" />
-                            <div className="w-1 h-2 bg-primary animate-pulse rounded delay-150" />
-                          </div>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">{index + 1}</span>
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{track.name}</p>
-                        <p className="text-xs text-muted-foreground">{track.artist}</p>
-                      </div>
-                      
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{track.name}</p>
+                      <p className="text-xs text-muted-foreground">{track.artist}</p>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                      {track.duration > 0 && (
+                        <span className="text-xs text-muted-foreground">
+                          {formatTime(track.duration)}
+                        </span>
+                      )}
                       <Button
                         variant="ghost"
                         size="icon"
@@ -432,12 +584,12 @@ export default function MusicSync() {
                         <Heart className={cn("h-4 w-4", favorites.has(track.id) && "fill-current")} />
                       </Button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       <BottomNav activeTab="home" onTabChange={handleNavChange} />
