@@ -15,10 +15,10 @@ export const useNotificationBell = () => {
     }
 
     try {
-      // Fetch all unread notifications for the user (across all rooms if no currentRoom)
+      // Fetch all unread notifications for the user
       let query = supabase
         .from('notifications')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
         .eq('is_read', false);
 
@@ -49,21 +49,51 @@ export const useNotificationBell = () => {
 
     // Subscribe to realtime updates for notifications
     const channel = supabase
-      .channel(`notifications-bell-${user.id}`)
+      .channel(`notifications-bell-${user.id}-${currentRoom?.id || 'all'}`)
       .on(
         'postgres_changes',
         { 
-          event: '*', 
+          event: 'INSERT', 
           schema: 'public', 
           table: 'notifications',
           filter: `user_id=eq.${user.id}`
         },
         () => {
-          console.log('Notification change detected, refetching...');
+          console.log('New notification received, refetching count...');
           fetchUnreadCount();
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          console.log('Notification updated, refetching count...');
+          fetchUnreadCount();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { 
+          event: 'DELETE', 
+          schema: 'public', 
+          table: 'notifications',
+          filter: `user_id=eq.${user.id}`
+        },
+        () => {
+          console.log('Notification deleted, refetching count...');
+          fetchUnreadCount();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('Subscribed to notification bell updates');
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

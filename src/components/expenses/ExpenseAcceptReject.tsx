@@ -3,23 +3,31 @@ import { Check, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface ExpenseAcceptRejectProps {
   splitId: string;
+  expenseId: string;
   expenseTitle: string;
+  expenseCreatedBy: string;
   amount: number;
   status: string;
   onStatusChange: () => void;
 }
 
 export const ExpenseAcceptReject = ({ 
-  splitId, 
+  splitId,
+  expenseId,
   expenseTitle, 
+  expenseCreatedBy,
   amount, 
   status,
   onStatusChange 
 }: ExpenseAcceptRejectProps) => {
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const { createExpenseAcceptedNotification, createExpenseRejectedNotification } = useCreateNotification();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleAction = async (newStatus: 'accepted' | 'rejected') => {
@@ -31,6 +39,16 @@ export const ExpenseAcceptReject = ({
         .eq('id', splitId);
 
       if (error) throw error;
+
+      // Create notification for expense creator
+      const userName = profile?.display_name || 'Someone';
+      const expense = { id: expenseId, title: expenseTitle, created_by: expenseCreatedBy };
+      
+      if (newStatus === 'accepted') {
+        await createExpenseAcceptedNotification(expense, userName);
+      } else {
+        await createExpenseRejectedNotification(expense, userName);
+      }
 
       toast({
         title: newStatus === 'accepted' ? 'Expense accepted' : 'Expense rejected',

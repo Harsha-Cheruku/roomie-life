@@ -18,6 +18,7 @@ import Reminders from "./pages/Reminders";
 import MusicSync from "./pages/MusicSync";
 import Games from "./pages/Games";
 import Notifications from "./pages/Notifications";
+import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -146,6 +147,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <RoomSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminPanel />
                 </ProtectedRoute>
               }
             />

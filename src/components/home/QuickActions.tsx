@@ -1,7 +1,8 @@
 import { useNavigate } from "react-router-dom";
-import { Music, Gamepad2, Clock, Receipt, Cloud, Users, ListTodo } from "lucide-react";
+import { Music, Gamepad2, Clock, Receipt, Cloud, Users, Crown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRoomMembers } from "@/hooks/useRoomMembers";
 
 interface QuickAction {
   icon: React.ElementType;
@@ -9,7 +10,8 @@ interface QuickAction {
   gradient: string;
   delay: number;
   route?: string;
-  soloHidden?: boolean; // Hide in solo mode
+  soloHidden?: boolean;
+  adminOnly?: boolean;
 }
 
 const actions: QuickAction[] = [
@@ -19,11 +21,13 @@ const actions: QuickAction[] = [
   { icon: Receipt, label: "Expenses", gradient: "gradient-coral", delay: 150, route: "/expenses" },
   { icon: Cloud, label: "Storage", gradient: "gradient-primary", delay: 200, route: "/storage" },
   { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 250, route: "/room-settings", soloHidden: true },
+  { icon: Crown, label: "Admin", gradient: "gradient-gold", delay: 300, route: "/admin", soloHidden: true, adminOnly: true },
 ];
 
 export const QuickActions = () => {
   const navigate = useNavigate();
   const { isSoloMode } = useAuth();
+  const { currentUserIsAdmin } = useRoomMembers();
 
   const handleClick = (action: QuickAction) => {
     if (action.route) {
@@ -31,10 +35,12 @@ export const QuickActions = () => {
     }
   };
 
-  // Filter actions based on solo mode
-  const visibleActions = isSoloMode 
-    ? actions.filter(a => !a.soloHidden) 
-    : actions;
+  // Filter actions based on solo mode and admin status
+  const visibleActions = actions.filter(action => {
+    if (isSoloMode && action.soloHidden) return false;
+    if (action.adminOnly && !currentUserIsAdmin) return false;
+    return true;
+  });
 
   return (
     <section className="px-4">
