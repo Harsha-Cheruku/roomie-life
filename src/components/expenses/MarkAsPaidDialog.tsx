@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Check, Loader2, Upload, Camera, X } from 'lucide-react';
+import { Check, Loader2, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -11,13 +11,17 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface MarkAsPaidDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   splitId: string;
   amount: number;
+  expenseId: string;
   expenseTitle: string;
+  expensePaidBy: string;
   onComplete: () => void;
 }
 
@@ -26,10 +30,14 @@ export const MarkAsPaidDialog = ({
   onOpenChange,
   splitId,
   amount,
+  expenseId,
   expenseTitle,
+  expensePaidBy,
   onComplete,
 }: MarkAsPaidDialogProps) => {
   const { toast } = useToast();
+  const { profile } = useAuth();
+  const { createExpensePaidNotification } = useCreateNotification();
   const [isLoading, setIsLoading] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
@@ -39,7 +47,6 @@ export const MarkAsPaidDialog = ({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Show preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setScreenshot(e.target?.result as string);
@@ -50,21 +57,19 @@ export const MarkAsPaidDialog = ({
   const handleConfirm = async () => {
     setIsLoading(true);
     try {
-      // Upload screenshot if provided
       let screenshotUrl: string | null = null;
       if (screenshot && fileInputRef.current?.files?.[0]) {
         setUploadingScreenshot(true);
         const file = fileInputRef.current.files[0];
         const fileName = `payment_${splitId}_${Date.now()}.${file.name.split('.').pop()}`;
         
-        const { data: uploadData, error: uploadError } = await supabase
+        const { error: uploadError } = await supabase
           .storage
           .from('chat-attachments')
           .upload(fileName, file);
 
         if (uploadError) {
           console.error('Upload error:', uploadError);
-          // Continue even if upload fails
         } else {
           const { data: urlData } = supabase
             .storage
@@ -75,13 +80,20 @@ export const MarkAsPaidDialog = ({
         setUploadingScreenshot(false);
       }
 
-      // Mark split as paid
       const { error } = await supabase
         .from('expense_splits')
         .update({ is_paid: true })
         .eq('id', splitId);
 
       if (error) throw error;
+
+      // Create notification for the person who originally paid
+      const userName = profile?.display_name || 'Someone';
+      await createExpensePaidNotification(
+        { id: expenseId, title: expenseTitle, paid_by: expensePaidBy },
+        userName,
+        amount
+      );
 
       toast({
         title: 'Payment confirmed! ✓',
@@ -121,7 +133,6 @@ export const MarkAsPaidDialog = ({
           </AlertDialogDescription>
         </AlertDialogHeader>
 
-        {/* Screenshot Upload */}
         <div className="space-y-3 py-2">
           <p className="text-sm text-muted-foreground">
             Optionally attach payment screenshot for proof:

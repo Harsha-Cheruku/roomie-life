@@ -50,6 +50,8 @@
     --gradient-sunset: linear-gradient(135deg, hsl(0 82% 71%) 0%, hsl(43 96% 56%) 100%);
     --gradient-ocean: linear-gradient(135deg, hsl(187 94% 43%) 0%, hsl(262 83% 78%) 100%);
     --gradient-mint: linear-gradient(135deg, hsl(158 64% 52%) 0%, hsl(187 94% 43%) 100%);
+    --gradient-gold: linear-gradient(135deg, hsl(43 96% 56%) 0%, hsl(30 90% 50%) 100%);
+    --gradient-lavender: linear-gradient(135deg, hsl(262 83% 78%) 0%, hsl(280 70% 65%) 100%);
     --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(220 14% 98%) 100%);
 
     /* Shadows */
@@ -127,6 +129,14 @@
 
   .gradient-mint {
     background: var(--gradient-mint);
+  }
+
+  .gradient-gold {
+    background: var(--gradient-gold);
+  }
+
+  .gradient-lavender {
+    background: var(--gradient-lavender);
   }
 
   .shadow-card {

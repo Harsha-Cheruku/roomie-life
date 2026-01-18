@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { RejectCommentDialog } from '@/components/tasks/RejectCommentDialog';
 import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface ExpenseSplit {
   id: string;
@@ -62,8 +63,9 @@ export const ExpenseDetailSheet = ({
   memberProfiles,
   onUpdate,
 }: ExpenseDetailSheetProps) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
+  const { createExpenseAcceptedNotification, createExpenseRejectedNotification, createExpensePaidNotification } = useCreateNotification();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
@@ -101,10 +103,8 @@ export const ExpenseDetailSheet = ({
     const amount = split.amount.toFixed(2);
     const note = encodeURIComponent(`Payment for: ${expense.title}`);
     
-    // UPI deep link - opens payment apps
     const upiUrl = `upi://pay?pn=${encodeURIComponent(payerProfile?.display_name || 'Roommate')}&am=${amount}&cu=INR&tn=${note}`;
     
-    // Try to open UPI intent
     const link = document.createElement('a');
     link.href = upiUrl;
     link.click();
@@ -115,7 +115,7 @@ export const ExpenseDetailSheet = ({
     });
   };
 
-  const markAsPaid = async (splitId: string) => {
+  const markAsPaid = async (splitId: string, amount: number) => {
     setUpdatingId(splitId);
     try {
       const { error } = await supabase
@@ -124,6 +124,14 @@ export const ExpenseDetailSheet = ({
         .eq('id', splitId);
 
       if (error) throw error;
+
+      // Create notification for the person who originally paid
+      const userName = profile?.display_name || 'Someone';
+      await createExpensePaidNotification(
+        { id: expense.id, title: expense.title, paid_by: expense.paid_by },
+        userName,
+        amount
+      );
 
       toast({ title: 'Marked as paid! ✓' });
       onUpdate();
@@ -144,6 +152,13 @@ export const ExpenseDetailSheet = ({
         .eq('id', splitId);
 
       if (error) throw error;
+
+      // Create notification for expense creator
+      const userName = profile?.display_name || 'Someone';
+      await createExpenseAcceptedNotification(
+        { id: expense.id, title: expense.title, created_by: expense.created_by },
+        userName
+      );
 
       toast({ title: 'Expense accepted' });
       onUpdate();
@@ -172,6 +187,14 @@ export const ExpenseDetailSheet = ({
       .eq('id', rejectingSplitId);
 
     if (error) throw error;
+
+    // Create notification for expense creator
+    const userName = profile?.display_name || 'Someone';
+    await createExpenseRejectedNotification(
+      { id: expense.id, title: expense.title, created_by: expense.created_by },
+      userName,
+      comment
+    );
 
     toast({ title: 'Expense rejected' });
     setRejectingSplitId(null);
@@ -264,7 +287,7 @@ export const ExpenseDetailSheet = ({
               </h3>
               <div className="space-y-3">
                 {expense.splits?.map(split => {
-                  const profile = memberProfiles.get(split.user_id);
+                  const splitProfile = memberProfiles.get(split.user_id);
                   const isMe = split.user_id === user?.id;
                   const isUpdating = updatingId === split.id;
                   const needsAction = isMe && split.status === 'pending' && !isCreator && expense.paid_by !== user?.id;
@@ -274,11 +297,11 @@ export const ExpenseDetailSheet = ({
                     <div key={split.id} className="border border-border rounded-xl p-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
-                          {profile?.avatar || '😊'}
+                          {splitProfile?.avatar || '😊'}
                         </div>
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
-                            {isMe ? 'You' : profile?.display_name || 'Unknown'}
+                            {isMe ? 'You' : splitProfile?.display_name || 'Unknown'}
                           </p>
                           <div className="flex items-center gap-2">
                             <span className={cn(
@@ -299,7 +322,6 @@ export const ExpenseDetailSheet = ({
                         </div>
                       </div>
 
-                      {/* Rejection reason if rejected */}
                       {split.status === 'rejected' && split.rejection_comment && (
                         <div className="mt-2 p-2 bg-coral/10 rounded-lg">
                           <p className="text-xs text-coral font-medium">Rejection reason:</p>
@@ -307,7 +329,6 @@ export const ExpenseDetailSheet = ({
                         </div>
                       )}
 
-                      {/* Action buttons for pending approval */}
                       {needsAction && (
                         <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                           <Button
@@ -330,7 +351,6 @@ export const ExpenseDetailSheet = ({
                         </div>
                       )}
 
-                      {/* Payment buttons */}
                       {needsPayment && (
                         <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                           <Button
@@ -343,7 +363,7 @@ export const ExpenseDetailSheet = ({
                           <Button
                             variant="outline"
                             className="flex-1 h-9 gap-2"
-                            onClick={() => markAsPaid(split.id)}
+                            onClick={() => markAsPaid(split.id, split.amount)}
                             disabled={isUpdating}
                           >
                             {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -357,7 +377,6 @@ export const ExpenseDetailSheet = ({
               </div>
             </div>
 
-            {/* Receipt Image */}
             {expense.receipt_url && (
               <div className="bg-card rounded-2xl p-4 shadow-card">
                 <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
@@ -380,7 +399,6 @@ export const ExpenseDetailSheet = ({
               </div>
             )}
 
-            {/* Notes */}
             {expense.notes && (
               <div className="bg-card rounded-2xl p-4 shadow-card">
                 <h3 className="font-semibold text-foreground mb-2">Notes</h3>
@@ -418,9 +436,7 @@ export const ExpenseDetailSheet = ({
         onConfirm={async () => {
           setIsDeleting(true);
           try {
-            // Delete splits first
             await supabase.from('expense_splits').delete().eq('expense_id', expense.id);
-            // Then delete expense
             const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
             if (error) throw error;
             toast({ title: 'Expense deleted' });

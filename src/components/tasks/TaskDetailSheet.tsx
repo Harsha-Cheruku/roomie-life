@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { RejectCommentDialog } from './RejectCommentDialog';
 import { EditTaskDialog } from './EditTaskDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -72,8 +73,9 @@ export const TaskDetailSheet = ({
   task,
   onUpdate,
 }: TaskDetailSheetProps) => {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { toast } = useToast();
+  const { createTaskAcceptedNotification, createTaskRejectedNotification, createTaskCompletedNotification } = useCreateNotification();
   const [updatingAction, setUpdatingAction] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
@@ -123,6 +125,14 @@ export const TaskDetailSheet = ({
 
       if (error) throw error;
 
+      // Create notification for task creator
+      const userName = profile?.display_name || 'Someone';
+      if (action === 'accept') {
+        await createTaskAcceptedNotification(task, userName);
+      } else if (action === 'complete') {
+        await createTaskCompletedNotification(task, userName);
+      }
+
       toast({
         title: action === 'accept' ? 'Task accepted!' : 
                action === 'start' ? 'Task started!' : 'Task completed!',
@@ -149,6 +159,10 @@ export const TaskDetailSheet = ({
       .eq('id', task.id);
 
     if (error) throw error;
+
+    // Create notification for task creator
+    const userName = profile?.display_name || 'Someone';
+    await createTaskRejectedNotification(task, userName, comment);
 
     toast({ title: 'Task rejected' });
     onUpdate();
