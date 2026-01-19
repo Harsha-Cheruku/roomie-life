@@ -83,7 +83,7 @@ export const Expenses = () => {
   const [rejectingExpenseTitle, setRejectingExpenseTitle] = useState<string>('');
   const [kpiFilter, setKpiFilter] = useState<'all' | 'pending' | 'accepted' | 'rejected' | 'settled' | null>(null);
   const [showMarkPaidDialog, setShowMarkPaidDialog] = useState(false);
-  const [markingPaidSplit, setMarkingPaidSplit] = useState<{ id: string; amount: number; title: string } | null>(null);
+  const [markingPaidSplit, setMarkingPaidSplit] = useState<{ id: string; amount: number; title: string; expense_id: string; paid_by: string } | null>(null);
   
   // Date filtering
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
@@ -415,9 +415,9 @@ export const Expenses = () => {
     });
   };
 
-  const markAsPaid = async (splitId: string, amount: number, title: string) => {
+  const markAsPaid = async (splitId: string, amount: number, title: string, expenseId: string, paidBy: string) => {
     // Open confirmation dialog instead of directly marking
-    setMarkingPaidSplit({ id: splitId, amount, title });
+    setMarkingPaidSplit({ id: splitId, amount, title, expense_id: expenseId, paid_by: paidBy });
     setShowMarkPaidDialog(true);
   };
 
@@ -694,7 +694,7 @@ export const Expenses = () => {
                     <Button
                       variant="outline"
                       className="flex-1 h-10 gap-2"
-                      onClick={() => mySplit && markAsPaid(mySplit.id, mySplit.amount, expense.title)}
+                      onClick={() => mySplit && markAsPaid(mySplit.id, mySplit.amount, expense.title, expense.id, expense.paid_by)}
                     >
                       <Check className="w-4 h-4" />
                       Mark Paid
