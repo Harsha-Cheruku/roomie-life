@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePushNotifications } from './usePushNotifications';
 
 type NotificationType = 'expense' | 'task' | 'reminder' | 'alarm' | 'chat' | 'system';
 
@@ -14,6 +15,13 @@ interface CreateNotificationParams {
 
 export const useCreateNotification = () => {
   const { currentRoom, user } = useAuth();
+  const { showNotification, isEnabled: pushEnabled } = usePushNotifications();
+
+  const triggerPushNotification = async (title: string, body?: string) => {
+    if (pushEnabled) {
+      await showNotification(title, { body });
+    }
+  };
 
   const createNotification = async ({
     userId,
@@ -40,6 +48,11 @@ export const useCreateNotification = () => {
         });
 
       if (error) throw error;
+
+      // Trigger push notification if this notification is for the current user
+      if (userId === user?.id) {
+        await triggerPushNotification(title, body);
+      }
     } catch (error) {
       console.error('Error creating notification:', error);
     }
