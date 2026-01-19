@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
-import { Bell, Check, Trash2, DollarSign, ListTodo, Clock, Loader2 } from "lucide-react";
+import { Bell, Check, Trash2, DollarSign, ListTodo, Clock, Loader2, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
@@ -184,29 +184,40 @@ export const Notifications = () => {
         title="Notifications" 
         showBack={true}
         rightContent={
-          notifications.length > 0 && (
-            <div className="flex gap-2">
-              {unreadCount > 0 && (
-                <Button 
-                  variant="glass" 
-                  size="sm" 
-                  className="press-effect gap-1.5"
-                  onClick={markAllAsRead}
-                >
-                  <Check className="w-4 h-4" />
-                  <span className="text-xs">Read all</span>
-                </Button>
-              )}
+          <div className="flex gap-2">
+            <Link to="/notification-settings">
               <Button 
                 variant="ghost" 
                 size="iconSm" 
                 className="press-effect text-muted-foreground"
-                onClick={clearAllNotifications}
               >
-                <Trash2 className="w-4 h-4" />
+                <Settings className="w-4 h-4" />
               </Button>
-            </div>
-          )
+            </Link>
+            {notifications.length > 0 && (
+              <>
+                {unreadCount > 0 && (
+                  <Button 
+                    variant="glass" 
+                    size="sm" 
+                    className="press-effect gap-1.5"
+                    onClick={markAllAsRead}
+                  >
+                    <Check className="w-4 h-4" />
+                    <span className="text-xs">Read all</span>
+                  </Button>
+                )}
+                <Button 
+                  variant="ghost" 
+                  size="iconSm" 
+                  className="press-effect text-muted-foreground"
+                  onClick={clearAllNotifications}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </>
+            )}
+          </div>
         }
       />
 

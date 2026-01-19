@@ -1,6 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePushNotifications } from './usePushNotifications';
+import { isNotificationTypeEnabled } from '@/pages/NotificationSettings';
 
 type NotificationType = 'expense' | 'task' | 'reminder' | 'alarm' | 'chat' | 'system';
 
@@ -17,8 +18,9 @@ export const useCreateNotification = () => {
   const { currentRoom, user } = useAuth();
   const { showNotification, isEnabled: pushEnabled } = usePushNotifications();
 
-  const triggerPushNotification = async (title: string, body?: string) => {
-    if (pushEnabled) {
+  const triggerPushNotification = async (title: string, body?: string, type?: NotificationType) => {
+    // Check if push is enabled and this notification type is enabled in preferences
+    if (pushEnabled && (!type || isNotificationTypeEnabled(type === 'expense' ? 'expenses' : type + 's'))) {
       await showNotification(title, { body });
     }
   };
@@ -32,6 +34,13 @@ export const useCreateNotification = () => {
     referenceId,
   }: CreateNotificationParams) => {
     if (!currentRoom) return;
+
+    // Check if this notification type is enabled in user preferences
+    const typeKey = type === 'expense' ? 'expenses' : type + 's';
+    if (!isNotificationTypeEnabled(typeKey)) {
+      console.log(`Notification type ${type} is disabled by user preferences`);
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -51,7 +60,7 @@ export const useCreateNotification = () => {
 
       // Trigger push notification if this notification is for the current user
       if (userId === user?.id) {
-        await triggerPushNotification(title, body);
+        await triggerPushNotification(title, body, type);
       }
     } catch (error) {
       console.error('Error creating notification:', error);

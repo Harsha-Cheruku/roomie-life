@@ -18,6 +18,7 @@ import Reminders from "./pages/Reminders";
 import MusicSync from "./pages/MusicSync";
 import Games from "./pages/Games";
 import Notifications from "./pages/Notifications";
+import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 
@@ -139,6 +140,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Notifications />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/notification-settings"
+              element={
+                <ProtectedRoute>
+                  <NotificationSettings />
                 </ProtectedRoute>
               }
             />
