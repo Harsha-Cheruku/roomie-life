@@ -923,6 +923,8 @@ export const Expenses = () => {
           splitId={markingPaidSplit.id}
           amount={markingPaidSplit.amount}
           expenseTitle={markingPaidSplit.title}
+          expenseId={markingPaidSplit.expense_id || ''}
+          expensePaidBy={markingPaidSplit.paid_by || ''}
           onComplete={handleMarkPaidConfirmed}
         />
       )}
