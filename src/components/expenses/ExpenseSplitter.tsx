@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2 } from 'lucide-react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, Edit3, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
 
 interface ExtractedItem {
   name: string;
@@ -50,16 +50,20 @@ export const ExpenseSplitter = ({
 }: ExpenseSplitterProps) => {
   const { user, currentRoom } = useAuth();
   const { toast } = useToast();
+  const { createExpenseNotification } = useCreateNotification();
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [title, setTitle] = useState('');
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [isLocked, setIsLocked] = useState(false);
 
   useEffect(() => {
     if (scanResult) {
-      setItems(scanResult.items);
+      // Create a deep copy to prevent OCR from overwriting edits
+      setItems(scanResult.items.map(item => ({ ...item })));
       setTitle(scanResult.title || 'Scanned Receipt');
       // Default: assign all items to all members
       const defaultAssignments: ItemAssignment = {};
@@ -67,6 +71,8 @@ export const ExpenseSplitter = ({
         defaultAssignments[index] = [];
       });
       setAssignments(defaultAssignments);
+      // Reset locked state when new scan comes in
+      setIsLocked(false);
     }
   }, [scanResult]);
 
@@ -147,18 +153,39 @@ export const ExpenseSplitter = ({
   };
 
   const updateItemPrice = (index: number, price: number) => {
+    if (isLocked) return;
     setItems(prev => prev.map((item, i) => 
       i === index ? { ...item, price: Math.max(0, price) } : item
     ));
   };
 
+  const updateItemName = (index: number, name: string) => {
+    if (isLocked) return;
+    setItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, name } : item
+    ));
+  };
+
   const updateItemQuantity = (index: number, delta: number) => {
+    if (isLocked) return;
     setItems(prev => prev.map((item, i) => 
       i === index ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
     ));
   };
 
+  const addNewItem = () => {
+    if (isLocked) return;
+    const newIndex = items.length;
+    setItems(prev => [...prev, { name: 'New Item', price: 0, quantity: 1 }]);
+    setAssignments(prev => ({
+      ...prev,
+      [newIndex]: roomMembers.map(m => m.user_id), // Assign to all by default
+    }));
+    setEditingItemIndex(newIndex);
+  };
+
   const removeItem = (index: number) => {
+    if (isLocked) return;
     setItems(prev => prev.filter((_, i) => i !== index));
     setAssignments(prev => {
       const newAssignments: ItemAssignment = {};
@@ -230,6 +257,8 @@ export const ExpenseSplitter = ({
 
       // Create splits for each item
       const splits: any[] = [];
+      const assignedUserIds = new Set<string>();
+      
       createdItems.forEach((createdItem, index) => {
         const assignedMembers = assignments[index] || [];
         if (assignedMembers.length > 0) {
@@ -237,12 +266,14 @@ export const ExpenseSplitter = ({
           const splitAmount = itemTotal / assignedMembers.length;
 
           assignedMembers.forEach(userId => {
+            assignedUserIds.add(userId);
             splits.push({
               expense_id: expense.id,
               expense_item_id: createdItem.id,
               user_id: userId,
               amount: splitAmount,
               is_paid: userId === user.id, // Creator already paid
+              status: userId === user.id ? 'accepted' : 'pending',
             });
           });
         }
@@ -256,10 +287,24 @@ export const ExpenseSplitter = ({
         if (splitsError) throw splitsError;
       }
 
+      // Send notifications to assigned users
+      await createExpenseNotification(
+        { 
+          id: expense.id, 
+          title, 
+          total_amount: calculateTotal(), 
+          created_by: user.id 
+        },
+        Array.from(assignedUserIds)
+      );
+
       toast({
         title: 'Expense saved!',
         description: `Split between ${roomMembers.length} roommates`,
       });
+
+      // Lock the bill after save
+      setIsLocked(true);
 
       onComplete();
       onOpenChange(false);

@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { useAdminNotifications } from '@/hooks/useAdminNotifications';
 
 interface MarkAsPaidDialogProps {
   open: boolean;
@@ -22,6 +23,7 @@ interface MarkAsPaidDialogProps {
   expenseId: string;
   expenseTitle: string;
   expensePaidBy: string;
+  expenseCreatedBy?: string;
   onComplete: () => void;
 }
 
@@ -33,11 +35,13 @@ export const MarkAsPaidDialog = ({
   expenseId,
   expenseTitle,
   expensePaidBy,
+  expenseCreatedBy,
   onComplete,
 }: MarkAsPaidDialogProps) => {
   const { toast } = useToast();
   const { profile } = useAuth();
   const { createExpensePaidNotification } = useCreateNotification();
+  const { notifyPaymentComplete } = useAdminNotifications();
   const [isLoading, setIsLoading] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
@@ -87,13 +91,39 @@ export const MarkAsPaidDialog = ({
 
       if (error) throw error;
 
-      // Create notification for the person who originally paid
+      // Create notification for the person who originally paid and admins
       const userName = profile?.display_name || 'Someone';
       await createExpensePaidNotification(
         { id: expenseId, title: expenseTitle, paid_by: expensePaidBy },
         userName,
         amount
       );
+
+      // Notify admins about the payment
+      await notifyPaymentComplete(
+        { 
+          id: expenseId, 
+          title: expenseTitle, 
+          paid_by: expensePaidBy, 
+          created_by: expenseCreatedBy || expensePaidBy 
+        },
+        userName,
+        amount
+      );
+
+      // Check if expense should be auto-settled (all splits paid)
+      const { data: allSplits } = await supabase
+        .from('expense_splits')
+        .select('id, is_paid')
+        .eq('expense_id', expenseId);
+
+      const allPaid = allSplits?.every(split => split.is_paid);
+      if (allPaid && allSplits && allSplits.length > 0) {
+        await supabase
+          .from('expenses')
+          .update({ status: 'settled' })
+          .eq('id', expenseId);
+      }
 
       toast({
         title: 'Payment confirmed! ✓',
