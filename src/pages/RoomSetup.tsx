@@ -21,31 +21,25 @@ export const RoomSetup = () => {
   // Check if user is adding a new room (from settings)
   const isAddingRoom = searchParams.get('add') === 'true';
   
-  const { createRoom, joinRoom, currentRoom, profile, userRooms, user, loading: authLoading } = useAuth();
+  const { createRoom, joinRoom, currentRoom, profile, userRooms, user } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   // Check if user already has rooms and redirect (only if NOT adding a new room)
   useEffect(() => {
-    // Wait for auth to finish loading
-    if (authLoading) {
-      return;
-    }
-
     if (!isAddingRoom) {
       if (user && currentRoom) {
         navigate("/", { replace: true });
-        return;
-      }
-      if (user && userRooms.length > 0) {
+      } else if (user && userRooms.length > 0) {
         navigate("/", { replace: true });
-        return;
+      } else if (user) {
+        setIsCheckingRooms(false);
       }
+    } else {
+      // Adding room mode - check if user already has a room and show warning
+      setIsCheckingRooms(false);
     }
-    
-    // Auth is done loading, show the UI
-    setIsCheckingRooms(false);
-  }, [user, currentRoom, userRooms, navigate, isAddingRoom, authLoading]);
+  }, [user, currentRoom, userRooms, navigate, isAddingRoom]);
 
   // Block room creation if user already has rooms (when adding a new room)
   const canCreateRoom = !isAddingRoom || userRooms.length === 0;

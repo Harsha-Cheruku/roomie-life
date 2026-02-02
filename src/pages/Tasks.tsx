@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User, BarChart3, CalendarDays } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -9,14 +9,11 @@ import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { TaskDashboard } from "@/components/tasks/TaskDashboard";
 import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
-import { SoloDayPlanner } from "@/components/tasks/SoloDayPlanner";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigation } from "@/hooks/useNavigation";
-import { useCreateNotification } from "@/hooks/useCreateNotification";
-import { useAdminNotifications } from "@/hooks/useAdminNotifications";
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -58,7 +55,7 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 };
 
 export const Tasks = () => {
-  const [view, setView] = useState<"list" | "dashboard" | "planner">("list");
+  const [view, setView] = useState<"list" | "dashboard">("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -68,10 +65,8 @@ export const Tasks = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingTaskId, setRejectingTaskId] = useState<string | null>(null);
   const { navigate, navigateToTab, goBack } = useNavigation();
-  const { user, currentRoom, isSoloMode, profile } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
-  const { createTaskCompletedNotification } = useCreateNotification();
-  const { notifyTaskComplete } = useAdminNotifications();
   
   // Date filtering
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
@@ -204,25 +199,9 @@ export const Tasks = () => {
 
       if (error) throw error;
 
-      // Send notifications when task is completed
-      if (action === 'complete') {
-        const task = tasks.find(t => t.id === taskId);
-        if (task) {
-          const userName = profile?.display_name || 'Someone';
-          await createTaskCompletedNotification(
-            { id: task.id, title: task.title, created_by: task.created_by, assigned_to: task.assigned_to },
-            userName
-          );
-          await notifyTaskComplete(
-            { id: task.id, title: task.title, created_by: task.created_by, assigned_to: task.assigned_to },
-            userName
-          );
-        }
-      }
-
       toast({
         title: action === 'accept' ? 'Task accepted!' : 
-               action === 'start' ? 'Task started!' : 'Task completed! 🎉',
+               action === 'start' ? 'Task started!' : 'Task completed!',
       });
     } catch (error) {
       console.error('Error updating task:', error);
