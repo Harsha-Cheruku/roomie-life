@@ -74,20 +74,28 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
 
-    // Play alarm sound immediately
-    const startAlarm = async () => {
-      try {
-        await playAlarm();
-        console.log("Alarm sound started successfully");
-      } catch (error) {
-        console.error("Failed to start alarm sound:", error);
-      }
-    };
+    // ONLY play alarm sound for the alarm owner
+    const isOwner = userId === alarm.created_by;
+    
+    if (isOwner) {
+      // Play alarm sound only on owner's device
+      const startAlarm = async () => {
+        try {
+          await playAlarm();
+          console.log("Alarm sound started successfully (owner's device)");
+        } catch (error) {
+          console.error("Failed to start alarm sound:", error);
+        }
+      };
 
-    startAlarm();
+      startAlarm();
 
-    // Send notification for background/locked screen
-    sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
+      // Send notification for background/locked screen
+      sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
+    } else {
+      // For non-owners, just show notification (no sound loop)
+      console.log("Alarm active - waiting for owner to wake up or conditions to be met");
+    }
 
     // Keep ring count consistent across devices based on triggered_at
     ringIntervalRef.current = window.setInterval(() => {
@@ -111,14 +119,33 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       })
       .subscribe();
 
+    // Also subscribe to trigger changes (in case alarm is dismissed)
+    const triggerChannel = supabase
+      .channel(`trigger-dismiss-${trigger.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'alarm_triggers',
+        filter: `id=eq.${trigger.id}`
+      }, (payload) => {
+        const updatedTrigger = payload.new as { status: string };
+        if (updatedTrigger.status === 'dismissed' && isMountedRef.current) {
+          // Alarm was dismissed by someone else
+          cleanupAlarm();
+          onDismissed();
+        }
+      })
+      .subscribe();
+
     fetchAcknowledgments();
 
     return () => {
       isMountedRef.current = false;
       cleanupAlarm();
       supabase.removeChannel(ackChannel);
+      supabase.removeChannel(triggerChannel);
     };
-  }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, sendAlarmNotification, triggeredAtMs, cleanupAlarm]);
+  }, [trigger.id, alarm.title, alarm.alarm_time, alarm.created_by, userId, playAlarm, sendAlarmNotification, triggeredAtMs, cleanupAlarm, onDismissed]);
 
   useEffect(() => {
     // Check if user can dismiss based on conditions
