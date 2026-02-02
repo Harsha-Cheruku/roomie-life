@@ -25,24 +25,28 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const AuthRedirect = () => {
-  const { user, currentRoom, loading } = useAuth();
+  const { user, currentRoom, loading, userRooms } = useAuth();
   
+  // Show loading until auth state is fully determined
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
+        <div className="animate-pulse text-muted-foreground">Loading...</div>
       </div>
     );
   }
   
-  if (user && currentRoom) {
+  // User is logged in and has a room - go to home
+  if (user && (currentRoom || userRooms.length > 0)) {
     return <Navigate to="/" replace />;
   }
   
-  if (user && !currentRoom) {
+  // User is logged in but no room - go to setup
+  if (user && !currentRoom && userRooms.length === 0) {
     return <Navigate to="/setup" replace />;
   }
   
+  // Not logged in - show auth page
   return <Auth />;
 };
 
