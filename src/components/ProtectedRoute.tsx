@@ -1,6 +1,6 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -11,18 +11,25 @@ export const ProtectedRoute = ({ children, requireRoom = true }: ProtectedRouteP
   const { user, currentRoom, loading, userRooms } = useAuth();
   const location = useLocation();
   const [isStable, setIsStable] = useState(false);
+  const hasInitialized = useRef(false);
 
   // Wait for auth state to stabilize before rendering
   useEffect(() => {
     if (!loading) {
-      // Small delay to ensure state is fully propagated
+      // Wait longer on initial load to prevent flicker
+      const delay = hasInitialized.current ? 50 : 200;
       const timer = setTimeout(() => {
         setIsStable(true);
-      }, 100);
+        hasInitialized.current = true;
+      }, delay);
       return () => clearTimeout(timer);
+    } else {
+      // Reset stable state when loading starts
+      setIsStable(false);
     }
-  }, [loading, user, currentRoom]);
+  }, [loading, user?.id, currentRoom?.id]);
 
+  // Show loading state while auth is not stable
   if (loading || !isStable) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -8,11 +8,14 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { LockedBillView } from './LockedBillView';
 
 interface ExtractedItem {
   name: string;
   price: number;
   quantity: number;
+  isManual?: boolean; // Track manually added items
 }
 
 interface ScanResult {
@@ -48,18 +51,28 @@ export const ExpenseSplitter = ({
   receiptImage,
   onComplete 
 }: ExpenseSplitterProps) => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, profile } = useAuth();
   const { toast } = useToast();
+  const { createExpenseNotification } = useCreateNotification();
+  
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [title, setTitle] = useState('');
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // New: Lock flow states
+  const [isLocked, setIsLocked] = useState(false);
+  const [showLockedView, setShowLockedView] = useState(false);
+  
+  // Track if items were loaded from OCR to prevent overwrites
+  const initialLoadRef = useRef(false);
 
   useEffect(() => {
-    if (scanResult) {
-      setItems(scanResult.items);
+    if (scanResult && !initialLoadRef.current) {
+      // Only set items on first load, preserve manual edits
+      setItems(scanResult.items.map(item => ({ ...item, isManual: false })));
       setTitle(scanResult.title || 'Scanned Receipt');
       // Default: assign all items to all members
       const defaultAssignments: ItemAssignment = {};
@@ -67,8 +80,18 @@ export const ExpenseSplitter = ({
         defaultAssignments[index] = [];
       });
       setAssignments(defaultAssignments);
+      initialLoadRef.current = true;
     }
   }, [scanResult]);
+  
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      initialLoadRef.current = false;
+      setIsLocked(false);
+      setShowLockedView(false);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (currentRoom && open) {
@@ -174,6 +197,32 @@ export const ExpenseSplitter = ({
     });
   };
 
+  // Add manual item
+  const addManualItem = () => {
+    const newItem: ExtractedItem = {
+      name: 'New Item',
+      price: 0,
+      quantity: 1,
+      isManual: true,
+    };
+    setItems(prev => [...prev, newItem]);
+    // Assign to all members by default
+    const allMemberIds = roomMembers.map(m => m.user_id);
+    setAssignments(prev => ({
+      ...prev,
+      [items.length]: allMemberIds,
+    }));
+    // Expand the new item for editing
+    setExpandedItem(items.length);
+  };
+
+  // Update item name
+  const updateItemName = (index: number, name: string) => {
+    setItems(prev => prev.map((item, i) => 
+      i === index ? { ...item, name } : item
+    ));
+  };
+
   const calculateTotal = () => {
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
@@ -187,6 +236,41 @@ export const ExpenseSplitter = ({
       }
     });
     return total;
+  };
+
+  // Get splits for locked view
+  const getSplits = () => {
+    return roomMembers.map(member => ({
+      userId: member.user_id,
+      name: member.profile.display_name,
+      avatar: member.profile.avatar,
+      amount: calculateMemberOwes(member.user_id),
+    })).filter(s => s.amount > 0);
+  };
+
+  // Handle lock/complete bill
+  const handleCompleteBill = () => {
+    if (items.length === 0) {
+      toast({
+        title: 'No items',
+        description: 'Please add at least one item to the bill',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    const total = calculateTotal();
+    if (total <= 0) {
+      toast({
+        title: 'Invalid total',
+        description: 'Bill total must be greater than 0',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setIsLocked(true);
+    setShowLockedView(true);
   };
 
   const saveExpense = async () => {
@@ -243,6 +327,7 @@ export const ExpenseSplitter = ({
               user_id: userId,
               amount: splitAmount,
               is_paid: userId === user.id, // Creator already paid
+              status: userId === user.id ? 'accepted' : 'pending',
             });
           });
         }
@@ -252,6 +337,15 @@ export const ExpenseSplitter = ({
         const { error: splitsError } = await supabase
           .from('expense_splits')
           .insert(splits);
+        
+        if (splitsError) throw splitsError;
+        
+        // Create notifications for assigned users
+        const assignedUserIds = [...new Set(splits.map(s => s.user_id))];
+        await createExpenseNotification(
+          { id: expense.id, title, total_amount: calculateTotal(), created_by: user.id },
+          assignedUserIds
+        );
 
         if (splitsError) throw splitsError;
       }
@@ -348,8 +442,22 @@ export const ExpenseSplitter = ({
 
                 {expandedItem === index && (
                   <div className="px-4 pb-4 space-y-4 border-t border-border/50">
+                    {/* Item Name (editable) */}
+                    <div className="pt-3">
+                      <label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Edit3 className="w-3 h-3" />
+                        Item Name
+                      </label>
+                      <Input
+                        value={item.name}
+                        onChange={(e) => updateItemName(index, e.target.value)}
+                        className="mt-1 h-10 rounded-lg"
+                        placeholder="Item name"
+                      />
+                    </div>
+                    
                     {/* Price and quantity controls */}
-                    <div className="flex items-center gap-4 pt-3">
+                    <div className="flex items-center gap-4">
                       <div className="flex-1">
                         <label className="text-xs text-muted-foreground">Price</label>
                         <Input
@@ -433,6 +541,16 @@ export const ExpenseSplitter = ({
                 )}
               </div>
             ))}
+            
+            {/* Add Manual Item Button */}
+            <Button
+              variant="outline"
+              className="w-full h-12 rounded-xl gap-2 border-dashed"
+              onClick={addManualItem}
+            >
+              <PlusCircle className="w-4 h-4" />
+              Add Item Manually
+            </Button>
           </div>
 
           {/* Summary */}
@@ -471,27 +589,46 @@ export const ExpenseSplitter = ({
           </div>
         </div>
 
-        {/* Save button */}
-        <div className="shrink-0 pt-4 border-t">
+        {/* Complete Bill button - triggers lock flow */}
+        <div className="shrink-0 pt-4 border-t flex gap-2">
           <Button 
-            className="w-full h-14 rounded-xl text-base gap-2 press-effect"
-            onClick={saveExpense}
-            disabled={isSaving || items.length === 0}
+            variant="outline"
+            className="flex-1 h-14 rounded-xl text-base gap-2"
+            onClick={() => onOpenChange(false)}
           >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <Save className="w-5 h-5" />
-                Save & Split
-              </>
-            )}
+            Cancel
+          </Button>
+          <Button 
+            className="flex-1 h-14 rounded-xl text-base gap-2 press-effect"
+            onClick={handleCompleteBill}
+            disabled={items.length === 0}
+          >
+            <Lock className="w-5 h-5" />
+            Complete Bill
           </Button>
         </div>
       </SheetContent>
+      
+      {/* Locked Bill View */}
+      <LockedBillView
+        open={showLockedView}
+        onOpenChange={(open) => {
+          setShowLockedView(open);
+          if (!open) setIsLocked(false);
+        }}
+        title={title}
+        items={items}
+        total={calculateTotal()}
+        paidBy={{
+          name: profile?.display_name || 'You',
+          avatar: profile?.avatar || '😊',
+        }}
+        splits={getSplits()}
+        category="general"
+        createdAt={new Date()}
+        onConfirm={saveExpense}
+        isConfirming={isSaving}
+      />
     </Sheet>
   );
 };
