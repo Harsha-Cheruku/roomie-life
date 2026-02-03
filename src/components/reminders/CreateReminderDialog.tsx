@@ -65,16 +65,23 @@ export function CreateReminderDialog({
 
     setIsCreating(true);
     try {
-      const { error } = await supabase.from('reminders').insert({
+      // Fix: Only include condition_type if it's not 'none' to avoid check constraint violation
+      const insertData: any = {
         room_id: roomId,
         created_by: userId,
         title: title.trim(),
         description: description.trim() || null,
         remind_at: remindAt.toISOString(),
-        condition_type: conditionType,
         allowed_completers: allowedCompleters.length > 0 ? allowedCompleters : otherMembers.map(m => m.user_id),
         status: 'scheduled'
-      });
+      };
+      
+      // Only add condition_type if it's a valid database value (not 'none')
+      if (conditionType !== 'none') {
+        insertData.condition_type = conditionType;
+      }
+      
+      const { error } = await supabase.from('reminders').insert(insertData);
 
       if (error) throw error;
 

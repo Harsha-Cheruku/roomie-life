@@ -61,6 +61,23 @@ export const MarkAsPaidDialog = ({
       if (screenshot && fileInputRef.current?.files?.[0]) {
         setUploadingScreenshot(true);
         const file = fileInputRef.current.files[0];
+        
+        // Validate file type and size
+        if (!file.type.startsWith('image/')) {
+          toast({ title: 'Invalid file type', description: 'Please select an image file', variant: 'destructive' });
+          setUploadingScreenshot(false);
+          setIsLoading(false);
+          return;
+        }
+        
+        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+        if (file.size > MAX_SIZE) {
+          toast({ title: 'File too large', description: 'Maximum file size is 10MB', variant: 'destructive' });
+          setUploadingScreenshot(false);
+          setIsLoading(false);
+          return;
+        }
+        
         const fileName = `payment_${splitId}_${Date.now()}.${file.name.split('.').pop()}`;
         
         const { error: uploadError } = await supabase
@@ -71,21 +88,42 @@ export const MarkAsPaidDialog = ({
         if (uploadError) {
           console.error('Upload error:', uploadError);
         } else {
-          const { data: urlData } = supabase
+          // Fix: Use signed URL instead of public URL for private bucket
+          const { data: signedUrlData, error: signedError } = await supabase
             .storage
             .from('chat-attachments')
-            .getPublicUrl(fileName);
-          screenshotUrl = urlData.publicUrl;
+            .createSignedUrl(fileName, 3600 * 24 * 7); // 7 days expiry
+          
+          if (!signedError && signedUrlData) {
+            screenshotUrl = signedUrlData.signedUrl;
+          }
         }
         setUploadingScreenshot(false);
       }
 
+      // Mark split as paid
       const { error } = await supabase
         .from('expense_splits')
         .update({ is_paid: true })
         .eq('id', splitId);
 
       if (error) throw error;
+      
+      // Check if all splits for this expense are paid - auto settle
+      const { data: allSplits } = await supabase
+        .from('expense_splits')
+        .select('id, is_paid, status')
+        .eq('expense_id', expenseId);
+      
+      const allPaid = allSplits?.every(s => s.is_paid || s.status === 'rejected');
+      
+      if (allPaid) {
+        // Auto-settle the expense
+        await supabase
+          .from('expenses')
+          .update({ status: 'settled' })
+          .eq('id', expenseId);
+      }
 
       // Create notification for the person who originally paid
       const userName = profile?.display_name || 'Someone';
