@@ -120,6 +120,30 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
     };
   }, [trigger.id, alarm.title, alarm.alarm_time, playAlarm, sendAlarmNotification, triggeredAtMs, cleanupAlarm]);
 
+  // Subscribe to trigger status changes for cross-device dismiss sync
+  useEffect(() => {
+    const statusChannel = supabase
+      .channel(`trigger-status-${trigger.id}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'alarm_triggers',
+        filter: `id=eq.${trigger.id}`
+      }, (payload) => {
+        // If trigger was dismissed by anyone, stop the alarm immediately
+        if (payload.new.status === 'dismissed') {
+          console.log("Alarm dismissed by another user - stopping sound");
+          cleanupAlarm();
+          onDismissed();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(statusChannel);
+    };
+  }, [trigger.id, cleanupAlarm, onDismissed]);
+
   useEffect(() => {
     // Check if user can dismiss based on conditions
     const isOwner = userId === alarm.created_by;

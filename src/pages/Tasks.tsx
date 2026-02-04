@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { CheckCircle2, Circle, Clock, Plus, Calendar, Filter, Check, X, Loader2, ListTodo, User, BarChart3 } from "lucide-react";
+import { CheckCircle2, Circle, Clock, Plus, Calendar as CalendarIcon, Filter, Check, X, Loader2, ListTodo, User, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -8,6 +8,7 @@ import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { TaskDashboard } from "@/components/tasks/TaskDashboard";
+import { TaskCalendar } from "@/components/tasks/TaskCalendar";
 import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
@@ -55,7 +56,7 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 };
 
 export const Tasks = () => {
-  const [view, setView] = useState<"list" | "dashboard">("list");
+  const [view, setView] = useState<"list" | "dashboard" | "calendar">("list");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -272,6 +273,14 @@ export const Tasks = () => {
         rightContent={
           <div className="flex gap-2">
             <Button 
+              variant={view === 'calendar' ? 'default' : 'glass'} 
+              size="iconSm" 
+              className="press-effect"
+              onClick={() => setView(view === 'calendar' ? 'list' : 'calendar')}
+            >
+              <CalendarIcon className="w-4 h-4" />
+            </Button>
+            <Button 
               variant={view === 'dashboard' ? 'default' : 'glass'} 
               size="iconSm" 
               className="press-effect"
@@ -330,6 +339,16 @@ export const Tasks = () => {
         <div className="px-4 mb-4">
           <TaskDashboard tasks={filteredByDateAndMode} />
         </div>
+      ) : view === 'calendar' ? (
+        <TaskCalendar 
+          onCreateTask={(date) => {
+            setShowCreateDialog(true);
+          }}
+          onTaskClick={(task) => {
+            setSelectedTask(task as Task);
+            setShowDetailSheet(true);
+          }}
+        />
       ) : (
         <>
           {/* KPI Summary Cards - Real-time Updates */}
