@@ -78,6 +78,7 @@ export const EditExpenseDialog = ({
 
     setIsSaving(true);
     try {
+      // Update the expense
       const { error } = await supabase
         .from('expenses')
         .update({
@@ -89,6 +90,34 @@ export const EditExpenseDialog = ({
         .eq('id', expense.id);
 
       if (error) throw error;
+
+      // Recalculate splits if amount changed
+      if (totalAmount !== expense.total_amount) {
+        // Get existing splits
+        const { data: splits, error: splitsError } = await supabase
+          .from('expense_splits')
+          .select('id, user_id')
+          .eq('expense_id', expense.id);
+
+        if (splitsError) throw splitsError;
+
+        if (splits && splits.length > 0) {
+          // Calculate new amount per person (equal split)
+          const newAmountPerPerson = totalAmount / splits.length;
+
+          // Update each split with new amount
+          for (const split of splits) {
+            const { error: updateError } = await supabase
+              .from('expense_splits')
+              .update({ amount: newAmountPerPerson })
+              .eq('id', split.id);
+
+            if (updateError) {
+              console.error('Error updating split:', updateError);
+            }
+          }
+        }
+      }
 
       toast({ title: 'Expense updated! ✓' });
       onComplete();

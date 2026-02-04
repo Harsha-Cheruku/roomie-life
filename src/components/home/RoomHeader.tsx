@@ -1,4 +1,4 @@
-import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog, RefreshCw, Circle, User } from "lucide-react";
+import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog, RefreshCw, Circle, User, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";
@@ -116,11 +116,31 @@ export const RoomHeader = () => {
 
   const handleSignOut = async () => {
     setShowMenu(false);
+    // Sign out just logs out - does NOT leave room
     await signOut();
+    navigate('/auth');
   };
+
+  // Check if current user is admin of current room
+  const isCurrentUserAdmin = members.find(m => m.user_id === user?.id)?.role === 'admin';
 
   const handleLeaveRoom = async () => {
     setShowMenu(false);
+    
+    // If admin is trying to leave, warn them
+    if (isCurrentUserAdmin) {
+      const otherMembers = members.filter(m => m.user_id !== user?.id);
+      if (otherMembers.length > 0) {
+        toast({
+          title: "You're the admin!",
+          description: "Please transfer admin role to another member before leaving, or remove all members first.",
+          variant: "destructive",
+        });
+        navigate('/room-settings');
+        return;
+      }
+    }
+
     const { error } = await leaveRoom();
     if (error) {
       toast({
@@ -200,7 +220,13 @@ export const RoomHeader = () => {
               <Settings className="w-5 h-5 text-foreground" />
             </Button>
             {showMenu && (
-              <div className="absolute right-0 top-12 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px] z-50 animate-scale-in">
+              <>
+                {/* Backdrop to close menu when clicking outside */}
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setShowMenu(false)}
+                />
+                <div className="absolute right-0 top-12 bg-card rounded-xl shadow-lg border border-border p-2 min-w-[180px] z-50 animate-scale-in">
                 <button
                   onClick={() => { setShowMenu(false); navigate("/room-settings"); }}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
@@ -208,6 +234,16 @@ export const RoomHeader = () => {
                   <Cog className="w-4 h-4" />
                   <span className="text-sm">Room Settings</span>
                 </button>
+                {/* Admin Panel - Only visible for admins */}
+                {isCurrentUserAdmin && (
+                  <button
+                    onClick={() => { setShowMenu(false); navigate("/admin"); }}
+                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
+                  >
+                    <Crown className="w-4 h-4 text-accent" />
+                    <span className="text-sm">Admin Panel</span>
+                  </button>
+                )}
                 <button
                   onClick={copyInviteCode}
                   className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
@@ -259,6 +295,7 @@ export const RoomHeader = () => {
                   <span className="text-sm">Sign Out</span>
                 </button>
               </div>
+              </>
             )}
           </div>
         </div>
