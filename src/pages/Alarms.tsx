@@ -15,6 +15,7 @@ import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
 import { AlarmDebugPanel } from "@/components/alarms/AlarmDebugPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAlarmSound } from "@/hooks/useAlarmSound";
+import { useDeviceId } from "@/hooks/useDeviceId";
 
 /**
  * Alarm Behavior:
@@ -34,6 +35,7 @@ interface Alarm {
   condition_value: number;
   created_by: string;
   room_id: string;
+  owner_device_id?: string | null;
 }
 
 interface AlarmTrigger {
@@ -63,9 +65,10 @@ export default function Alarms() {
   const [activeAlarm, setActiveAlarm] = useState<Alarm | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { requestPermission, hasPermission, sendAlarmNotification } = useNotifications();
+  const { requestPermission, hasPermission } = useNotifications();
   const { preloadAudio } = useAlarmSound();
   const lastTriggeredRef = useRef<Map<string, number>>(new Map());
+  const deviceId = useDeviceId();
 
   // Preload alarm sound on mount
   useEffect(() => {
@@ -173,6 +176,10 @@ export default function Alarms() {
      const currentDay = now.getDay();
  
      for (const alarm of alarms) {
+       // HARD RULE: only the alarm creator's *owner device* is allowed to trigger.
+       if (alarm.created_by !== user.id) continue;
+       if (alarm.owner_device_id && alarm.owner_device_id !== deviceId) continue;
+
        if (!alarm.is_active) continue;
        if (!alarm.days_of_week.includes(currentDay)) continue;
  
@@ -208,6 +215,28 @@ export default function Alarms() {
         continue;
       }
 
+       // Backward-compatible ownership claim for older alarms (owner_device_id was added later).
+       // We only claim when the alarm is actually due to ring.
+       if (!alarm.owner_device_id) {
+         const { data: claimed, error: claimError } = await supabase
+           .from('alarms')
+           .update({ owner_device_id: deviceId } as any)
+           .eq('id', alarm.id)
+           .is('owner_device_id', null)
+           .select('id')
+           .maybeSingle();
+
+         if (claimError) {
+           console.error('Error claiming alarm ownership:', claimError);
+           continue;
+         }
+
+         // Another device may have claimed it first.
+         if (!claimed) continue;
+
+         setAlarms(prev => prev.map(a => (a.id === alarm.id ? { ...a, owner_device_id: deviceId } : a)));
+       }
+
       console.log("Triggering alarm:", alarm.title);
 
       // Mark as triggered locally
@@ -227,15 +256,11 @@ export default function Alarms() {
         // Remove local trigger mark on error
         lastTriggeredRef.current.delete(alarm.id);
       } else {
-        // Send notification with sound
-      // Note: Sound only plays on the alarm creator's device (handled in ActiveAlarmModal)
-      sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
-        
         // Refresh to show the modal
         checkActiveAlarms();
       }
     }
-  }, [roomId, user, alarms, sendAlarmNotification]);
+  }, [roomId, user, alarms, deviceId]);
 
   const toggleAlarm = async (alarm: Alarm) => {
     const { error } = await supabase
