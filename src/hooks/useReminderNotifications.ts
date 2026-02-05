@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useNotifications } from '@/hooks/useNotifications';
 
 interface Reminder {
   id: string;
@@ -17,11 +18,18 @@ export const useReminderNotifications = () => {
   const { user, currentRoom } = useAuth();
   const notifiedReminders = useRef<Set<string>>(new Set());
   const checkInterval = useRef<NodeJS.Timeout | null>(null);
+  const { sendReminderNotification, playNotificationSound, hasPermission } = useNotifications();
 
   const createNotification = async (reminder: Reminder) => {
     if (!user || !currentRoom) return;
 
     try {
+      // Play reminder sound with notification
+      playNotificationSound('reminder');
+      
+      // Send browser notification with sound
+      sendReminderNotification(reminder.title, reminder.description || 'Reminder is due now!');
+      
       await supabase
         .from('notifications')
         .insert({
@@ -41,11 +49,16 @@ export const useReminderNotifications = () => {
         .update({ status: 'notified' })
         .eq('id', reminder.id);
 
-      // Show toast notification
-      toast.info(`⏰ ${reminder.title}`, {
-        description: reminder.description || 'Reminder is due now!',
-        duration: 10000,
-      });
+      // Vibrate if supported (for mobile)
+      if ('vibrate' in navigator) {
+        try {
+          navigator.vibrate([200, 100, 200]);
+        } catch (e) {
+          // Ignore vibration errors
+        }
+      }
+      
+      console.log('Reminder notification sent:', reminder.title);
     } catch (error) {
       console.error('Error creating reminder notification:', error);
     }
@@ -93,8 +106,8 @@ export const useReminderNotifications = () => {
     // Check immediately
     checkReminders();
 
-    // Check every 30 seconds
-    checkInterval.current = setInterval(checkReminders, 30000);
+    // Check every 15 seconds for better accuracy
+    checkInterval.current = setInterval(checkReminders, 15000);
 
     // Subscribe to new reminders
     const channel = supabase

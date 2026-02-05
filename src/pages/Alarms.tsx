@@ -15,6 +15,15 @@ import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
 import { AlarmDebugPanel } from "@/components/alarms/AlarmDebugPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useAlarmSound } from "@/hooks/useAlarmSound";
+
+/**
+ * Alarm Behavior:
+ * - Alarm rings ONLY on the creator's device with full sound
+ * - Other roommates receive silent notifications
+ * - Anyone can dismiss the alarm (syncs across all devices)
+ * - Alarm auto-dismisses after 3 rings
+ */
+
 interface Alarm {
   id: string;
   title: string;
@@ -219,7 +228,8 @@ export default function Alarms() {
         lastTriggeredRef.current.delete(alarm.id);
       } else {
         // Send notification with sound
-        sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
+      // Note: Sound only plays on the alarm creator's device (handled in ActiveAlarmModal)
+      sendAlarmNotification(alarm.title, formatTime(alarm.alarm_time));
         
         // Refresh to show the modal
         checkActiveAlarms();

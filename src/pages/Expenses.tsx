@@ -13,6 +13,7 @@ import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
 import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
+import { SettledBillsSection } from "@/components/expenses/SettledBillsSection";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -708,13 +709,14 @@ export const Expenses = () => {
       )}
 
       {/* Balances */}
-      {balances.length > 0 && (
+      {!isSoloMode && (
         <section className="px-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-lg font-semibold text-foreground">Balances</h2>
-            <button className="text-sm text-primary font-medium press-effect" onClick={() => setShowSettleUp(true)}>Settle Up</button>
+            <button className="text-sm text-primary font-medium press-effect bg-primary/10 px-3 py-1 rounded-lg" onClick={() => setShowSettleUp(true)}>Settle Up</button>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          {balances.length > 0 ? (
+            <div className="flex gap-3 overflow-x-auto pb-2">
             {balances.map((person, index) => (
               <div
                 key={person.user_id}
@@ -728,7 +730,14 @@ export const Expenses = () => {
                 </p>
               </div>
             ))}
-          </div>
+            </div>
+          ) : (
+            <div className="bg-mint/10 rounded-2xl p-4 text-center">
+              <Check className="w-8 h-8 mx-auto text-mint mb-2" />
+              <p className="text-sm font-medium text-mint">All settled up! ✓</p>
+              <p className="text-xs text-muted-foreground">No pending balances with roommates</p>
+            </div>
+          )}
         </section>
       )}
 
@@ -736,6 +745,22 @@ export const Expenses = () => {
       <section className="px-4 mb-6">
         <MonthlyExpenseChart />
       </section>
+
+      {/* Settled Bills Section - Always visible when viewing settled tab */}
+      {activeTab === 'settled' && (
+        <section className="px-4 mb-6">
+          <SettledBillsSection 
+            onExpenseClick={(exp) => {
+              // Find full expense data for detail view
+              const fullExpense = expenses.find(e => e.id === exp.id);
+              if (fullExpense) {
+                setSelectedExpense(fullExpense);
+                setShowExpenseDetail(true);
+              }
+            }}
+          />
+        </section>
+      )}
 
       {/* Solo Mode Indicator */}
       {isSoloMode && (
