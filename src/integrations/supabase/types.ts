@@ -91,6 +91,7 @@ export type Database = {
           days_of_week: number[]
           id: string
           is_active: boolean
+          owner_device_id: string | null
           room_id: string
           title: string
           updated_at: string
@@ -104,6 +105,7 @@ export type Database = {
           days_of_week?: number[]
           id?: string
           is_active?: boolean
+          owner_device_id?: string | null
           room_id: string
           title: string
           updated_at?: string
@@ -117,6 +119,7 @@ export type Database = {
           days_of_week?: number[]
           id?: string
           is_active?: boolean
+          owner_device_id?: string | null
           room_id?: string
           title?: string
           updated_at?: string

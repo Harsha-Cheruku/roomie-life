@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
+import { useDeviceId } from "@/hooks/useDeviceId";
 
 interface CreateAlarmDialogProps {
   open: boolean;
@@ -40,6 +41,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
   const [conditionType, setConditionType] = useState('anyone_can_dismiss');
   const [conditionValue, setConditionValue] = useState(3);
   const [creating, setCreating] = useState(false);
+  const deviceId = useDeviceId();
 
   const handleCreate = async () => {
     if (!roomId || !userId) {
@@ -66,8 +68,10 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
       alarm_time: time,
       days_of_week: selectedDays,
       condition_type: conditionType,
-      condition_value: conditionValue
-    });
+      condition_value: conditionValue,
+      // Per-device ownership: only this device is allowed to trigger + ring this alarm.
+      owner_device_id: deviceId,
+    } as any);
 
     setCreating(false);
 
