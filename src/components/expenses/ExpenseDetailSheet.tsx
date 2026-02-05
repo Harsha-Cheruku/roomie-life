@@ -204,6 +204,11 @@ export const ExpenseDetailSheet = ({
   const mySplit = expense.splits?.find(s => s.user_id === user?.id);
   const isPayer = expense.paid_by === user?.id;
   const isCreator = expense.created_by === user?.id;
+  
+  // Check if bill is fully paid/settled - should be read-only
+  const isSettled = expense.status === 'settled';
+  const allSplitsPaid = expense.splits?.every(s => s.is_paid || s.status === 'rejected') ?? false;
+  const isReadOnly = isSettled || allSplitsPaid;
 
   return (
     <>
@@ -216,7 +221,7 @@ export const ExpenseDetailSheet = ({
               </Button>
               <SheetTitle className="text-xl font-bold">Expense Details</SheetTitle>
             </div>
-            {isCreator && (
+            {isCreator && !isReadOnly && (
               <div className="flex gap-2">
                 <Button 
                   variant="ghost" 
@@ -235,6 +240,11 @@ export const ExpenseDetailSheet = ({
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
+            )}
+            {isCreator && isReadOnly && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                🔒 Read-only
+              </span>
             )}
           </SheetHeader>
 
@@ -403,6 +413,13 @@ export const ExpenseDetailSheet = ({
               <div className="bg-card rounded-2xl p-4 shadow-card">
                 <h3 className="font-semibold text-foreground mb-2">Notes</h3>
                 <p className="text-sm text-muted-foreground">{expense.notes}</p>
+              </div>
+            )}
+
+            {isReadOnly && (
+              <div className="bg-mint/10 rounded-2xl p-4 text-center">
+                <p className="text-sm text-mint font-medium">✓ This bill is settled and locked</p>
+                <p className="text-xs text-muted-foreground mt-1">Settled bills cannot be edited or deleted</p>
               </div>
             )}
           </div>

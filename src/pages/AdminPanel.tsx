@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { useToast } from "@/hooks/use-toast";
 import { TopBar } from "@/components/layout/TopBar";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -51,7 +52,8 @@ interface RoomActivity {
 export default function AdminPanel() {
   const navigate = useNavigate();
   const { user, currentRoom } = useAuth();
-  const { members, isAdmin, refetch: refetchMembers } = useRoomMembers();
+  const { members, refetch: refetchMembers } = useRoomMembers();
+  const { isAdmin, isLoading: adminLoading, error: adminError } = useAdminCheck();
   const { toast } = useToast();
   
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -62,9 +64,13 @@ export default function AdminPanel() {
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
   
-  const isCurrentUserAdmin = isAdmin();
+  // Use the dedicated admin check hook for reliable role verification
+  const isCurrentUserAdmin = isAdmin;
 
   useEffect(() => {
+    // Wait for admin check to complete before redirecting
+    if (adminLoading) return;
+    
     if (!currentRoom?.id) {
       navigate('/');
       return;
@@ -73,7 +79,7 @@ export default function AdminPanel() {
     if (!isCurrentUserAdmin) {
       toast({
         title: "Access Denied",
-        description: "Only room admins can access this panel",
+        description: adminError || "Only room admins can access this panel",
         variant: "destructive"
       });
       navigate('/');
@@ -81,7 +87,19 @@ export default function AdminPanel() {
     }
     
     fetchData();
-  }, [currentRoom?.id, isCurrentUserAdmin]);
+  }, [currentRoom?.id, isCurrentUserAdmin, adminLoading, adminError]);
+
+  // Show loading while checking admin status
+  if (adminLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">Checking permissions...</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchData = async () => {
     if (!currentRoom?.id) return;

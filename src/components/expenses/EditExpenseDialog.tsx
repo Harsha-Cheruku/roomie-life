@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,8 @@ interface EditExpenseDialogProps {
     total_amount: number;
     category?: string;
     notes?: string;
+    status?: string;
+    splits?: Array<{ is_paid: boolean; status: string }>;
   } | null;
   onComplete: () => void;
 }
@@ -46,6 +48,7 @@ export const EditExpenseDialog = ({
   const [category, setCategory] = useState('general');
   const [notes, setNotes] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   useEffect(() => {
     if (expense && open) {
@@ -53,8 +56,46 @@ export const EditExpenseDialog = ({
       setAmount(expense.total_amount.toString());
       setCategory(expense.category || 'general');
       setNotes(expense.notes || '');
+      
+      // Check if expense is settled or all splits are paid - make read-only
+      const allPaid = expense.splits?.every(s => s.is_paid || s.status === 'rejected') ?? false;
+      setIsReadOnly(expense.status === 'settled' || allPaid);
     }
   }, [expense, open]);
+
+  // If read-only, show a locked message
+  if (isReadOnly && open) {
+    return (
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="bottom" className="h-[40vh] rounded-t-3xl overflow-hidden flex flex-col">
+          <SheetHeader className="shrink-0">
+            <SheetTitle className="text-xl font-bold flex items-center gap-2">
+              <Lock className="w-5 h-5 text-muted-foreground" />
+              Bill is Locked
+            </SheetTitle>
+          </SheetHeader>
+          
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                <Lock className="w-8 h-8 text-muted-foreground" />
+              </div>
+              <p className="font-medium text-foreground">This bill cannot be edited</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Bills that are settled or fully paid are locked to maintain accurate records.
+              </p>
+            </div>
+          </div>
+          
+          <div className="shrink-0 p-4 border-t">
+            <Button variant="outline" className="w-full h-12 rounded-xl" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
   const handleSave = async () => {
     if (!expense || !title.trim() || !amount) {
