@@ -43,7 +43,6 @@ interface ActiveAlarmModalProps {
  */
 export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: ActiveAlarmModalProps) {
   const RING_LENGTH_MS = 5000;
-  const MAX_RINGS = 3;
 
   const deviceId = useDeviceId();
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
@@ -64,12 +63,36 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
   const { playAlarm, stopAlarm } = useAlarmSound();
   const { sendNotification } = useNotifications();
 
+  // Determine if this device is the owner (sound plays only here)
   const isOwnerDevice = Boolean(
     userId &&
       userId === alarm.created_by &&
       alarm.owner_device_id &&
       alarm.owner_device_id === deviceId
   );
+
+  // Determine if current user is the owner (can always dismiss)
+  const isOwnerUser = userId === alarm.created_by;
+
+  // Determine if others can dismiss based on condition_type and ring count
+  const canUserDismiss = useMemo(() => {
+    // Owner can always dismiss
+    if (isOwnerUser) return true;
+    
+    switch (alarm.condition_type) {
+      case 'owner_only':
+        // Only owner can dismiss - others cannot
+        return false;
+      case 'after_rings':
+        // Others can dismiss after X rings (configurable)
+        const requiredRings = alarm.condition_value || 3;
+        return ringCount >= requiredRings;
+      case 'anyone_can_dismiss':
+      default:
+        // Anyone can dismiss immediately
+        return true;
+    }
+  }, [isOwnerUser, alarm.condition_type, alarm.condition_value, ringCount]);
 
   const formatTime = useCallback((time: string) => {
     const [hours, minutes] = time.split(':');
@@ -159,18 +182,9 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       // Start alarm sound + vibration ONLY on the owner device.
       void playAlarm().catch((error) => console.error('Failed to start alarm sound:', error));
 
-      // Owner-only local ring timer (does not rely on backend latency).
-      localRingCounterRef.current = 0;
-      ownerRingIntervalRef.current = window.setInterval(() => {
-        localRingCounterRef.current += 1;
-        if (localRingCounterRef.current >= MAX_RINGS) {
-          if (ownerRingIntervalRef.current) {
-            clearInterval(ownerRingIntervalRef.current);
-            ownerRingIntervalRef.current = null;
-          }
-          void handleAutoDismiss();
-        }
-      }, RING_LENGTH_MS);
+      // Note: Alarm does NOT auto-dismiss after X rings anymore.
+      // It only stops when someone dismisses it (owner always, others after condition is met).
+      // The ring counter is just for display and dismiss permission calculation.
 
       // Background/locked-screen notification (may play system notification sound).
       sendNotification({
@@ -212,6 +226,14 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
 
   const handleDismiss = async () => {
     if (!userId || dismissing) return;
+
+    // Check if user has permission to dismiss
+    if (!canUserDismiss) {
+      const requiredRings = alarm.condition_value || 3;
+      const remaining = requiredRings - ringCount;
+      toast.error(`Only the alarm owner can dismiss. Wait ${remaining} more ring${remaining !== 1 ? 's' : ''}.`);
+      return;
+    }
 
     setDismissing(true);
     
@@ -263,12 +285,17 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
 
           <Button
             onClick={handleDismiss}
-            disabled={dismissing}
+            disabled={dismissing || !canUserDismiss}
             className="w-full"
             size="lg"
+            variant={canUserDismiss ? "default" : "outline"}
           >
             <BellOff className="h-5 w-5 mr-2" />
-            {dismissing ? 'Dismissing...' : 'Dismiss Alarm'}
+            {dismissing 
+              ? 'Dismissing...' 
+              : !canUserDismiss 
+                ? `Wait ${(alarm.condition_value || 3) - ringCount} more ring${(alarm.condition_value || 3) - ringCount !== 1 ? 's' : ''}` 
+                : 'Dismiss Alarm'}
           </Button>
         </div>
       </DialogContent>
