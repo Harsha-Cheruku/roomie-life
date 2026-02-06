@@ -16,9 +16,14 @@ interface Task {
   status: string;
   priority: string;
   due_date: string | null;
+  created_at: string;
   assigned_to: string;
   created_by: string;
   assignee_profile?: {
+    display_name: string;
+    avatar: string;
+  };
+  creator_profile?: {
     display_name: string;
     avatar: string;
   };
@@ -35,6 +40,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
   const { user, currentRoom, isSoloMode } = useAuth();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [showCreatedTasks, setShowCreatedTasks] = useState(false);
   const [view, setView] = useState<"calendar" | "planner">("calendar");
 
   useEffect(() => {
@@ -83,7 +89,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     setTasks(filteredTasks);
   };
 
-  // Get tasks for a specific date
+  // Get tasks for a specific date (by due date)
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => {
       if (!task.due_date) return false;
@@ -91,8 +97,16 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     });
   };
 
-  // Get tasks for selected date
+  // Get tasks CREATED on a specific date
+  const getTasksCreatedOnDate = (date: Date) => {
+    return tasks.filter(task => {
+      return isSameDay(new Date(task.created_at), date);
+    });
+  };
+
+  // Get tasks for selected date (both due and created)
   const selectedDateTasks = getTasksForDate(selectedDate);
+  const createdOnDateTasks = getTasksCreatedOnDate(selectedDate);
 
   // Get tasks by hour for day planner
   const getTasksForHour = (hour: number) => {
@@ -103,10 +117,14 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     });
   };
 
-  // Dates with tasks (for calendar highlighting)
-  const datesWithTasks = tasks
+  // Dates with due tasks (for calendar highlighting - underline)
+  const datesWithDueTasks = tasks
     .filter(t => t.due_date)
     .map(t => startOfDay(new Date(t.due_date!)));
+
+  // Dates with created tasks (for calendar highlighting - dot)
+  const datesWithCreatedTasks = tasks
+    .map(t => startOfDay(new Date(t.created_at)));
 
   const priorityColors: Record<string, string> = {
     low: "bg-mint/20 text-mint",
@@ -150,22 +168,27 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
         <div className="px-4">
           <Card>
             <CardContent className="p-4">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => date && setSelectedDate(date)}
-                className="rounded-md border-0"
-                modifiers={{
-                  hasTasks: datesWithTasks,
-                }}
-                modifiersStyles={{
-                  hasTasks: {
-                    fontWeight: "bold",
-                    textDecoration: "underline",
-                    textDecorationColor: "hsl(var(--primary))",
-                  },
-                }}
-              />
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => date && setSelectedDate(date)}
+                  className="rounded-md border-0"
+                  modifiers={{
+                    hasDueTasks: datesWithDueTasks,
+                    hasCreatedTasks: datesWithCreatedTasks,
+                  }}
+                  modifiersStyles={{
+                    hasDueTasks: {
+                      fontWeight: "bold",
+                      textDecoration: "underline",
+                      textDecorationColor: "hsl(var(--primary))",
+                    },
+                    hasCreatedTasks: {
+                      backgroundColor: "hsl(var(--accent) / 0.2)",
+                      borderRadius: "9999px",
+                    },
+                  }}
+                />
             </CardContent>
           </Card>
 
@@ -174,62 +197,91 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center justify-between">
                 <span>{format(selectedDate, "EEEE, MMMM d")}</span>
-                <Badge variant="secondary">
-                  {selectedDateTasks.length} task{selectedDateTasks.length !== 1 ? "s" : ""}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {selectedDateTasks.length === 0 ? (
-                <div className="text-center py-6">
-                  <p className="text-muted-foreground text-sm mb-3">No tasks scheduled</p>
-                  {onCreateTask && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onCreateTask(selectedDate)}
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Add Task
-                    </Button>
+                <div className="flex gap-1">
+                  <Badge variant="secondary">
+                    {selectedDateTasks.length} due
+                  </Badge>
+                  {createdOnDateTasks.length > 0 && (
+                    <Badge variant="outline" className="bg-accent/10">
+                      {createdOnDateTasks.length} created
+                    </Badge>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {selectedDateTasks.map((task) => (
-                    <button
-                      key={task.id}
-                      onClick={() => onTaskClick?.(task)}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
-                    >
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm">
-                        {task.assignee_profile?.avatar || "😊"}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "font-medium text-sm truncate",
-                          task.status === "done" && "line-through text-muted-foreground"
-                        )}>
-                          {task.title}
-                        </p>
-                        {task.due_date && (
-                          <p className="text-xs text-muted-foreground">
-                            {format(new Date(task.due_date), "h:mm a")}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        <Badge className={cn("text-xs", priorityColors[task.priority])}>
-                          {task.priority}
-                        </Badge>
-                        <Badge className={cn("text-xs", statusColors[task.status])}>
-                          {task.status.replace("_", " ")}
-                        </Badge>
-                      </div>
-                    </button>
-                  ))}
-                </div>
+              </CardTitle>
+              {/* Toggle to show created tasks */}
+              {createdOnDateTasks.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2 text-xs"
+                  onClick={() => setShowCreatedTasks(!showCreatedTasks)}
+                >
+                  {showCreatedTasks ? "Show Due Tasks" : "Show Tasks Created This Day"}
+                </Button>
               )}
+            </CardHeader>
+            <CardContent>
+              {/* Display tasks based on toggle */}
+              {(() => {
+                const displayTasks = showCreatedTasks ? createdOnDateTasks : selectedDateTasks;
+                const emptyMessage = showCreatedTasks 
+                  ? "No tasks created on this date" 
+                  : "No tasks due on this date";
+                
+                return displayTasks.length === 0 ? (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground text-sm mb-3">{emptyMessage}</p>
+                    {onCreateTask && !showCreatedTasks && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onCreateTask(selectedDate)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Task
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {displayTasks.map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => onTaskClick?.(task)}
+                        className="w-full flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
+                      >
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm">
+                          {task.assignee_profile?.avatar || "😊"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn(
+                            "font-medium text-sm truncate",
+                            task.status === "done" && "line-through text-muted-foreground"
+                          )}>
+                            {task.title}
+                          </p>
+                          <div className="flex gap-2 text-xs text-muted-foreground">
+                            {task.due_date && (
+                              <span>Due: {format(new Date(task.due_date), "h:mm a")}</span>
+                            )}
+                            {showCreatedTasks && (
+                              <span>Created: {format(new Date(task.created_at), "h:mm a")}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-1 flex-wrap justify-end">
+                          <Badge className={cn("text-xs", priorityColors[task.priority])}>
+                            {task.priority}
+                          </Badge>
+                          <Badge className={cn("text-xs", statusColors[task.status])}>
+                            {task.status.replace("_", " ")}
+                          </Badge>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>

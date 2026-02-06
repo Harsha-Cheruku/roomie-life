@@ -19,12 +19,15 @@ import {
   Activity,
   Shield,
   Users,
-  ChevronRight
+  ChevronRight,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
+import { AdminDeleteDialog } from "@/components/admin/AdminDeleteDialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Task {
   id: string;
@@ -63,6 +66,11 @@ export default function AdminPanel() {
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
+  const [deleteItem, setDeleteItem] = useState<{
+    type: "expense" | "task";
+    id: string;
+    title: string;
+  } | null>(null);
   
   // Use the dedicated admin check hook for reliable role verification
   const isCurrentUserAdmin = isAdmin;
@@ -218,10 +226,11 @@ export default function AdminPanel() {
         </div>
 
         <Tabs defaultValue="members" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="members"><Users className="h-4 w-4 mr-1" />Members</TabsTrigger>
-            <TabsTrigger value="actions"><Shield className="h-4 w-4 mr-1" />Actions</TabsTrigger>
-            <TabsTrigger value="activity"><Activity className="h-4 w-4 mr-1" />Activity</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="members"><Users className="h-4 w-4" /></TabsTrigger>
+            <TabsTrigger value="actions"><Shield className="h-4 w-4" /></TabsTrigger>
+            <TabsTrigger value="manage"><Trash2 className="h-4 w-4" /></TabsTrigger>
+            <TabsTrigger value="activity"><Activity className="h-4 w-4" /></TabsTrigger>
           </TabsList>
           
           <TabsContent value="members" className="mt-4">
@@ -267,6 +276,72 @@ export default function AdminPanel() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="manage" className="mt-4 space-y-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                  Delete Items (Requires Approval)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-2">Tasks ({tasks.length})</p>
+                  <ScrollArea className="h-[150px]">
+                    <div className="space-y-2">
+                      {tasks.map((task) => (
+                        <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{task.title}</p>
+                            <p className="text-xs text-muted-foreground">{task.status}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteItem({ type: "task", id: task.id, title: task.title })}
+                            className="text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {tasks.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No tasks</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+
+                <div>
+                  <p className="text-sm font-medium mb-2">Expenses ({expenses.length})</p>
+                  <ScrollArea className="h-[150px]">
+                    <div className="space-y-2">
+                      {expenses.map((expense) => (
+                        <div key={expense.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/30">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{expense.title}</p>
+                            <p className="text-xs text-muted-foreground">₹{expense.total_amount}</p>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDeleteItem({ type: "expense", id: expense.id, title: expense.title })}
+                            className="text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      {expenses.length === 0 && (
+                        <p className="text-sm text-muted-foreground text-center py-4">No expenses</p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
           
           <TabsContent value="activity" className="mt-4">
             <Card>
@@ -294,6 +369,17 @@ export default function AdminPanel() {
       <DeleteConfirmDialog open={!!memberToRemove} onOpenChange={() => setMemberToRemove(null)} title="Remove Member" description="Are you sure you want to remove this member from the room?" itemName={memberToRemove ? getMemberName(memberToRemove) : ''} onConfirm={async () => memberToRemove && await handleRemoveMember(memberToRemove)} />
       <CreateTaskDialog open={showCreateTask} onOpenChange={setShowCreateTask} onTaskCreated={fetchData} />
       <CreateExpenseDialog open={showCreateExpense} onOpenChange={setShowCreateExpense} onComplete={fetchData} />
+      {deleteItem && (
+        <AdminDeleteDialog
+          open={!!deleteItem}
+          onOpenChange={() => setDeleteItem(null)}
+          itemType={deleteItem.type}
+          itemId={deleteItem.id}
+          itemTitle={deleteItem.title}
+          onDeleted={fetchData}
+          requiredApprovals={2}
+        />
+      )}
       <BottomNav activeTab="home" onTabChange={handleNavChange} />
     </div>
   );

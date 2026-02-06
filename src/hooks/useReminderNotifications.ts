@@ -24,12 +24,25 @@ export const useReminderNotifications = () => {
     if (!user || !currentRoom) return;
 
     try {
-      // Play reminder sound with notification
-      playNotificationSound('reminder');
+      console.log('Creating reminder notification for:', reminder.title);
+      
+      // Play reminder sound with notification - use multiple attempts for reliability
+      const soundPlayed = await playNotificationSound('reminder');
+      console.log('Reminder sound played:', soundPlayed);
+      
+      // Vibrate if supported (for mobile) - do this before notification for better UX
+      if ('vibrate' in navigator) {
+        try {
+          navigator.vibrate([300, 100, 300, 100, 300]);
+        } catch (e) {
+          console.warn('Vibration failed:', e);
+        }
+      }
       
       // Send browser notification with sound
       sendReminderNotification(reminder.title, reminder.description || 'Reminder is due now!');
       
+      // Store notification in database
       await supabase
         .from('notifications')
         .insert({
@@ -48,19 +61,18 @@ export const useReminderNotifications = () => {
         .from('reminders')
         .update({ status: 'notified' })
         .eq('id', reminder.id);
-
-      // Vibrate if supported (for mobile)
-      if ('vibrate' in navigator) {
-        try {
-          navigator.vibrate([200, 100, 200]);
-        } catch (e) {
-          // Ignore vibration errors
-        }
-      }
       
-      console.log('Reminder notification sent:', reminder.title);
+      // Show in-app toast as fallback
+      toast.success(`⏰ ${reminder.title}`, {
+        description: reminder.description || 'Reminder is due now!',
+        duration: 10000,
+      });
+      
+      console.log('Reminder notification sent successfully:', reminder.title);
     } catch (error) {
       console.error('Error creating reminder notification:', error);
+      // Still show toast even if other notifications fail
+      toast.error('Reminder failed to trigger properly');
     }
   };
 
@@ -69,18 +81,23 @@ export const useReminderNotifications = () => {
 
     try {
       const now = new Date();
-      const oneMinuteAgo = new Date(now.getTime() - 60000);
-      const oneMinuteAhead = new Date(now.getTime() + 60000);
+      // Expand window to 2 minutes to catch any timing delays
+      const twoMinutesAgo = new Date(now.getTime() - 120000);
+      const thirtySecondsAhead = new Date(now.getTime() + 30000);
+
+      console.log('Checking reminders...', { now: now.toISOString() });
 
       const { data: dueReminders, error } = await supabase
         .from('reminders')
         .select('*')
         .eq('room_id', currentRoom.id)
         .eq('status', 'scheduled')
-        .gte('remind_at', oneMinuteAgo.toISOString())
-        .lte('remind_at', oneMinuteAhead.toISOString());
+        .gte('remind_at', twoMinutesAgo.toISOString())
+        .lte('remind_at', thirtySecondsAhead.toISOString());
 
       if (error) throw error;
+
+      console.log('Found due reminders:', dueReminders?.length || 0);
 
       dueReminders?.forEach((reminder) => {
         // Check if we should notify this user
@@ -91,6 +108,7 @@ export const useReminderNotifications = () => {
           allowedCompleters.includes(user.id);
 
         if (shouldNotify && !notifiedReminders.current.has(reminder.id)) {
+          console.log('Triggering reminder:', reminder.title);
           notifiedReminders.current.add(reminder.id);
           createNotification(reminder);
         }
@@ -103,11 +121,13 @@ export const useReminderNotifications = () => {
   useEffect(() => {
     if (!user || !currentRoom?.id) return;
 
+    console.log('Reminder notification hook initialized');
+
     // Check immediately
     checkReminders();
 
-    // Check every 15 seconds for better accuracy
-    checkInterval.current = setInterval(checkReminders, 15000);
+    // Check every 10 seconds for better accuracy (reduced from 15s)
+    checkInterval.current = setInterval(checkReminders, 10000);
 
     // Subscribe to new reminders
     const channel = supabase
