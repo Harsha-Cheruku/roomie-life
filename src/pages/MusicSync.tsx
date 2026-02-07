@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { YouTubeSync } from "@/components/music/YouTubeSync";
 
 interface Track {
   id: string;
@@ -70,7 +71,7 @@ export default function MusicSync() {
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [activeSource, setActiveSource] = useState<'local' | 'spotify' | 'apple'>('local');
+  const [activeSource, setActiveSource] = useState<'local' | 'spotify' | 'apple' | 'youtube'>('youtube');
 
   useEffect(() => {
     if (audioRef.current) {
@@ -474,6 +475,7 @@ export default function MusicSync() {
         {/* Source Tabs */}
         <div className="flex gap-2 overflow-x-auto pb-1">
           {[
+            { key: 'youtube' as const, label: 'YouTube', icon: '▶️' },
             { key: 'local' as const, label: 'My Files', icon: '📁' },
             { key: 'spotify' as const, label: 'Spotify', icon: '🎧' },
             { key: 'apple' as const, label: 'Apple', icon: '🍎' },
@@ -493,6 +495,11 @@ export default function MusicSync() {
             </button>
           ))}
         </div>
+
+        {/* YouTube Sync Section */}
+        {activeSource === 'youtube' && (
+          <YouTubeSync />
+        )}
 
         {/* Add Music Button */}
         {activeSource === 'local' && (
