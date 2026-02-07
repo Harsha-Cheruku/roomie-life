@@ -276,6 +276,50 @@ export type Database = {
           },
         ]
       }
+      game_sessions: {
+        Row: {
+          created_at: string
+          game_type: string
+          id: string
+          loser_id: string | null
+          player_ids: string[]
+          result: string
+          room_id: string
+          score: Json | null
+          winner_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          game_type: string
+          id?: string
+          loser_id?: string | null
+          player_ids?: string[]
+          result?: string
+          room_id: string
+          score?: Json | null
+          winner_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          game_type?: string
+          id?: string
+          loser_id?: string | null
+          player_ids?: string[]
+          result?: string
+          room_id?: string
+          score?: Json | null
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_sessions_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string

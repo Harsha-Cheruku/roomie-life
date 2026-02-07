@@ -18,12 +18,15 @@ import {
   Zap,
   Grid3X3,
   Users,
-  Share2
+  Share2,
+  BarChart3
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useGameStats } from "@/hooks/useGameStats";
+import { GameStatsDashboard } from "@/components/games/GameStatsDashboard";
 
-type GameType = 'menu' | 'tictactoe' | 'memory' | 'reaction' | 'dice';
+type GameType = 'menu' | 'tictactoe' | 'memory' | 'reaction' | 'dice' | 'stats';
 
 interface MemoryCard {
   id: number;
@@ -50,6 +53,7 @@ interface GameState {
 export default function Games() {
   const navigate = useNavigate();
   const { currentRoom, profile, user } = useAuth();
+  const { saveGameResult } = useGameStats();
   const [currentGame, setCurrentGame] = useState<GameType>('menu');
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
@@ -267,6 +271,19 @@ export default function Games() {
       setTttWinner(isDraw ? 'draw' : winner);
       
       await broadcastGameUpdate('tictactoe', { state: newState });
+      
+      // Save game result if game ended
+      if (isDraw || winner) {
+        const winnerId = isDraw ? null : (winner === tttMySymbol ? user?.id : (tttMySymbol === 'X' ? tttGameState.players.O : tttGameState.players.X));
+        const loserId = isDraw ? null : (winner === tttMySymbol ? (tttMySymbol === 'X' ? tttGameState.players.O : tttGameState.players.X) : user?.id);
+        saveGameResult({
+          gameType: 'tictactoe',
+          winnerId: winnerId || null,
+          loserId: loserId || null,
+          playerIds: [tttGameState.players.X, tttGameState.players.O].filter(Boolean),
+          result: isDraw ? 'draw' : 'completed',
+        });
+      }
     } else {
       // Local play
       const newBoard = [...tttBoard];
@@ -278,6 +295,16 @@ export default function Games() {
       if (winner) {
         setTttWinner(winner);
         toast.success(`${winner} wins! 🎉`);
+        // Save local game (no specific user IDs for local play)
+        if (user) {
+          saveGameResult({
+            gameType: 'tictactoe',
+            winnerId: user.id,
+            loserId: null,
+            playerIds: [user.id],
+            result: 'completed',
+          });
+        }
       } else if (newBoard.every(cell => cell !== null)) {
         setTttWinner('draw');
         toast.info("It's a draw!");
@@ -331,6 +358,15 @@ export default function Games() {
           
           if (memoryMatched + 1 === 8) {
             toast.success(`You won in ${memoryMoves + 1} moves! 🎉`);
+            if (user) {
+              saveGameResult({
+                gameType: 'memory',
+                winnerId: user.id,
+                playerIds: [user.id],
+                result: 'completed',
+                score: { moves: memoryMoves + 1 },
+              });
+            }
           }
         }, 500);
       } else {
@@ -374,11 +410,18 @@ export default function Games() {
         toast.success(`New best: ${time}ms! 🏆`);
       }
       
-      // Share with room
-      if (profile) {
+      // Share with room & save stats
+      if (profile && user) {
         await broadcastGameUpdate('reaction', { 
           player: profile.display_name, 
           time 
+        });
+        saveGameResult({
+          gameType: 'reaction',
+          winnerId: user.id,
+          playerIds: [user.id],
+          result: 'completed',
+          score: { time_ms: time },
         });
         setReactionLeaderboard(prev => {
           const updated = [...prev, { name: profile.display_name, time }]
@@ -668,6 +711,9 @@ export default function Games() {
           </div>
         );
 
+      case 'stats':
+        return <GameStatsDashboard onClose={() => setCurrentGame('menu')} />;
+
       default:
         return (
           <div className="space-y-6">
@@ -748,6 +794,20 @@ export default function Games() {
                 </Card>
               ))}
             </div>
+
+            {/* Stats Button */}
+            <Card
+              className="cursor-pointer hover:shadow-md transition-all bg-accent/10"
+              onClick={() => setCurrentGame('stats')}
+            >
+              <CardContent className="p-4 flex items-center gap-3">
+                <BarChart3 className="h-8 w-8 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-sm">Game Stats & Leaderboard</h3>
+                  <p className="text-xs text-muted-foreground">See wins, losses & rankings</p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         );
     }
