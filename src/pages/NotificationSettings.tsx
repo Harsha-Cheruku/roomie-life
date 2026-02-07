@@ -147,7 +147,7 @@ const NotificationSettings = () => {
       <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
         <div className="flex items-center gap-3 px-4 py-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/notifications')}
             className="w-10 h-10 rounded-xl bg-card flex items-center justify-center press-effect"
           >
             <ArrowLeft className="w-5 h-5" />
