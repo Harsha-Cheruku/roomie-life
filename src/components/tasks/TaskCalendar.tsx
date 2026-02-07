@@ -108,11 +108,15 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
   const selectedDateTasks = getTasksForDate(selectedDate);
   const createdOnDateTasks = getTasksCreatedOnDate(selectedDate);
 
-  // Get tasks by hour for day planner
+  // Get tasks for hour for day planner - tasks without specific time go to hour 0
   const getTasksForHour = (hour: number) => {
     return selectedDateTasks.filter(task => {
-      if (!task.due_date) return false;
-      const taskHour = new Date(task.due_date).getHours();
+      if (!task.due_date) return hour === 0; // No due_date tasks show at top
+      const taskDate = new Date(task.due_date);
+      const taskHour = taskDate.getHours();
+      // If time is exactly midnight (00:00:00), treat as "no specific time" → show at current hour or 9 AM
+      const isUnsetTime = taskDate.getHours() === 0 && taskDate.getMinutes() === 0 && taskDate.getSeconds() === 0;
+      if (isUnsetTime) return hour === 9; // Default to 9 AM for tasks with date but no time
       return taskHour === hour;
     });
   };

@@ -183,6 +183,7 @@ export const Notifications = () => {
       <TopBar 
         title="Notifications" 
         showBack={true}
+        onBack={() => navigate('/')}
         rightContent={
           <div className="flex gap-2">
             <Link to="/notification-settings">

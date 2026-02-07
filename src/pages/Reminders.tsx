@@ -119,33 +119,8 @@ export default function Reminders() {
     }
   }, [currentRoom?.id]);
 
-  // Check and update reminder status based on time
-  const checkReminderTimes = useCallback(async () => {
-    if (!user?.id) return;
-
-    const now = new Date();
-    const scheduledReminders = reminders.filter(
-      r => r.status === 'scheduled' && 
-      r.created_by === user.id && 
-      new Date(r.remind_at) <= now
-    );
-
-    for (const reminder of scheduledReminders) {
-      // Update status to notified
-      await supabase
-        .from('reminders')
-        .update({ status: 'notified' })
-        .eq('id', reminder.id);
-
-      // Send notification with sound using our hook
-      sendReminderNotification(reminder.title, reminder.description || undefined);
-    }
-
-    if (scheduledReminders.length > 0) {
-      fetchReminders();
-    }
-  }, [reminders, user?.id, fetchReminders, sendReminderNotification]);
-
+  // Removed local checkReminderTimes — useReminderNotifications handles all checking
+  // to avoid race conditions with dual status updates
   useEffect(() => {
     fetchReminders();
     fetchMembers();
@@ -176,12 +151,7 @@ export default function Reminders() {
     };
   }, [currentRoom?.id, fetchReminders]);
 
-  // Check reminders periodically
-  useEffect(() => {
-    const interval = setInterval(checkReminderTimes, 30000); // Every 30 seconds
-    checkReminderTimes(); // Check immediately
-    return () => clearInterval(interval);
-  }, [checkReminderTimes]);
+  // Reminder checking is handled by useReminderNotifications hook globally
 
   // Request notification permission
   useEffect(() => {
