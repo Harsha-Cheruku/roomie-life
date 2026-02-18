@@ -112,16 +112,16 @@ export const FloatingActionButton = () => {
         {/* Main FAB */}
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={cn(
-            "w-14 h-14 rounded-2xl flex items-center justify-center shadow-glow",
-            "transition-all duration-300 hover:scale-105 active:scale-95",
-            isOpen ? "bg-foreground rotate-45" : "gradient-primary"
+          className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-glow transition-all duration-300 hover:scale-105 active:scale-95 text-lime-300",
+
+
+          isOpen ? "bg-foreground rotate-45" : "gradient-primary"
           )}>
 
           {isOpen ?
           <X className="w-6 h-6 text-background" /> :
 
-          <Plus className="w-6 h-6 text-primary-foreground bg-lime-500" />
+          <Plus className="w-6 h-6 text-primary-foreground" />
           }
         </button>
       </div>
