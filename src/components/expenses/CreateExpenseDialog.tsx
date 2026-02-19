@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Users, Percent, Calculator, Equal, Bell, Calendar } from 'lucide-react';
+import { Save, Loader2, Users, Percent, Calculator, Equal, Bell, Calendar, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -11,6 +11,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { useOfflineExpenses } from '@/hooks/useOfflineExpenses';
 
 interface RoomMember {
   user_id: string;
@@ -54,7 +55,7 @@ export const CreateExpenseDialog = ({
   const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   const { createExpenseNotification } = useCreateNotification();
-  
+  const { isOnline, queueExpense } = useOfflineExpenses();
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('general');
@@ -399,6 +400,46 @@ export const CreateExpenseDialog = ({
       onOpenChange(false);
     } catch (error) {
       console.error('Error saving expense:', error);
+      
+      // OFFLINE FALLBACK: queue expense locally if network fails
+      if (!navigator.onLine) {
+        queueExpense({
+          id: `offline_${Date.now()}`,
+          room_id: currentRoom.id,
+          created_by: user.id,
+          paid_by: isSoloMode ? user.id : paidBy,
+          title: title.trim(),
+          total_amount: totalAmount,
+          category,
+          split_type: isSoloMode ? 'equal' : splitType,
+          notes: notes.trim() || null,
+          status: isSoloMode ? 'settled' : 'pending',
+          created_at: new Date().toISOString(),
+          splits: selectedSplits.map(s => ({
+            user_id: s.user_id,
+            amount: s.amount,
+            is_paid: isSoloMode ? true : s.user_id === paidBy,
+            status: isSoloMode ? 'accepted' : (s.user_id === paidBy ? 'accepted' : 'pending'),
+          })),
+        });
+        
+        toast({
+          title: 'Saved offline 📴',
+          description: 'Expense will sync automatically when you\'re back online.',
+        });
+        
+        setTitle('');
+        setAmount('');
+        setCategory('general');
+        setNotes('');
+        setSplitType('equal');
+        setEnableReminder(false);
+        setReminderDate('');
+        onComplete();
+        onOpenChange(false);
+        return;
+      }
+      
       toast({
         title: 'Failed to save',
         description: 'Could not save the expense. Please try again.',
@@ -436,12 +477,18 @@ export const CreateExpenseDialog = ({
             <div className="relative mt-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">₹</span>
               <Input 
-                type="number"
+                type="text"
+                inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  // Only allow digits and one decimal point - never auto-round
+                  const val = e.target.value;
+                  if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                    setAmount(val);
+                  }
+                }}
                 className="rounded-xl h-12 pl-8 text-lg font-semibold"
                 placeholder="0.00"
-                step="0.01"
               />
             </div>
           </div>

@@ -132,9 +132,8 @@ export const EditExpenseDialog = ({
 
       if (error) throw error;
 
-      // Recalculate splits if amount changed
+      // Recalculate splits if amount changed - using decimal-safe math
       if (totalAmount !== expense.total_amount) {
-        // Get existing splits
         const { data: splits, error: splitsError } = await supabase
           .from('expense_splits')
           .select('id, user_id')
@@ -143,15 +142,16 @@ export const EditExpenseDialog = ({
         if (splitsError) throw splitsError;
 
         if (splits && splits.length > 0) {
-          // Calculate new amount per person (equal split)
-          const newAmountPerPerson = totalAmount / splits.length;
+          const count = splits.length;
+          const baseShare = Math.floor((totalAmount * 100) / count) / 100;
+          const remainder = Math.round((totalAmount - baseShare * count) * 100) / 100;
 
-          // Update each split with new amount
-          for (const split of splits) {
+          for (let i = 0; i < splits.length; i++) {
+            const splitAmount = i === 0 ? baseShare + remainder : baseShare;
             const { error: updateError } = await supabase
               .from('expense_splits')
-              .update({ amount: newAmountPerPerson })
-              .eq('id', split.id);
+              .update({ amount: splitAmount })
+              .eq('id', splits[i].id);
 
             if (updateError) {
               console.error('Error updating split:', updateError);
@@ -201,13 +201,18 @@ export const EditExpenseDialog = ({
             <label className="text-sm font-medium text-muted-foreground">Amount</label>
             <div className="relative mt-1">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">₹</span>
-              <Input 
-                type="number"
+            <Input 
+                type="text"
+                inputMode="decimal"
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                    setAmount(val);
+                  }
+                }}
                 className="rounded-xl h-12 pl-8 text-lg font-semibold"
                 placeholder="0.00"
-                step="0.01"
               />
             </div>
           </div>

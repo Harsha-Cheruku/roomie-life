@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,6 +19,7 @@ import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
+import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
 
 interface ExpenseSplit {
   id: string;
@@ -65,6 +66,7 @@ export const Expenses = () => {
   const { user, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { isOnline, pendingCount, syncQueue } = useOfflineExpenses();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -526,6 +528,16 @@ export const Expenses = () => {
           </div>
         }
       />
+
+      {/* Offline indicator */}
+      {(!isOnline || pendingCount > 0) && (
+        <div className="mx-4 mb-3 flex items-center gap-2 rounded-xl bg-accent/20 px-4 py-2 text-sm">
+          <WifiOff className="w-4 h-4 text-accent" />
+          <span className="text-accent font-medium">
+            {!isOnline ? 'Offline mode' : `${pendingCount} expense(s) syncing...`}
+          </span>
+        </div>
+      )}
 
       {/* Summary Card with Bill KPIs */}
       <div className="px-4 mb-6">
