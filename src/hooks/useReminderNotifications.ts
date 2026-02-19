@@ -21,56 +21,48 @@ export const useReminderNotifications = () => {
   const checkInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const { sendReminderNotification, playNotificationSound } = useNotifications();
 
+  // Load already-notified IDs from sessionStorage to prevent duplicates across re-renders
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem('notified-reminders');
+      if (stored) {
+        const ids = JSON.parse(stored) as string[];
+        ids.forEach(id => notifiedReminders.current.add(id));
+      }
+    } catch {}
+  }, []);
+
+  const persistNotifiedIds = useCallback(() => {
+    try {
+      const ids = Array.from(notifiedReminders.current).slice(-100); // Keep last 100
+      sessionStorage.setItem('notified-reminders', JSON.stringify(ids));
+    } catch {}
+  }, []);
+
   const createNotification = useCallback(async (reminder: Reminder) => {
     if (!user || !currentRoom) return;
 
     try {
-      console.log('Creating reminder notification for:', reminder.title);
-      
-      // Play sound with multiple attempts
+      // Play sound
       try {
         await playNotificationSound('reminder');
       } catch (e) {
-        console.warn('Sound failed, retrying...', e);
         setTimeout(() => playNotificationSound('reminder').catch(() => {}), 500);
       }
       
       // Vibrate
       if ('vibrate' in navigator) {
-        try { navigator.vibrate([300, 100, 300, 100, 300]); } catch (e) {}
+        try { navigator.vibrate([300, 100, 300, 100, 300]); } catch {}
       }
       
       // Browser notification
       sendReminderNotification(reminder.title, reminder.description || 'Reminder is due now!');
       
-      // Store in DB
-      await supabase
-        .from('notifications')
-        .insert({
-          user_id: user.id,
-          room_id: currentRoom.id,
-          type: 'reminder',
-          title: '⏰ Reminder',
-          body: reminder.title,
-          reference_type: 'reminder',
-          reference_id: reminder.id,
-          is_read: false,
-        });
-
-      // Update status
-      await supabase
-        .from('reminders')
-        .update({ status: 'notified' })
-        .eq('id', reminder.id)
-        .eq('status', 'scheduled');
-      
-      // In-app toast fallback
+      // In-app toast
       toast.success(`⏰ ${reminder.title}`, {
         description: reminder.description || 'Reminder is due now!',
         duration: 15000,
       });
-      
-      console.log('Reminder notification sent successfully:', reminder.title);
     } catch (error) {
       console.error('Error creating reminder notification:', error);
       toast.error(`⏰ ${reminder.title}`, {
@@ -84,70 +76,78 @@ export const useReminderNotifications = () => {
     if (!user || !currentRoom?.id) return;
 
     try {
+      // Check for reminders that were set to 'notified' by the server-side cron
+      // AND for reminders that are due but still 'scheduled' (client-side fallback)
       const now = new Date();
-      // Check window: 3 minutes ago to 30 seconds ahead
-      const windowStart = new Date(now.getTime() - 180000);
-      const windowEnd = new Date(now.getTime() + 30000);
-
-      console.log('Checking reminders...', { now: now.toISOString() });
+      const fiveMinAgo = new Date(now.getTime() - 300000);
 
       const { data: dueReminders, error } = await supabase
         .from('reminders')
         .select('*')
         .eq('room_id', currentRoom.id)
-        .eq('status', 'scheduled')
-        .gte('remind_at', windowStart.toISOString())
-        .lte('remind_at', windowEnd.toISOString());
+        .in('status', ['scheduled', 'notified'])
+        .gte('remind_at', fiveMinAgo.toISOString())
+        .lte('remind_at', new Date(now.getTime() + 30000).toISOString());
 
       if (error) throw error;
 
-      console.log('Found due reminders:', dueReminders?.length || 0);
-
       if (dueReminders) {
         for (const reminder of dueReminders) {
+          // Skip if already notified locally
+          if (notifiedReminders.current.has(reminder.id)) continue;
+
           const allowedCompleters = reminder.allowed_completers || [];
           const shouldNotify = 
             reminder.created_by === user.id || 
             allowedCompleters.length === 0 || 
             allowedCompleters.includes(user.id);
 
-          if (shouldNotify && !notifiedReminders.current.has(reminder.id)) {
-            console.log('Triggering reminder:', reminder.title);
-            notifiedReminders.current.add(reminder.id);
-            await createNotification(reminder);
+          if (!shouldNotify) continue;
+
+          notifiedReminders.current.add(reminder.id);
+          persistNotifiedIds();
+          await createNotification(reminder);
+
+          // If status is still 'scheduled', update to 'notified' (client-side fallback)
+          if (reminder.status === 'scheduled') {
+            await supabase
+              .from('reminders')
+              .update({ status: 'notified' })
+              .eq('id', reminder.id)
+              .eq('status', 'scheduled');
           }
         }
       }
     } catch (error) {
       console.error('Error checking reminders:', error);
     }
-  }, [user?.id, currentRoom?.id, createNotification]);
+  }, [user?.id, currentRoom?.id, createNotification, persistNotifiedIds]);
 
   useEffect(() => {
     if (!user || !currentRoom?.id) return;
 
-    console.log('Reminder notification hook initialized');
-
     // Check immediately
     checkReminders();
 
-    // Check every 5 seconds for maximum reliability
-    checkInterval.current = setInterval(checkReminders, 5000);
+    // Check every 10 seconds (server-side cron handles the actual scheduling)
+    checkInterval.current = setInterval(checkReminders, 10000);
 
-    // Subscribe to new/updated reminders for instant trigger
+    // Subscribe to reminder changes for instant trigger
     const channel = supabase
       .channel('reminder-notifications')
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'reminders',
           filter: `room_id=eq.${currentRoom.id}`
         },
-        () => {
-          // Small delay to let DB settle, then check
-          setTimeout(checkReminders, 500);
+        (payload) => {
+          // When server-side cron updates status to 'notified', check immediately
+          if (payload.new && (payload.new as any).status === 'notified') {
+            setTimeout(checkReminders, 300);
+          }
         }
       )
       .subscribe();

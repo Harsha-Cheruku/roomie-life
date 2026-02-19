@@ -279,6 +279,22 @@ export default function Alarms() {
   };
 
   const deleteAlarm = async (alarmId: string) => {
+    // First, dismiss any active triggers for this alarm to prevent ghost rings
+    await supabase
+      .from('alarm_triggers')
+      .update({ status: 'dismissed', dismissed_by: user?.id, dismissed_at: new Date().toISOString() })
+      .eq('alarm_id', alarmId)
+      .eq('status', 'ringing');
+
+    // Clear from local trigger tracking
+    lastTriggeredRef.current.delete(alarmId);
+
+    // If the currently active trigger belongs to this alarm, clear it
+    if (activeTrigger?.alarm_id === alarmId) {
+      setActiveTrigger(null);
+      setActiveAlarm(null);
+    }
+
     const { error } = await supabase
       .from('alarms')
       .delete()
@@ -290,7 +306,7 @@ export default function Alarms() {
     }
 
     setAlarms(prev => prev.filter(a => a.id !== alarmId));
-    toast.success('Alarm deleted');
+    toast.success('Alarm deleted — it will never ring again');
   };
 
   const handleTabChange = (tab: string) => {
