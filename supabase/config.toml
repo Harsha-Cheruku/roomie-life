@@ -2,3 +2,6 @@ project_id = "wwungotslsvanzyczwui"
 
 [functions.scan-receipt]
 verify_jwt = false
+
+[functions.check-alarms-reminders]
+verify_jwt = false
