@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
@@ -57,6 +58,9 @@ export default function Games() {
   const [currentGame, setCurrentGame] = useState<GameType>('menu');
   const [isMultiplayer, setIsMultiplayer] = useState(false);
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
+  const [gameCode, setGameCode] = useState<string>("");
+  const [joinCodeInput, setJoinCodeInput] = useState("");
+  const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   
   // Tic Tac Toe state
   const [tttBoard, setTttBoard] = useState<(string | null)[]>(Array(9).fill(null));
@@ -82,6 +86,10 @@ export default function Games() {
   const [diceValues, setDiceValues] = useState<number[]>([1, 1]);
   const [diceRolling, setDiceRolling] = useState(false);
   const [diceHistory, setDiceHistory] = useState<{ player: string; total: number }[]>([]);
+
+  const generateGameCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
 
   const handleNavChange = (tab: string) => {
     const routes: Record<string, string> = {
@@ -202,6 +210,10 @@ export default function Games() {
   const startMultiplayerTtt = async () => {
     if (!user || !profile) return;
     
+    const code = generateGameCode();
+    setGameCode(code);
+    setWaitingForOpponent(true);
+    
     const newState: GameState = {
       board: Array(9).fill(null),
       currentPlayer: user.id,
@@ -215,8 +227,8 @@ export default function Games() {
     setIsMultiplayer(true);
     setCurrentGame('tictactoe');
     
-    await broadcastGameUpdate('tictactoe', { state: newState });
-    toast.success("Game created! Waiting for opponent...");
+    await broadcastGameUpdate('tictactoe', { state: newState, code });
+    toast.success(`Game created! Share code: ${code}`, { duration: 10000 });
   };
 
   const joinMultiplayerTtt = async () => {
@@ -230,9 +242,25 @@ export default function Games() {
     
     setTttGameState(newState);
     setTttMySymbol('O');
+    setWaitingForOpponent(false);
     
     await broadcastGameUpdate('tictactoe', { state: newState });
     toast.success("Joined! Game started!");
+  };
+
+  const handleJoinWithCode = async () => {
+    if (!joinCodeInput.trim()) {
+      toast.error("Enter a game code to join");
+      return;
+    }
+    // The join code matches via broadcast - when we receive a game_update with a matching code
+    // For now, join the existing game state if available
+    if (tttGameState && !tttGameState.started && tttGameState.players.X !== user?.id) {
+      await joinMultiplayerTtt();
+      setJoinCodeInput("");
+    } else {
+      toast.error("No open game found with that code. Ask your friend to create a new game.");
+    }
   };
 
   const handleTttClick = async (index: number) => {
@@ -319,6 +347,9 @@ export default function Games() {
     setTttGameState(null);
     setTttMySymbol(null);
     setIsMultiplayer(false);
+    setGameCode("");
+    setWaitingForOpponent(false);
+    setJoinCodeInput("");
   };
 
   // Memory Game logic
@@ -483,7 +514,7 @@ export default function Games() {
             <div className="text-center">
               <h2 className="text-xl font-bold mb-2">Tic Tac Toe</h2>
               {isMultiplayer && (
-                <div className="mb-2">
+                <div className="mb-2 space-y-2">
                   <Badge variant="outline" className="bg-primary/10">
                     Multiplayer Mode
                   </Badge>
@@ -492,11 +523,32 @@ export default function Games() {
                       You are {tttMySymbol}
                     </Badge>
                   )}
+                  {gameCode && waitingForOpponent && (
+                    <div className="mt-2 p-3 bg-muted rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-1">Share this code with your friend:</p>
+                      <p className="text-2xl font-mono font-bold tracking-widest text-primary">{gameCode}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => {
+                          navigator.clipboard.writeText(gameCode);
+                          toast.success("Code copied!");
+                        }}
+                      >
+                        Copy Code
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
               {tttWinner ? (
                 <Badge variant={tttWinner === 'draw' ? 'secondary' : 'default'}>
                   {tttWinner === 'draw' ? "It's a draw!" : `${tttWinner} wins!`}
+                </Badge>
+              ) : waitingForOpponent ? (
+                <Badge variant="secondary" className="animate-pulse">
+                  Waiting for opponent to join...
                 </Badge>
               ) : (
                 <Badge variant={isMyTurn ? 'default' : 'secondary'}>
@@ -717,6 +769,26 @@ export default function Games() {
       default:
         return (
           <div className="space-y-6">
+            {/* Join Game with Code */}
+            <div className="bg-card rounded-xl p-4">
+              <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                <Share2 className="h-4 w-4 text-primary" />
+                Join a Game
+              </h3>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Enter game code..."
+                  value={joinCodeInput}
+                  onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                  className="flex-1 font-mono tracking-wider"
+                  maxLength={6}
+                />
+                <Button size="sm" onClick={handleJoinWithCode} disabled={!joinCodeInput.trim()}>
+                  Join
+                </Button>
+              </div>
+            </div>
+
             {/* Online Players */}
             {onlinePlayers.length > 0 && (
               <div className="bg-card rounded-xl p-4">

@@ -182,11 +182,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         <Card className="overflow-hidden">
           <div className="relative">
             <iframe
-              src={`https://www.youtube.com/embed/${activeVideoId}?autoplay=1&rel=0`}
+              src={`https://www.youtube-nocookie.com/embed/${activeVideoId}?autoplay=1&rel=0&modestbranding=1`}
               className="w-full aspect-video"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               title="YouTube video player"
+              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
             />
             <Button
               variant="destructive"
