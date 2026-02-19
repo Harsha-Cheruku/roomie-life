@@ -189,16 +189,11 @@ export const RoomHeader = () => {
         <div>
           <p className="text-sm text-muted-foreground">Welcome back 👋</p>
           <button 
-            onClick={() => userRooms.length > 1 && setShowRoomSwitcher(!showRoomSwitcher)}
-            className={cn(
-              "font-display text-2xl font-bold text-foreground flex items-center gap-2",
-              userRooms.length > 1 && "hover:text-primary transition-colors"
-            )}
+            onClick={() => setShowRoomSwitcher(!showRoomSwitcher)}
+            className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors"
           >
             {currentRoom?.name || "Room"}
-            {userRooms.length > 1 && (
-              <RefreshCw className="w-4 h-4 text-muted-foreground" />
-            )}
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -251,15 +246,13 @@ export const RoomHeader = () => {
                   {copied ? <Check className="w-4 h-4 text-mint" /> : <Copy className="w-4 h-4" />}
                   <span className="text-sm">Share Invite Code</span>
                 </button>
-                {userRooms.length > 1 && (
-                  <button
-                    onClick={() => { setShowMenu(false); setShowRoomSwitcher(true); }}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
-                  >
-                    <RefreshCw className="w-4 h-4" />
-                    <span className="text-sm">Switch Room</span>
-                  </button>
-                )}
+                <button
+                  onClick={() => { setShowMenu(false); setShowRoomSwitcher(true); }}
+                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span className="text-sm">{userRooms.length > 1 ? 'Switch Room' : 'Change Room'}</span>
+                </button>
                 <button
                   onClick={() => { toggleSoloMode(); setShowMenu(false); }}
                   className={cn(
@@ -302,7 +295,7 @@ export const RoomHeader = () => {
       </div>
 
       {/* Room Switcher Dropdown */}
-      {showRoomSwitcher && userRooms.length > 1 && (
+      {showRoomSwitcher && (
         <div className="mb-4 bg-card rounded-xl shadow-lg border border-border p-2 animate-slide-up">
           <p className="text-xs text-muted-foreground px-3 py-1">Switch Room</p>
           {userRooms.map(room => (
@@ -319,6 +312,14 @@ export const RoomHeader = () => {
               {room.id === currentRoom?.id && <Check className="w-4 h-4 ml-auto" />}
             </button>
           ))}
+          <div className="border-t border-border my-1" />
+          <button
+            onClick={() => { setShowRoomSwitcher(false); navigate('/setup?add=true'); }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted transition-colors text-left press-effect"
+          >
+            <span className="text-lg">➕</span>
+            <span className="text-sm font-medium text-primary">Create or Join Room</span>
+          </button>
         </div>
       )}
 
