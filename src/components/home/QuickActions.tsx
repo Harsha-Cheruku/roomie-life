@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Music, Gamepad2, Clock, Receipt, Cloud, Users, Crown } from "lucide-react";
+import { Music, Gamepad2, Clock, Receipt, Cloud, Users, Crown, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRoomMembers } from "@/hooks/useRoomMembers";
@@ -18,10 +18,11 @@ const actions: QuickAction[] = [
   { icon: Music, label: "Music Sync", gradient: "gradient-ocean", delay: 0, route: "/music" },
   { icon: Gamepad2, label: "Games", gradient: "gradient-lavender", delay: 50, route: "/games" },
   { icon: Clock, label: "Alarms", gradient: "gradient-mint", delay: 100, route: "/alarms", soloHidden: true },
-  { icon: Receipt, label: "Expenses", gradient: "gradient-coral", delay: 150, route: "/expenses" },
-  { icon: Cloud, label: "Storage", gradient: "gradient-primary", delay: 200, route: "/storage" },
-  { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 250, route: "/room-settings", soloHidden: true },
-  { icon: Crown, label: "Admin", gradient: "gradient-gold", delay: 300, route: "/admin", soloHidden: true, adminOnly: true },
+  { icon: Bell, label: "Reminders", gradient: "gradient-sunset", delay: 150, route: "/reminders" },
+  { icon: Receipt, label: "Expenses", gradient: "gradient-coral", delay: 200, route: "/expenses" },
+  { icon: Cloud, label: "Storage", gradient: "gradient-primary", delay: 250, route: "/storage" },
+  { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 300, route: "/room-settings", soloHidden: true },
+  { icon: Crown, label: "Admin", gradient: "gradient-gold", delay: 350, route: "/admin", soloHidden: true, adminOnly: true },
 ];
 
 export const QuickActions = () => {
