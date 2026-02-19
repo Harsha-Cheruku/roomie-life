@@ -41,20 +41,11 @@ export const RoomSetup = () => {
     }
   }, [user, currentRoom, userRooms, navigate, isAddingRoom]);
 
-  // Block room creation if user already has rooms (when adding a new room)
-  const canCreateRoom = !isAddingRoom || userRooms.length === 0;
+  // Allow creating or joining rooms freely
+  const canCreateRoom = true;
   const hasExistingRoom = userRooms.length > 0;
 
   const handleCreateRoom = async () => {
-    // Block if user already has a room and is trying to add another
-    if (isAddingRoom && hasExistingRoom) {
-      toast({
-        title: "Already in a room",
-        description: "You're already part of a room. Please leave your current room first before creating a new one.",
-        variant: "destructive",
-      });
-      return;
-    }
 
     if (!roomName.trim()) {
       toast({

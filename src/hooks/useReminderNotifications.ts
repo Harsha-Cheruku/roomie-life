@@ -12,37 +12,38 @@ interface Reminder {
   status: string;
   created_by: string;
   room_id: string;
+  allowed_completers: string[] | null;
 }
 
 export const useReminderNotifications = () => {
   const { user, currentRoom } = useAuth();
   const notifiedReminders = useRef<Set<string>>(new Set());
-  const checkInterval = useRef<NodeJS.Timeout | null>(null);
-  const { sendReminderNotification, playNotificationSound, hasPermission } = useNotifications();
+  const checkInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { sendReminderNotification, playNotificationSound } = useNotifications();
 
-  const createNotification = async (reminder: Reminder) => {
+  const createNotification = useCallback(async (reminder: Reminder) => {
     if (!user || !currentRoom) return;
 
     try {
       console.log('Creating reminder notification for:', reminder.title);
       
-      // Play reminder sound with notification - use multiple attempts for reliability
-      const soundPlayed = await playNotificationSound('reminder');
-      console.log('Reminder sound played:', soundPlayed);
-      
-      // Vibrate if supported (for mobile) - do this before notification for better UX
-      if ('vibrate' in navigator) {
-        try {
-          navigator.vibrate([300, 100, 300, 100, 300]);
-        } catch (e) {
-          console.warn('Vibration failed:', e);
-        }
+      // Play sound with multiple attempts
+      try {
+        await playNotificationSound('reminder');
+      } catch (e) {
+        console.warn('Sound failed, retrying...', e);
+        setTimeout(() => playNotificationSound('reminder').catch(() => {}), 500);
       }
       
-      // Send browser notification with sound
+      // Vibrate
+      if ('vibrate' in navigator) {
+        try { navigator.vibrate([300, 100, 300, 100, 300]); } catch (e) {}
+      }
+      
+      // Browser notification
       sendReminderNotification(reminder.title, reminder.description || 'Reminder is due now!');
       
-      // Store notification in database
+      // Store in DB
       await supabase
         .from('notifications')
         .insert({
@@ -56,34 +57,37 @@ export const useReminderNotifications = () => {
           is_read: false,
         });
 
-      // Update reminder status to notified
+      // Update status
       await supabase
         .from('reminders')
         .update({ status: 'notified' })
-        .eq('id', reminder.id);
+        .eq('id', reminder.id)
+        .eq('status', 'scheduled');
       
-      // Show in-app toast as fallback
+      // In-app toast fallback
       toast.success(`⏰ ${reminder.title}`, {
         description: reminder.description || 'Reminder is due now!',
-        duration: 10000,
+        duration: 15000,
       });
       
       console.log('Reminder notification sent successfully:', reminder.title);
     } catch (error) {
       console.error('Error creating reminder notification:', error);
-      // Still show toast even if other notifications fail
-      toast.error('Reminder failed to trigger properly');
+      toast.error(`⏰ ${reminder.title}`, {
+        description: 'Reminder triggered (notification error)',
+        duration: 10000,
+      });
     }
-  };
+  }, [user, currentRoom, sendReminderNotification, playNotificationSound]);
 
   const checkReminders = useCallback(async () => {
     if (!user || !currentRoom?.id) return;
 
     try {
       const now = new Date();
-      // Expand window to 2 minutes to catch any timing delays
-      const twoMinutesAgo = new Date(now.getTime() - 120000);
-      const thirtySecondsAhead = new Date(now.getTime() + 30000);
+      // Check window: 3 minutes ago to 30 seconds ahead
+      const windowStart = new Date(now.getTime() - 180000);
+      const windowEnd = new Date(now.getTime() + 30000);
 
       console.log('Checking reminders...', { now: now.toISOString() });
 
@@ -92,31 +96,32 @@ export const useReminderNotifications = () => {
         .select('*')
         .eq('room_id', currentRoom.id)
         .eq('status', 'scheduled')
-        .gte('remind_at', twoMinutesAgo.toISOString())
-        .lte('remind_at', thirtySecondsAhead.toISOString());
+        .gte('remind_at', windowStart.toISOString())
+        .lte('remind_at', windowEnd.toISOString());
 
       if (error) throw error;
 
       console.log('Found due reminders:', dueReminders?.length || 0);
 
-      dueReminders?.forEach((reminder) => {
-        // Check if we should notify this user
-        const allowedCompleters = reminder.allowed_completers || [];
-        const shouldNotify = 
-          reminder.created_by === user.id || 
-          allowedCompleters.length === 0 || 
-          allowedCompleters.includes(user.id);
+      if (dueReminders) {
+        for (const reminder of dueReminders) {
+          const allowedCompleters = reminder.allowed_completers || [];
+          const shouldNotify = 
+            reminder.created_by === user.id || 
+            allowedCompleters.length === 0 || 
+            allowedCompleters.includes(user.id);
 
-        if (shouldNotify && !notifiedReminders.current.has(reminder.id)) {
-          console.log('Triggering reminder:', reminder.title);
-          notifiedReminders.current.add(reminder.id);
-          createNotification(reminder);
+          if (shouldNotify && !notifiedReminders.current.has(reminder.id)) {
+            console.log('Triggering reminder:', reminder.title);
+            notifiedReminders.current.add(reminder.id);
+            await createNotification(reminder);
+          }
         }
-      });
+      }
     } catch (error) {
       console.error('Error checking reminders:', error);
     }
-  }, [user?.id, currentRoom?.id]);
+  }, [user?.id, currentRoom?.id, createNotification]);
 
   useEffect(() => {
     if (!user || !currentRoom?.id) return;
@@ -126,10 +131,10 @@ export const useReminderNotifications = () => {
     // Check immediately
     checkReminders();
 
-    // Check every 10 seconds for better accuracy (reduced from 15s)
-    checkInterval.current = setInterval(checkReminders, 10000);
+    // Check every 5 seconds for maximum reliability
+    checkInterval.current = setInterval(checkReminders, 5000);
 
-    // Subscribe to new reminders
+    // Subscribe to new/updated reminders for instant trigger
     const channel = supabase
       .channel('reminder-notifications')
       .on(
@@ -140,7 +145,10 @@ export const useReminderNotifications = () => {
           table: 'reminders',
           filter: `room_id=eq.${currentRoom.id}`
         },
-        () => checkReminders()
+        () => {
+          // Small delay to let DB settle, then check
+          setTimeout(checkReminders, 500);
+        }
       )
       .subscribe();
 

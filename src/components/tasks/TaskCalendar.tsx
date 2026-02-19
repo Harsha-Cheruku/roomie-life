@@ -63,7 +63,6 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
       return;
     }
 
-    // Fetch profiles
     const userIds = [...new Set([
       ...(tasksData?.map(t => t.assigned_to) || []),
       ...(tasksData?.map(t => t.created_by) || [])
@@ -81,7 +80,6 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
       assignee_profile: profileMap.get(task.assigned_to),
     })) || [];
 
-    // Filter for solo mode
     const filteredTasks = isSoloMode
       ? tasksWithProfiles.filter(t => t.assigned_to === user?.id || t.created_by === user?.id)
       : tasksWithProfiles;
@@ -89,7 +87,6 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     setTasks(filteredTasks);
   };
 
-  // Get tasks for a specific date (by due date)
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => {
       if (!task.due_date) return false;
@@ -97,36 +94,38 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     });
   };
 
-  // Get tasks CREATED on a specific date
   const getTasksCreatedOnDate = (date: Date) => {
     return tasks.filter(task => {
       return isSameDay(new Date(task.created_at), date);
     });
   };
 
-  // Get tasks for selected date (both due and created)
   const selectedDateTasks = getTasksForDate(selectedDate);
   const createdOnDateTasks = getTasksCreatedOnDate(selectedDate);
 
-  // Get tasks for hour for day planner - tasks without specific time go to hour 0
+  // Get tasks for a specific hour in the day planner
+  // Tasks show at their actual due_date hour. Tasks with midnight (no specific time) show at 9 AM.
   const getTasksForHour = (hour: number) => {
     return selectedDateTasks.filter(task => {
-      if (!task.due_date) return hour === 0; // No due_date tasks show at top
+      if (!task.due_date) return hour === 9;
       const taskDate = new Date(task.due_date);
       const taskHour = taskDate.getHours();
-      // If time is exactly midnight (00:00:00), treat as "no specific time" → show at current hour or 9 AM
-      const isUnsetTime = taskDate.getHours() === 0 && taskDate.getMinutes() === 0 && taskDate.getSeconds() === 0;
-      if (isUnsetTime) return hour === 9; // Default to 9 AM for tasks with date but no time
+      const taskMinutes = taskDate.getMinutes();
+      const taskSeconds = taskDate.getSeconds();
+      
+      // If stored as midnight exactly (00:00:00), it means "date only, no specific time" → show at 9 AM
+      if (taskHour === 0 && taskMinutes === 0 && taskSeconds === 0) {
+        return hour === 9;
+      }
+      // Otherwise show at the actual hour
       return taskHour === hour;
     });
   };
 
-  // Dates with due tasks (for calendar highlighting - underline)
   const datesWithDueTasks = tasks
     .filter(t => t.due_date)
     .map(t => startOfDay(new Date(t.due_date!)));
 
-  // Dates with created tasks (for calendar highlighting - dot)
   const datesWithCreatedTasks = tasks
     .map(t => startOfDay(new Date(t.created_at)));
 
@@ -212,7 +211,6 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                   )}
                 </div>
               </CardTitle>
-              {/* Toggle to show created tasks */}
               {createdOnDateTasks.length > 0 && (
                 <Button
                   variant="ghost"
@@ -225,7 +223,6 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
               )}
             </CardHeader>
             <CardContent>
-              {/* Display tasks based on toggle */}
               {(() => {
                 const displayTasks = showCreatedTasks ? createdOnDateTasks : selectedDateTasks;
                 const emptyMessage = showCreatedTasks 
@@ -344,6 +341,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                               <p className="font-medium truncate">{task.title}</p>
                               <p className="text-xs opacity-70">
                                 {task.assignee_profile?.display_name}
+                                {task.due_date && ` · ${format(new Date(task.due_date), "h:mm a")}`}
                               </p>
                             </button>
                           ))}
