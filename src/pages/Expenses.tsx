@@ -12,7 +12,7 @@ import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
 import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
-import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
+import { ReminderBellIcon } from "@/components/reminders/ReminderBellIcon";
 import { SettledBillsSection } from "@/components/expenses/SettledBillsSection";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -517,6 +517,7 @@ export const Expenses = () => {
         hint="Split bills fairly with your roommates 💰"
         rightContent={
           <div className="flex gap-2">
+            <ReminderBellIcon filterType="expense" />
             <Button variant="outline" size="sm" className="gap-2 press-effect" onClick={() => setShowCreateDialog(true)}>
               <Plus className="w-4 h-4" />
               Add
