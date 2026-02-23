@@ -85,7 +85,7 @@ export default function Alarms() {
     fetchAlarms();
     checkActiveAlarms();
     
-    // Set up realtime subscriptions
+    // Realtime only — no polling timers
     const alarmsChannel = supabase
       .channel('alarms-changes')
       .on('postgres_changes', {
@@ -102,21 +102,17 @@ export default function Alarms() {
         event: '*',
         schema: 'public',
         table: 'alarm_triggers'
-      }, () => checkActiveAlarms())
+      }, (payload) => {
+        // When a trigger is inserted or updated, check active alarms
+        checkActiveAlarms();
+      })
       .subscribe();
-
-    // Check for alarms every 10 seconds for better accuracy (still debounced)
-    const interval = setInterval(checkAndTriggerAlarms, 10000);
-    
-    // Also run immediately
-    checkAndTriggerAlarms();
 
     return () => {
       supabase.removeChannel(alarmsChannel);
       supabase.removeChannel(triggersChannel);
-      clearInterval(interval);
     };
-  }, [roomId, alarms]);
+  }, [roomId]);
 
   const fetchAlarms = async () => {
     if (!roomId) return;

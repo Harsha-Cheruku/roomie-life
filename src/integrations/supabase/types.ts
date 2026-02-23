@@ -470,11 +470,15 @@ export type Database = {
           created_by: string
           description: string | null
           id: string
+          notified: boolean | null
+          related_id: string | null
           remind_at: string
+          reminder_type: string | null
           room_id: string
           status: string
           title: string
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           allowed_completers?: string[] | null
@@ -486,11 +490,15 @@ export type Database = {
           created_by: string
           description?: string | null
           id?: string
+          notified?: boolean | null
+          related_id?: string | null
           remind_at: string
+          reminder_type?: string | null
           room_id: string
           status?: string
           title: string
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           allowed_completers?: string[] | null
@@ -502,11 +510,15 @@ export type Database = {
           created_by?: string
           description?: string | null
           id?: string
+          notified?: boolean | null
+          related_id?: string | null
           remind_at?: string
+          reminder_type?: string | null
           room_id?: string
           status?: string
           title?: string
           updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {

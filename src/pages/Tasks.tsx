@@ -9,7 +9,7 @@ import { TaskDetailSheet } from "@/components/tasks/TaskDetailSheet";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { TaskDashboard } from "@/components/tasks/TaskDashboard";
 import { TaskCalendar } from "@/components/tasks/TaskCalendar";
-import { FollowUpsSection } from "@/components/tasks/FollowUpsSection";
+import { ReminderBellIcon } from "@/components/reminders/ReminderBellIcon";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -272,6 +272,7 @@ export const Tasks = () => {
         hint="Everything here is shared with your room ❤️"
         rightContent={
           <div className="flex gap-2">
+            <ReminderBellIcon filterType="task" />
             <Button 
               variant={view === 'calendar' ? 'default' : 'glass'} 
               size="iconSm" 
@@ -331,8 +332,7 @@ export const Tasks = () => {
         </div>
       </div>
 
-      {/* Follow-ups Section (Reminders merged here) */}
-      {currentRoom && <FollowUpsSection roomId={currentRoom.id} />}
+      {/* Reminder bell icon is now in the top bar */}
 
       {/* Dashboard View */}
       {view === 'dashboard' ? (
