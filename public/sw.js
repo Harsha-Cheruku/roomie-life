@@ -10,14 +10,14 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  console.log('Push notification received:', event);
-  
   let data = {
     title: 'RoomSync',
     body: 'You have a new notification',
     icon: '/favicon.ico',
     badge: '/favicon.ico',
     tag: 'roomsync-notification',
+    silent: false,
+    requireInteraction: false,
     data: { url: '/' }
   };
 
@@ -30,6 +30,8 @@ self.addEventListener('push', (event) => {
         icon: payload.icon || data.icon,
         badge: payload.badge || data.badge,
         tag: payload.tag || data.tag,
+        silent: payload.silent || false,
+        requireInteraction: payload.requireInteraction || false,
         data: payload.data || data.data
       };
     }
@@ -37,25 +39,28 @@ self.addEventListener('push', (event) => {
     console.error('Error parsing push data:', e);
   }
 
+  // Respect silent flag — skip vibration and sound for non-owner notifications
+  const notificationOptions = {
+    body: data.body,
+    icon: data.icon,
+    badge: data.badge,
+    tag: data.tag,
+    data: data.data,
+    requireInteraction: data.requireInteraction,
+    silent: data.silent,
+  };
+
+  // Only add vibration for non-silent notifications (alarm owner)
+  if (!data.silent) {
+    notificationOptions.vibrate = [200, 100, 200, 100, 200];
+  }
+
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon,
-      badge: data.badge,
-      tag: data.tag,
-      data: data.data,
-      vibrate: [200, 100, 200],
-      requireInteraction: true,
-      actions: [
-        { action: 'open', title: 'Open' },
-        { action: 'dismiss', title: 'Dismiss' }
-      ]
-    })
+    self.registration.showNotification(data.title, notificationOptions)
   );
 });
 
 self.addEventListener('notificationclick', (event) => {
-  console.log('Notification clicked:', event);
   event.notification.close();
 
   if (event.action === 'dismiss') {
@@ -66,7 +71,6 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window is already open, focus it
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.focus();
@@ -76,7 +80,6 @@ self.addEventListener('notificationclick', (event) => {
           return;
         }
       }
-      // Otherwise open a new window
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
@@ -85,5 +88,5 @@ self.addEventListener('notificationclick', (event) => {
 });
 
 self.addEventListener('notificationclose', (event) => {
-  console.log('Notification closed:', event);
+  // No-op
 });

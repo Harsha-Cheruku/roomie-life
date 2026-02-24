@@ -5,9 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, BellOff, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
-import { useAlarmSound } from "@/hooks/useAlarmSound";
-import { useNotifications } from "@/hooks/useNotifications";
 import { useDeviceId } from "@/hooks/useDeviceId";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface AlarmTrigger {
   id: string;
@@ -31,39 +30,28 @@ interface Alarm {
 interface ActiveAlarmModalProps {
   trigger: AlarmTrigger;
   alarm: Alarm;
-  userId: string | undefined;
   onDismissed: () => void;
 }
 
 /**
- * Alarm behavior (authoritative):
- * - Alarm sound + vibration is allowed ONLY on the alarm owner's original device.
- * - Everyone can dismiss; dismissal stops the alarm on all devices via realtime sync.
- * - Owner device auto-stops after exactly 3 rings (local timer; does not rely on backend latency).
+ * Alarm modal — shows globally (mounted from Index.tsx).
+ * Sound is controlled by useGlobalAlarm hook, NOT here.
+ * Dismissal goes through the atomic dismiss-alarm edge function.
  */
-export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: ActiveAlarmModalProps) {
+export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmModalProps) {
   const RING_LENGTH_MS = 5000;
-
+  const { user } = useAuth();
+  const userId = user?.id;
   const deviceId = useDeviceId();
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
-
-  const ringUiIntervalRef = useRef<number | null>(null);
-  const ownerRingIntervalRef = useRef<number | null>(null);
-  const localRingCounterRef = useRef(0);
-  const hasStartedRef = useRef(false);
-  const isMountedRef = useRef(true);
-  const hasClosedRef = useRef(false);
 
   const [ringCount, setRingCount] = useState<number>(() => {
     const diff = Date.now() - triggeredAtMs;
     return Math.max(1, Math.floor(diff / RING_LENGTH_MS) + 1);
   });
   const [dismissing, setDismissing] = useState(false);
+  const hasClosedRef = useRef(false);
 
-  const { playAlarm, stopAlarm } = useAlarmSound();
-  const { sendNotification } = useNotifications();
-
-  // Determine if this device is the owner (sound plays only here)
   const isOwnerDevice = Boolean(
     userId &&
       userId === alarm.created_by &&
@@ -71,184 +59,98 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
       alarm.owner_device_id === deviceId
   );
 
-  // Determine if current user is the owner (can always dismiss)
   const isOwnerUser = userId === alarm.created_by;
 
-  // Determine if others can dismiss based on condition_type and ring count
   const canUserDismiss = useMemo(() => {
-    // Owner can always dismiss
     if (isOwnerUser) return true;
-    
     switch (alarm.condition_type) {
-      case 'owner_only':
-        // Only owner can dismiss - others cannot
+      case "owner_only":
         return false;
-      case 'after_rings':
-        // Others can dismiss after X rings (configurable)
-        const requiredRings = alarm.condition_value || 3;
-        return ringCount >= requiredRings;
-      case 'anyone_can_dismiss':
+      case "after_rings":
+        return ringCount >= (alarm.condition_value || 3);
+      case "anyone_can_dismiss":
       default:
-        // Anyone can dismiss immediately
         return true;
     }
   }, [isOwnerUser, alarm.condition_type, alarm.condition_value, ringCount]);
 
   const formatTime = useCallback((time: string) => {
-    const [hours, minutes] = time.split(':');
+    const [hours, minutes] = time.split(":");
     const h = parseInt(hours, 10);
-    const ampm = h >= 12 ? 'PM' : 'AM';
+    const ampm = h >= 12 ? "PM" : "AM";
     const hour12 = h % 12 || 12;
     return `${hour12}:${minutes} ${ampm}`;
   }, []);
 
-  const cleanupAlarm = useCallback(() => {
-    if (ringUiIntervalRef.current) {
-      clearInterval(ringUiIntervalRef.current);
-      ringUiIntervalRef.current = null;
-    }
-    if (ownerRingIntervalRef.current) {
-      clearInterval(ownerRingIntervalRef.current);
-      ownerRingIntervalRef.current = null;
-    }
-    stopAlarm();
-  }, [stopAlarm]);
-
-  const updateTriggerDismissed = useCallback(
-    async (dismissedBy: string | null) => {
-      await supabase
-        .from('alarm_triggers')
-        .update({
-          status: 'dismissed',
-          dismissed_by: dismissedBy,
-          dismissed_at: new Date().toISOString(),
-        })
-        .eq('id', trigger.id)
-        .eq('status', 'ringing');
-    },
-    [trigger.id]
-  );
-
-  const handleAutoDismiss = useCallback(async () => {
-    if (!userId || !isOwnerDevice || dismissing) return;
-    cleanupAlarm();
-    try {
-      await updateTriggerDismissed(userId);
-      hasClosedRef.current = true;
-      onDismissed();
-    } catch (err) {
-      console.error('Error auto-dismissing alarm:', err);
-    }
-  }, [userId, isOwnerDevice, dismissing, cleanupAlarm, updateTriggerDismissed, onDismissed]);
-
-  // Subscribe to trigger status changes for cross-device dismiss sync
+  // Ring count UI ticker
   useEffect(() => {
-    const statusChannel = supabase
+    const interval = window.setInterval(() => {
+      const newRingCount = Math.max(1, Math.floor((Date.now() - triggeredAtMs) / RING_LENGTH_MS) + 1);
+      setRingCount(newRingCount);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [triggeredAtMs]);
+
+  // Listen for cross-device dismiss
+  useEffect(() => {
+    const channel = supabase
       .channel(`trigger-status-${trigger.id}`)
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'alarm_triggers',
-        filter: `id=eq.${trigger.id}`
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "alarm_triggers",
+        filter: `id=eq.${trigger.id}`,
       }, (payload) => {
-        // If trigger was dismissed by anyone, stop the alarm immediately
-        if (payload.new.status === 'dismissed') {
-          if (hasClosedRef.current) return;
+        if (payload.new.status === "dismissed" && !hasClosedRef.current) {
           hasClosedRef.current = true;
-          cleanupAlarm();
           onDismissed();
         }
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(statusChannel);
+      supabase.removeChannel(channel);
     };
-  }, [trigger.id, cleanupAlarm, onDismissed]);
-
-  useEffect(() => {
-    isMountedRef.current = true;
-    if (hasStartedRef.current) return;
-    hasStartedRef.current = true;
-
-    // UI ring counter (shared) is derived from triggered_at.
-    ringUiIntervalRef.current = window.setInterval(() => {
-      if (!isMountedRef.current) return;
-      const newRingCount = Math.max(1, Math.floor((Date.now() - triggeredAtMs) / RING_LENGTH_MS) + 1);
-      setRingCount(newRingCount);
-    }, 1000);
-
-    if (isOwnerDevice) {
-      // Start alarm sound + vibration ONLY on the owner device.
-      void playAlarm().catch((error) => console.error('Failed to start alarm sound:', error));
-
-      // Note: Alarm does NOT auto-dismiss after X rings anymore.
-      // It only stops when someone dismisses it (owner always, others after condition is met).
-      // The ring counter is just for display and dismiss permission calculation.
-
-      // Background/locked-screen notification (may play system notification sound).
-      sendNotification({
-        title: `Alarm: ${alarm.title}`,
-        body: `It's ${formatTime(alarm.alarm_time)}. Tap to open.`,
-        requireInteraction: true,
-        silent: false,
-        tag: `alarm-${trigger.id}`,
-        route: "/alarms",
-      });
-    } else {
-      // Non-owner devices: notification only, strictly silent.
-      sendNotification({
-        title: `Alarm: ${alarm.title}`,
-        body: `${formatTime(alarm.alarm_time)} - A roommate's alarm is ringing. You can dismiss it.`,
-        requireInteraction: true,
-        silent: true,
-        tag: `alarm-silent-${trigger.id}`,
-        route: "/alarms",
-      });
-    }
-
-    return () => {
-      isMountedRef.current = false;
-      cleanupAlarm();
-    };
-  }, [
-    alarm.title,
-    alarm.alarm_time,
-    cleanupAlarm,
-    formatTime,
-    handleAutoDismiss,
-    isOwnerDevice,
-    playAlarm,
-    sendNotification,
-    trigger.id,
-    triggeredAtMs,
-  ]);
+  }, [trigger.id, onDismissed]);
 
   const handleDismiss = async () => {
     if (!userId || dismissing) return;
 
-    // Check if user has permission to dismiss
     if (!canUserDismiss) {
-      const requiredRings = alarm.condition_value || 3;
-      const remaining = requiredRings - ringCount;
-      toast.error(`Only the alarm owner can dismiss. Wait ${remaining} more ring${remaining !== 1 ? 's' : ''}.`);
+      const remaining = (alarm.condition_value || 3) - ringCount;
+      toast.error(`Wait ${remaining} more ring${remaining !== 1 ? "s" : ""}.`);
       return;
     }
 
     setDismissing(true);
-    
-    // IMMEDIATELY stop everything before any async operation
-    cleanupAlarm();
 
     try {
-      await updateTriggerDismissed(userId);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+      
+      if (!accessToken) {
+        toast.error("Not authenticated");
+        setDismissing(false);
+        return;
+      }
 
-      toast.success('Alarm dismissed!');
+      const res = await supabase.functions.invoke("dismiss-alarm", {
+        body: { trigger_id: trigger.id },
+      });
+
+      if (res.error) {
+        const errorData = res.data;
+        toast.error(errorData?.error || "Failed to dismiss alarm");
+        setDismissing(false);
+        return;
+      }
+
+      toast.success("Alarm dismissed!");
       hasClosedRef.current = true;
       onDismissed();
     } catch (err) {
-      console.error('Error dismissing alarm:', err);
-      toast.error('Failed to dismiss alarm');
+      console.error("Error dismissing alarm:", err);
+      toast.error("Failed to dismiss alarm");
       setDismissing(false);
     }
   };
@@ -291,11 +193,11 @@ export function ActiveAlarmModal({ trigger, alarm, userId, onDismissed }: Active
             variant={canUserDismiss ? "default" : "outline"}
           >
             <BellOff className="h-5 w-5 mr-2" />
-            {dismissing 
-              ? 'Dismissing...' 
-              : !canUserDismiss 
-                ? `Wait ${(alarm.condition_value || 3) - ringCount} more ring${(alarm.condition_value || 3) - ringCount !== 1 ? 's' : ''}` 
-                : 'Dismiss Alarm'}
+            {dismissing
+              ? "Dismissing..."
+              : !canUserDismiss
+                ? `Wait ${(alarm.condition_value || 3) - ringCount} more ring${(alarm.condition_value || 3) - ringCount !== 1 ? "s" : ""}`
+                : "Dismiss Alarm"}
           </Button>
         </div>
       </DialogContent>
