@@ -60,6 +60,7 @@ export const Tasks = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [selectedPlannerDate, setSelectedPlannerDate] = useState<Date | null>(null);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [showDetailSheet, setShowDetailSheet] = useState(false);
@@ -342,6 +343,7 @@ export const Tasks = () => {
       ) : view === 'calendar' ? (
         <TaskCalendar 
           onCreateTask={(date) => {
+            setSelectedPlannerDate(date);
             setShowCreateDialog(true);
           }}
           onTaskClick={(task) => {
@@ -748,7 +750,10 @@ export const Tasks = () => {
 
       {/* FAB */}
       <button 
-        onClick={() => setShowCreateDialog(true)}
+        onClick={() => {
+          setSelectedPlannerDate(null);
+          setShowCreateDialog(true);
+        }}
         className="fixed bottom-24 right-4 w-14 h-14 bg-primary rounded-full shadow-lg flex items-center justify-center text-primary-foreground z-50 press-effect hover:bg-primary/90 transition-all"
       >
         <Plus className="w-6 h-6" />
@@ -758,6 +763,7 @@ export const Tasks = () => {
         open={showCreateDialog} 
         onOpenChange={setShowCreateDialog}
         onTaskCreated={fetchTasks}
+        initialDueDate={selectedPlannerDate}
       />
 
       <TaskDetailSheet

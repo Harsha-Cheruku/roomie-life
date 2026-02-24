@@ -366,12 +366,14 @@ export const CreateExpenseDialog = ({
           .insert({
             room_id: currentRoom.id,
             created_by: user.id,
+            user_id: user.id,
             title: `Bill Reminder: ${title.trim()}`,
-            description: `Reminder for expense of ₹${totalAmount.toFixed(0)}`,
+            description: `Reminder for expense of ₹${totalAmount.toFixed(2)}`,
             remind_at: new Date(reminderDate).toISOString(),
-            condition_type: 'expense',
-            condition_ref_id: expense.id,
+            reminder_type: 'expense',
+            related_id: expense.id,
             status: 'scheduled',
+            notified: false,
           });
 
         if (reminderError) {

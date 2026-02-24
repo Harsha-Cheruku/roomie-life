@@ -3,7 +3,12 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+const timeToMinutes = (timeValue: string) => {
+  const [hh, mm] = timeValue.slice(0, 5).split(":").map(Number);
+  return hh * 60 + mm;
 };
 
 Deno.serve(async (req) => {
@@ -18,11 +23,12 @@ Deno.serve(async (req) => {
 
     const now = new Date();
     const currentDay = now.getDay();
-    const currentTimeStr = now.toTimeString().slice(0, 5); // "HH:MM"
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
 
     let alarmsTriggered = 0;
 
-    // ── ALARMS ──────────────────────────────────────────────
     const { data: alarms, error: alarmErr } = await supabase
       .from("alarms")
       .select("*")
@@ -35,30 +41,39 @@ Deno.serve(async (req) => {
 
     if (alarms) {
       for (const alarm of alarms) {
-        const alarmTime = alarm.alarm_time.slice(0, 5);
-        if (alarmTime !== currentTimeStr) continue;
+        const alarmMinutes = timeToMinutes(alarm.alarm_time);
+        const diffMinutes = nowMinutes - alarmMinutes;
 
-        // Idempotent: check if already triggered in last 2 minutes
-        const twoMinAgo = new Date(now.getTime() - 120000).toISOString();
-        const { data: existing } = await supabase
+        // Trigger within 0..5 minutes window to avoid missed exact-minute runs
+        if (diffMinutes < 0 || diffMinutes > 5) continue;
+
+        // Skip if this alarm already has a trigger today (idempotent daily lock)
+        const { data: existingToday } = await supabase
           .from("alarm_triggers")
-          .select("id")
+          .select("id,status")
           .eq("alarm_id", alarm.id)
-          .gte("triggered_at", twoMinAgo)
+          .gte("triggered_at", startOfDay.toISOString())
+          .order("triggered_at", { ascending: false })
           .limit(1);
 
-        if (existing && existing.length > 0) continue;
+        if (existingToday && existingToday.length > 0) continue;
 
-        // Create trigger
-        const { error: triggerErr } = await supabase
+        // Create new trigger
+        const { data: insertedTrigger, error: triggerErr } = await supabase
           .from("alarm_triggers")
           .insert({
             alarm_id: alarm.id,
             status: "ringing",
             ring_count: 0,
-          });
+          })
+          .select("id")
+          .single();
 
-        if (triggerErr) continue;
+        if (triggerErr || !insertedTrigger) {
+          console.error("Error creating alarm trigger:", triggerErr);
+          continue;
+        }
+
         alarmsTriggered++;
 
         // Notify room members
@@ -67,19 +82,25 @@ Deno.serve(async (req) => {
           .select("user_id")
           .eq("room_id", alarm.room_id);
 
-        if (members) {
+        if (members && members.length > 0) {
           const notifications = members.map((m) => ({
             user_id: m.user_id,
             room_id: alarm.room_id,
             type: "alarm",
             title: `🔔 Alarm: ${alarm.title}`,
-            body: `It's ${alarmTime}! Alarm is ringing.`,
+            body: `It's ${alarm.alarm_time.slice(0, 5)}! Alarm is ringing.`,
             reference_type: "alarm",
             reference_id: alarm.id,
             is_read: false,
           }));
 
-          await supabase.from("notifications").insert(notifications);
+          const { error: notificationErr } = await supabase
+            .from("notifications")
+            .insert(notifications);
+
+          if (notificationErr) {
+            console.error("Error creating alarm notifications:", notificationErr);
+          }
         }
       }
     }
@@ -97,12 +118,9 @@ Deno.serve(async (req) => {
     );
   } catch (error) {
     console.error("Error in check-alarms-reminders:", error);
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 500,
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 500,
+    });
   }
 });

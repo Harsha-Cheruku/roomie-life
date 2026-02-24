@@ -16,9 +16,19 @@ interface CreateTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onTaskCreated: () => void;
+  initialDueDate?: Date | null;
 }
 
-export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTaskDialogProps) => {
+const toDateTimeLocalValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated, initialDueDate = null }: CreateTaskDialogProps) => {
   const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   const { members } = useRoomMembers();
@@ -37,6 +47,13 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
       setAssignedTo(user.id);
     }
   }, [isSoloMode, user, assignedTo]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (initialDueDate) {
+      setDueDate(toDateTimeLocalValue(initialDueDate));
+    }
+  }, [open, initialDueDate]);
 
   const handleSubmit = async () => {
     if (!user || !currentRoom || !title.trim() || !assignedTo) {
@@ -82,6 +99,28 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
         });
       }
 
+      // Create task reminder if configured
+      if (task && reminderTime) {
+        const { error: reminderError } = await supabase
+          .from('reminders')
+          .insert({
+            room_id: currentRoom.id,
+            created_by: user.id,
+            user_id: assignedTo,
+            title: `Task Reminder: ${title.trim()}`,
+            description: description.trim() || `Reminder for task: ${title.trim()}`,
+            remind_at: new Date(reminderTime).toISOString(),
+            reminder_type: 'task',
+            related_id: task.id,
+            status: 'scheduled',
+            notified: false,
+          });
+
+        if (reminderError) {
+          console.error('Error creating task reminder:', reminderError);
+        }
+      }
+
       toast({
         title: 'Task created!',
         description: isSelfAssigned 
@@ -92,7 +131,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated }: CreateTa
       // Reset form
       setTitle('');
       setDescription('');
-      setAssignedTo(null);
+      setAssignedTo(isSoloMode && user ? user.id : null);
       setPriority('medium');
       setDueDate('');
       setReminderTime('');

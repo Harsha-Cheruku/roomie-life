@@ -16,6 +16,7 @@ interface Task {
   status: string;
   priority: string;
   due_date: string | null;
+  reminder_time: string | null;
   created_at: string;
   assigned_to: string;
   created_by: string;
@@ -87,10 +88,16 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     setTasks(filteredTasks);
   };
 
+  const getTaskScheduledDate = (task: Task): Date | null => {
+    const dateValue = task.due_date || task.reminder_time;
+    return dateValue ? new Date(dateValue) : null;
+  };
+
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => {
-      if (!task.due_date) return false;
-      return isSameDay(new Date(task.due_date), date);
+      const scheduledDate = getTaskScheduledDate(task);
+      if (!scheduledDate) return false;
+      return isSameDay(scheduledDate, date);
     });
   };
 
@@ -104,27 +111,28 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
   const createdOnDateTasks = getTasksCreatedOnDate(selectedDate);
 
   // Get tasks for a specific hour in the day planner
-  // Tasks show at their actual due_date hour. Tasks with midnight (no specific time) show at 9 AM.
+  // Tasks show at their actual due/reminder hour. Date-only tasks (midnight) show at 9 AM.
   const getTasksForHour = (hour: number) => {
     return selectedDateTasks.filter(task => {
-      if (!task.due_date) return hour === 9;
-      const taskDate = new Date(task.due_date);
+      const taskDate = getTaskScheduledDate(task);
+      if (!taskDate) return hour === 9;
+
       const taskHour = taskDate.getHours();
       const taskMinutes = taskDate.getMinutes();
       const taskSeconds = taskDate.getSeconds();
-      
-      // If stored as midnight exactly (00:00:00), it means "date only, no specific time" → show at 9 AM
+
       if (taskHour === 0 && taskMinutes === 0 && taskSeconds === 0) {
         return hour === 9;
       }
-      // Otherwise show at the actual hour
+
       return taskHour === hour;
     });
   };
 
   const datesWithDueTasks = tasks
-    .filter(t => t.due_date)
-    .map(t => startOfDay(new Date(t.due_date!)));
+    .map(getTaskScheduledDate)
+    .filter((date): date is Date => Boolean(date))
+    .map((date) => startOfDay(date));
 
   const datesWithCreatedTasks = tasks
     .map(t => startOfDay(new Date(t.created_at)));
@@ -262,8 +270,8 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                             {task.title}
                           </p>
                           <div className="flex gap-2 text-xs text-muted-foreground">
-                            {task.due_date && (
-                              <span>Due: {format(new Date(task.due_date), "h:mm a")}</span>
+                            {getTaskScheduledDate(task) && (
+                              <span>Due: {format(getTaskScheduledDate(task)!, "h:mm a")}</span>
                             )}
                             {showCreatedTasks && (
                               <span>Created: {format(new Date(task.created_at), "h:mm a")}</span>
@@ -341,7 +349,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                               <p className="font-medium truncate">{task.title}</p>
                               <p className="text-xs opacity-70">
                                 {task.assignee_profile?.display_name}
-                                {task.due_date && ` · ${format(new Date(task.due_date), "h:mm a")}`}
+                                {getTaskScheduledDate(task) && ` · ${format(getTaskScheduledDate(task)!, "h:mm a")}`}
                               </p>
                             </button>
                           ))}
