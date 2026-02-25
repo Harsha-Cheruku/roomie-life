@@ -27,7 +27,39 @@ Deno.serve(async (req) => {
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
 
+    const staleBefore = new Date(now.getTime() - 30 * 60 * 1000);
+    let staleDismissed = 0;
     let alarmsTriggered = 0;
+
+    // Cleanup stale ringing triggers so they don't block future alarms
+    const { data: staleTriggers, error: staleErr } = await supabase
+      .from("alarm_triggers")
+      .select("id")
+      .eq("status", "ringing")
+      .lt("triggered_at", staleBefore.toISOString());
+
+    if (staleErr) {
+      console.error("Error fetching stale triggers:", staleErr);
+    }
+
+    if (staleTriggers && staleTriggers.length > 0) {
+      const staleIds = staleTriggers.map((t) => t.id);
+      const { error: staleDismissErr } = await supabase
+        .from("alarm_triggers")
+        .update({
+          status: "dismissed",
+          dismissed_at: now.toISOString(),
+          dismissed_by: null,
+        })
+        .in("id", staleIds)
+        .eq("status", "ringing");
+
+      if (staleDismissErr) {
+        console.error("Error dismissing stale triggers:", staleDismissErr);
+      } else {
+        staleDismissed = staleIds.length;
+      }
+    }
 
     const { data: alarms, error: alarmErr } = await supabase
       .from("alarms")
@@ -109,6 +141,7 @@ Deno.serve(async (req) => {
       JSON.stringify({
         success: true,
         alarmsTriggered,
+        staleDismissed,
         checkedAt: now.toISOString(),
       }),
       {

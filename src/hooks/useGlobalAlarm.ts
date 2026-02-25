@@ -117,7 +117,7 @@ export function useGlobalAlarm() {
 
     const isOwnerDevice =
       user.id === activeAlarm.created_by &&
-      activeAlarm.owner_device_id === deviceId;
+      (!activeAlarm.owner_device_id || activeAlarm.owner_device_id === deviceId);
 
     if (isOwnerDevice && !isPlayingRef.current) {
       isPlayingRef.current = true;
