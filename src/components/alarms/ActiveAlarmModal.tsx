@@ -55,8 +55,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
   const isOwnerDevice = Boolean(
     userId &&
       userId === alarm.created_by &&
-      alarm.owner_device_id &&
-      alarm.owner_device_id === deviceId
+      (!alarm.owner_device_id || alarm.owner_device_id === deviceId)
   );
 
   const isOwnerUser = userId === alarm.created_by;

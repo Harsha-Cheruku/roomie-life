@@ -21,6 +21,7 @@ import Notifications from "./pages/Notifications";
 import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
+import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 
 const queryClient = new QueryClient();
 
@@ -53,6 +54,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <GlobalAlarmLayer />
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
             <Route

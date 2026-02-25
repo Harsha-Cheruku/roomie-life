@@ -6,16 +6,12 @@ import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { useRealtimePushNotifications } from "@/hooks/useRealtimePushNotifications";
 import { PushNotificationPrompt } from "@/components/notifications/PushNotificationPrompt";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
-import { useGlobalAlarm } from "@/hooks/useGlobalAlarm";
-import { ActiveAlarmModal } from "@/components/alarms/ActiveAlarmModal";
 
 const Index = () => {
   const { activeTab, navigateToTab } = useNavigation();
   const { isSupported, isEnabled, permission } = usePushNotifications();
   const [showPushPrompt, setShowPushPrompt] = useState(false);
   
-  // Global alarm — rings on any page when trigger is active
-  const { activeTrigger, activeAlarm, handleDismissed } = useGlobalAlarm();
 
   // Initialize reminder notifications
   useReminderNotifications();
@@ -43,14 +39,6 @@ const Index = () => {
       <Home />
       <BottomNav activeTab={activeTab} onTabChange={navigateToTab} />
 
-      {/* Global alarm modal — shows on ANY page */}
-      {activeTrigger && activeAlarm && (
-        <ActiveAlarmModal
-          trigger={activeTrigger}
-          alarm={activeAlarm}
-          onDismissed={handleDismissed}
-        />
-      )}
     </div>
   );
 };
