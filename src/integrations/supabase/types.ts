@@ -93,6 +93,7 @@ export type Database = {
           is_active: boolean
           owner_device_id: string | null
           room_id: string
+          timezone_offset: number
           title: string
           updated_at: string
         }
@@ -107,6 +108,7 @@ export type Database = {
           is_active?: boolean
           owner_device_id?: string | null
           room_id: string
+          timezone_offset?: number
           title: string
           updated_at?: string
         }
@@ -121,6 +123,7 @@ export type Database = {
           is_active?: boolean
           owner_device_id?: string | null
           room_id?: string
+          timezone_offset?: number
           title?: string
           updated_at?: string
         }

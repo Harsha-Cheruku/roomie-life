@@ -61,6 +61,11 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
 
     setCreating(true);
 
+    // Store the user's timezone offset so the backend can compare alarm time
+    // in the correct local timezone. JS getTimezoneOffset() returns minutes
+    // to add to local time to get UTC (e.g., IST = -330).
+    const timezoneOffset = new Date().getTimezoneOffset();
+
     const { error } = await supabase.from('alarms').insert({
       room_id: roomId,
       created_by: userId,
@@ -69,8 +74,8 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
       days_of_week: selectedDays,
       condition_type: conditionType,
       condition_value: conditionValue,
-      // Per-device ownership: only this device is allowed to trigger + ring this alarm.
       owner_device_id: deviceId,
+      timezone_offset: timezoneOffset,
     } as any);
 
     setCreating(false);
