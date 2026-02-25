@@ -22,16 +22,14 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const now = new Date();
-    const currentDay = now.getDay();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
 
     const staleBefore = new Date(now.getTime() - 30 * 60 * 1000);
     let staleDismissed = 0;
     let alarmsTriggered = 0;
 
-    // Cleanup stale ringing triggers so they don't block future alarms
+    console.log(`[check-alarms] Running at UTC: ${now.toISOString()}`);
+
+    // Cleanup stale ringing triggers (>30 min old)
     const { data: staleTriggers, error: staleErr } = await supabase
       .from("alarm_triggers")
       .select("id")
@@ -43,7 +41,7 @@ Deno.serve(async (req) => {
     }
 
     if (staleTriggers && staleTriggers.length > 0) {
-      const staleIds = staleTriggers.map((t) => t.id);
+      const staleIds = staleTriggers.map((t: any) => t.id);
       const { error: staleDismissErr } = await supabase
         .from("alarm_triggers")
         .update({
@@ -58,37 +56,65 @@ Deno.serve(async (req) => {
         console.error("Error dismissing stale triggers:", staleDismissErr);
       } else {
         staleDismissed = staleIds.length;
+        console.log(`[check-alarms] Dismissed ${staleDismissed} stale triggers`);
       }
     }
 
+    // Fetch all active alarms (we'll check day/time per-alarm using their timezone)
     const { data: alarms, error: alarmErr } = await supabase
       .from("alarms")
       .select("*")
-      .eq("is_active", true)
-      .contains("days_of_week", [currentDay]);
+      .eq("is_active", true);
 
     if (alarmErr) {
       console.error("Error fetching alarms:", alarmErr);
     }
 
+    console.log(`[check-alarms] Found ${alarms?.length || 0} active alarms`);
+
     if (alarms) {
       for (const alarm of alarms) {
+        // timezone_offset is from JS getTimezoneOffset():
+        // For IST (UTC+5:30) it's -330.
+        // Local time = UTC - offset  →  localMs = utcMs - (offset * 60000)
+        const tzOffset = alarm.timezone_offset || 0;
+        const localNowMs = now.getTime() - tzOffset * 60 * 1000;
+        const localNow = new Date(localNowMs);
+        // Use getUTC* methods since we manually shifted the date
+        const localDay = localNow.getUTCDay();
+        const localMinutes = localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
+
+        // Check if today is a scheduled day (in alarm's local timezone)
+        if (!alarm.days_of_week || !alarm.days_of_week.includes(localDay)) {
+          continue;
+        }
+
         const alarmMinutes = timeToMinutes(alarm.alarm_time);
-        const diffMinutes = nowMinutes - alarmMinutes;
+        const diffMinutes = localMinutes - alarmMinutes;
 
-        // Trigger within 0..5 minutes window to avoid missed exact-minute runs
-        if (diffMinutes < 0 || diffMinutes > 5) continue;
+        // Trigger within 0..2 minutes window
+        if (diffMinutes < 0 || diffMinutes > 2) continue;
 
-        // Skip if this alarm already has a trigger today (idempotent daily lock)
+        console.log(`[check-alarms] Alarm "${alarm.title}" (${alarm.id}) is due! localTime=${localNow.getUTCHours()}:${localNow.getUTCMinutes()}, alarmTime=${alarm.alarm_time}, tzOffset=${tzOffset}`);
+
+        // Idempotent: skip if already triggered today (in alarm's local timezone)
+        const localStartOfDay = new Date(localNowMs);
+        localStartOfDay.setUTCHours(0, 0, 0, 0);
+        // Convert local start-of-day back to UTC for DB query
+        const utcStartOfDay = new Date(localStartOfDay.getTime() + tzOffset * 60 * 1000);
+
         const { data: existingToday } = await supabase
           .from("alarm_triggers")
           .select("id,status")
           .eq("alarm_id", alarm.id)
-          .gte("triggered_at", startOfDay.toISOString())
+          .gte("triggered_at", utcStartOfDay.toISOString())
           .order("triggered_at", { ascending: false })
           .limit(1);
 
-        if (existingToday && existingToday.length > 0) continue;
+        if (existingToday && existingToday.length > 0) {
+          console.log(`[check-alarms] Alarm "${alarm.title}" already triggered today, skipping`);
+          continue;
+        }
 
         // Create new trigger
         const { data: insertedTrigger, error: triggerErr } = await supabase
@@ -107,6 +133,7 @@ Deno.serve(async (req) => {
         }
 
         alarmsTriggered++;
+        console.log(`[check-alarms] ✅ Trigger created for "${alarm.title}", trigger_id=${insertedTrigger.id}`);
 
         // Notify room members
         const { data: members } = await supabase
@@ -115,7 +142,7 @@ Deno.serve(async (req) => {
           .eq("room_id", alarm.room_id);
 
         if (members && members.length > 0) {
-          const notifications = members.map((m) => ({
+          const notifications = members.map((m: any) => ({
             user_id: m.user_id,
             room_id: alarm.room_id,
             type: "alarm",
@@ -136,6 +163,8 @@ Deno.serve(async (req) => {
         }
       }
     }
+
+    console.log(`[check-alarms] Done. Triggered=${alarmsTriggered}, StaleDismissed=${staleDismissed}`);
 
     return new Response(
       JSON.stringify({
