@@ -22,8 +22,22 @@ import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
+import { useNativeAlarm } from "@/hooks/useNativeAlarm";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
+
+/** Initialize native alarm channel on app startup */
+function NativeAlarmInit() {
+  const { isNative, createAlarmChannel, requestPermissions } = useNativeAlarm();
+  useEffect(() => {
+    if (isNative) {
+      createAlarmChannel();
+      requestPermissions();
+    }
+  }, [isNative, createAlarmChannel, requestPermissions]);
+  return null;
+}
 
 const AuthRedirect = () => {
   const { user, currentRoom, loading } = useAuth();
@@ -55,6 +69,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <GlobalAlarmLayer />
+          <NativeAlarmInit />
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
             <Route

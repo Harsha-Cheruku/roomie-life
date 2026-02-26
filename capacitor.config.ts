@@ -1,0 +1,24 @@
+import type { CapacitorConfig } from '@capacitor/cli';
+
+const config: CapacitorConfig = {
+  appId: 'app.lovable.33f96bab05a84df9939e66df730e6530',
+  appName: 'RoomSync',
+  webDir: 'dist',
+  server: {
+    url: 'https://33f96bab-05a8-4df9-939e-66df730e6530.lovableproject.com?forceHideBadge=true',
+    cleartext: true,
+  },
+  plugins: {
+    LocalNotifications: {
+      // Use exact alarms on Android (AlarmManager.setExactAndAllowWhileIdle)
+      smallIcon: 'ic_stat_alarm',
+      iconColor: '#EF4444',
+      sound: 'alarm_sound.wav',
+    },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
+};
+
+export default config;

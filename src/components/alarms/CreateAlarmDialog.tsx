@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
+import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 
 interface CreateAlarmDialogProps {
   open: boolean;
@@ -42,6 +43,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
   const [conditionValue, setConditionValue] = useState(3);
   const [creating, setCreating] = useState(false);
   const deviceId = useDeviceId();
+  const { isNative, scheduleAlarm, createAlarmChannel, requestPermissions } = useNativeAlarm();
 
   const handleCreate = async () => {
     if (!roomId || !userId) {
@@ -87,6 +89,31 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     }
 
     toast.success('Alarm created!');
+
+    // Schedule native alarm if running as a native app
+    if (isNative) {
+      try {
+        await createAlarmChannel();
+        await requestPermissions();
+        // Calculate next occurrence
+        const [hours, minutes] = time.split(':').map(Number);
+        const now = new Date();
+        const scheduleDate = new Date();
+        scheduleDate.setHours(hours, minutes, 0, 0);
+        if (scheduleDate <= now) {
+          scheduleDate.setDate(scheduleDate.getDate() + 1);
+        }
+        await scheduleAlarm({
+          id: Date.now() % 100000,
+          title: `🔔 Alarm: ${title.trim()}`,
+          body: `It's ${time}! Alarm is ringing.`,
+          scheduleAt: scheduleDate,
+        });
+      } catch (e) {
+        console.warn('Native alarm scheduling failed (web fallback active):', e);
+      }
+    }
+
     setTitle('');
     setTime('07:00');
     setSelectedDays([1, 2, 3, 4, 5]);
