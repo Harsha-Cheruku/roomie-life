@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useGameLobby } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
+import { Input } from "@/components/ui/input";
 import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
