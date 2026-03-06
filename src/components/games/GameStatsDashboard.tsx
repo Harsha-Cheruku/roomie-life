@@ -139,6 +139,10 @@ export const GameStatsDashboard = ({ onClose }: GameStatsDashboardProps) => {
     memory: "Memory Match",
     reaction: "Reaction Time",
     dice: "Dice Roller",
+    snakes_and_ladders: "Snakes & Ladders",
+    ludo: "Ludo",
+    chopat: "Chopat",
+    kabaddi_tap: "Kabaddi Tap",
   };
 
   const myStats = stats.find(s => s.user_id === user?.id);
