@@ -279,6 +279,103 @@ export type Database = {
           },
         ]
       }
+      game_lobbies: {
+        Row: {
+          created_at: string
+          current_turn_user_id: string | null
+          game_state: Json | null
+          game_type: string
+          host_id: string
+          id: string
+          join_code: string
+          max_players: number
+          room_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          current_turn_user_id?: string | null
+          game_state?: Json | null
+          game_type: string
+          host_id: string
+          id?: string
+          join_code?: string
+          max_players?: number
+          room_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          current_turn_user_id?: string | null
+          game_state?: Json | null
+          game_type?: string
+          host_id?: string
+          id?: string
+          join_code?: string
+          max_players?: number
+          room_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_lobbies_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_lobby_players: {
+        Row: {
+          avatar: string | null
+          display_name: string
+          id: string
+          is_ready: boolean
+          joined_at: string
+          lobby_id: string
+          player_order: number
+          player_state: Json | null
+          score: number
+          user_id: string
+        }
+        Insert: {
+          avatar?: string | null
+          display_name: string
+          id?: string
+          is_ready?: boolean
+          joined_at?: string
+          lobby_id: string
+          player_order?: number
+          player_state?: Json | null
+          score?: number
+          user_id: string
+        }
+        Update: {
+          avatar?: string | null
+          display_name?: string
+          id?: string
+          is_ready?: boolean
+          joined_at?: string
+          lobby_id?: string
+          player_order?: number
+          player_state?: Json | null
+          score?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_lobby_players_lobby_id_fkey"
+            columns: ["lobby_id"]
+            isOneToOne: false
+            referencedRelation: "game_lobbies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_sessions: {
         Row: {
           created_at: string
