@@ -158,6 +158,24 @@ export const RoomSettings = () => {
     navigate("/setup?add=true");
   };
 
+  const handleAvatarChange = async (newAvatar: string) => {
+    if (!user) return;
+    setIsSavingAvatar(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar: newAvatar })
+      .eq("user_id", user.id);
+    setIsSavingAvatar(false);
+    if (error) {
+      toast({ title: "Failed to update avatar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Avatar updated! 🎉" });
+      setShowAvatarPicker(false);
+      refreshProfile();
+      fetchMembers();
+    }
+  };
+
   if (!currentRoom) return null;
 
   return (
