@@ -177,9 +177,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         <Button
           onClick={openYouTubeApp}
           variant="outline"
-          className="h-auto py-3 flex flex-col items-center gap-2 border-red-200 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950"
+          className="h-auto py-3 flex flex-col items-center gap-2 border-destructive/30 hover:bg-destructive/5"
         >
-          <Youtube className="h-6 w-6 text-red-500" />
+          <Youtube className="h-6 w-6 text-destructive" />
           <span className="text-xs font-medium">Open YouTube</span>
         </Button>
         <Button
