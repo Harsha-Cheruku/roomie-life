@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { Auth } from "./pages/Auth";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
 import { RoomSetup } from "./pages/RoomSetup";
 import { RoomSettings } from "./pages/RoomSettings";
 import { Expenses } from "./pages/Expenses";
@@ -72,6 +74,8 @@ const App = () => (
           <NativeAlarmInit />
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               path="/setup"
               element={
