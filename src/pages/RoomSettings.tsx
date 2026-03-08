@@ -30,7 +30,6 @@ export const RoomSettings = () => {
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
-  const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
 
   useEffect(() => {
     if (!currentRoom) {
