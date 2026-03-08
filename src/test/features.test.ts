@@ -347,6 +347,23 @@ describe("Task Management Logic", () => {
     expect(validTransitions["done"]).toHaveLength(0);
   });
 
+  it("should reject invalid status transitions", () => {
+    const validTransitions: Record<string, string[]> = {
+      pending: ["accepted", "rejected"],
+      accepted: ["in_progress"],
+      in_progress: ["done"],
+      rejected: ["pending"],
+      done: [],
+    };
+    // Can't go from pending directly to done
+    expect(validTransitions["pending"]).not.toContain("done");
+    expect(validTransitions["pending"]).not.toContain("in_progress");
+    // Can't go from done to anything
+    expect(validTransitions["done"]).toHaveLength(0);
+    // Can't go from accepted to done directly
+    expect(validTransitions["accepted"]).not.toContain("done");
+  });
+
   it("should format due dates correctly", () => {
     const formatDueDate = (dateString: string | null): string | null => {
       if (!dateString) return null;
@@ -366,6 +383,11 @@ describe("Task Management Logic", () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     expect(formatDueDate(yesterday.toISOString())).toBe("Overdue");
+    
+    // Far future
+    const farFuture = new Date();
+    farFuture.setDate(farFuture.getDate() + 30);
+    expect(formatDueDate(farFuture.toISOString())).toBe("Due in 30 days");
   });
 
   it("should filter solo mode tasks correctly", () => {
@@ -381,6 +403,59 @@ describe("Task Management Logic", () => {
     );
     expect(soloTasks).toHaveLength(2);
     expect(soloTasks.map(t => t.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("should require title for task creation", () => {
+    const validateTask = (title: string) => title.trim().length > 0;
+    expect(validateTask("")).toBe(false);
+    expect(validateTask("   ")).toBe(false);
+    expect(validateTask("Clean kitchen")).toBe(true);
+  });
+
+  it("should require assigned_to for task creation", () => {
+    const validateAssignee = (assignedTo: string | null) => !!assignedTo && assignedTo.length > 0;
+    expect(validateAssignee(null)).toBe(false);
+    expect(validateAssignee("")).toBe(false);
+    expect(validateAssignee("user-1")).toBe(true);
+  });
+
+  it("should validate priority values", () => {
+    const validPriorities = ["low", "medium", "high"];
+    expect(validPriorities).toContain("low");
+    expect(validPriorities).toContain("medium");
+    expect(validPriorities).toContain("high");
+    expect(validPriorities).not.toContain("urgent");
+    expect(validPriorities).not.toContain("");
+  });
+
+  it("should handle task with no due date", () => {
+    const task = { title: "Buy groceries", due_date: null, reminder_time: null };
+    expect(task.due_date).toBeNull();
+    expect(task.reminder_time).toBeNull();
+  });
+
+  it("should handle rejection requiring a comment", () => {
+    const validateRejection = (comment: string) => comment.trim().length > 0;
+    expect(validateRejection("")).toBe(false);
+    expect(validateRejection("   ")).toBe(false);
+    expect(validateRejection("Not my turn")).toBe(true);
+  });
+
+  it("should handle self-assigned tasks (creator = assignee)", () => {
+    const task = { created_by: "user-1", assigned_to: "user-1", status: "pending" };
+    const isSelfAssigned = task.created_by === task.assigned_to;
+    expect(isSelfAssigned).toBe(true);
+    // Self-assigned tasks still need approval
+    const needsApproval = task.status === "pending" && task.assigned_to === "user-1";
+    expect(needsApproval).toBe(true);
+  });
+
+  it("should handle empty task list gracefully", () => {
+    const tasks: any[] = [];
+    const pending = tasks.filter(t => t.status === "pending");
+    const inProgress = tasks.filter(t => t.status === "in_progress");
+    expect(pending).toHaveLength(0);
+    expect(inProgress).toHaveLength(0);
   });
 });
 
