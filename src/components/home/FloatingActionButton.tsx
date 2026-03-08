@@ -122,7 +122,7 @@ export const FloatingActionButton = () => {
             "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95",
             isOpen
               ? "bg-foreground rotate-45 shadow-glow"
-              : "gradient-primary shadow-glow ring-3 ring-background"
+              : "gradient-lavender shadow-glow ring-3 ring-background"
           )}>
           {isOpen ?
             <X className="w-6 h-6 text-background" /> :
