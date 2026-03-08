@@ -17,7 +17,7 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomSettings = () => {
-  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms } = useAuth();
+  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
