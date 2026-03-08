@@ -50,6 +50,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [syncedUsers, setSyncedUsers] = useState<SyncedUser[]>([]);
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [playlistCopied, setPlaylistCopied] = useState(false);
+  const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
