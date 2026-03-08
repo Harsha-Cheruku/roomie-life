@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -201,10 +202,10 @@ export const RoomSettings = () => {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setShowAvatarPicker(true)}
-              className="relative w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl hover:bg-primary/20 transition-colors group"
+              className="relative group"
             >
-              {profile?.avatar || "😎"}
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <ProfileAvatar avatar={profile?.avatar} size="xl" className="ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all" />
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
                 <Pencil className="w-3 h-3 text-primary-foreground" />
               </div>
             </button>
@@ -214,7 +215,7 @@ export const RoomSettings = () => {
                 onClick={() => setShowAvatarPicker(true)}
                 className="text-sm text-primary hover:text-primary/80 transition-colors"
               >
-                Change avatar
+                Change DP
               </button>
             </div>
           </div>
@@ -348,8 +349,8 @@ export const RoomSettings = () => {
                 key={member.user_id}
                 className="flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors"
               >
-                <div className="relative w-10 h-10 rounded-full bg-card border-2 border-border flex items-center justify-center text-xl">
-                  {member.avatar}
+                <div className="relative">
+                  <ProfileAvatar avatar={member.avatar} size="md" />
                   <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-muted bg-mint" />
                 </div>
                 <div className="flex-1 min-w-0">
