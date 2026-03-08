@@ -121,6 +121,95 @@ describe("Expense Calculation Logic", () => {
     expect(totalCheck).toBeCloseTo(100, 2);
   });
 
+  it("should handle 0 total amount", () => {
+    const total = 0;
+    const memberCount = 3;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    expect(perPerson).toBe(0);
+    const splits = Array.from({ length: memberCount }, () => ({ amount: perPerson }));
+    const sum = splits.reduce((s, sp) => s + sp.amount, 0);
+    expect(sum).toBe(0);
+  });
+
+  it("should reject negative expense amounts", () => {
+    const validateAmount = (amount: number) => amount > 0;
+    expect(validateAmount(-50)).toBe(false);
+    expect(validateAmount(-0.01)).toBe(false);
+    expect(validateAmount(0)).toBe(false);
+    expect(validateAmount(0.01)).toBe(true);
+    expect(validateAmount(100)).toBe(true);
+  });
+
+  it("should handle single-member split (no split needed)", () => {
+    const total = 250;
+    const memberCount = 1;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    expect(perPerson).toBe(250);
+  });
+
+  it("should handle very small amounts split across many members", () => {
+    const total = 0.01;
+    const memberCount = 5;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    // 0.01 / 5 = 0.002, floored to 0.00
+    expect(perPerson).toBe(0);
+    // Remainder goes to first person
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100;
+    expect(remainder).toBe(0.01);
+  });
+
+  it("should handle large amounts with remainder", () => {
+    const total = 999999.99;
+    const memberCount = 7;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100;
+    const firstSplit = perPerson + remainder;
+    const totalCheck = firstSplit + perPerson * (memberCount - 1);
+    expect(Math.round(totalCheck * 100) / 100).toBe(999999.99);
+  });
+
+  it("should handle 2-way split of odd penny", () => {
+    const total = 0.03;
+    const memberCount = 2;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100; // 0.01
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100; // 0.01
+    expect(perPerson).toBe(0.01);
+    expect(remainder).toBe(0.01);
+    expect(perPerson + remainder + perPerson * (memberCount - 1)).toBeCloseTo(0.03, 2);
+  });
+
+  it("should handle 100 split across 3 members precisely", () => {
+    const total = 100;
+    const members = 3;
+    const base = Math.floor((total / members) * 100) / 100; // 33.33
+    const firstSplit = Math.round((total - base * (members - 1)) * 100) / 100; // 33.34
+    expect(base).toBe(33.33);
+    expect(firstSplit).toBe(33.34);
+    expect(firstSplit + base * (members - 1)).toBe(100);
+  });
+
+  it("should handle 1000 split across 6 members", () => {
+    const total = 1000;
+    const members = 6;
+    const base = Math.floor((total / members) * 100) / 100; // 166.66
+    const remainder = Math.round((total - base * members) * 100) / 100;
+    const firstSplit = base + remainder;
+    const totalCheck = firstSplit + base * (members - 1);
+    expect(Math.round(totalCheck * 100) / 100).toBe(1000);
+  });
+
+  it("should not allow negative split amounts in validation", () => {
+    const splits = [
+      { user_id: 'u1', amount: 50 },
+      { user_id: 'u2', amount: -10 },
+      { user_id: 'u3', amount: 60 },
+    ];
+    const hasNegative = splits.some(s => s.amount < 0);
+    expect(hasNegative).toBe(true);
+    const validSplits = splits.filter(s => s.amount >= 0);
+    expect(validSplits).toHaveLength(2);
+  });
+
   it("should track will-pay and will-get correctly", () => {
     const currentUserId = "user-1";
     const expenses = [
@@ -160,6 +249,30 @@ describe("Expense Calculation Logic", () => {
     expect(willGet).toBe(200);
   });
 
+  it("should handle all splits already paid (will-pay = 0, will-get = 0)", () => {
+    const currentUserId = "user-1";
+    const expenses = [
+      {
+        created_by: "user-1",
+        splits: [
+          { user_id: "user-2", amount: 50, is_paid: true, status: "accepted" },
+        ],
+      },
+    ];
+    let willPay = 0;
+    let willGet = 0;
+    expenses.forEach(expense => {
+      expense.splits.forEach(split => {
+        if (split.status === "accepted" && !split.is_paid) {
+          if (split.user_id === currentUserId) willPay += split.amount;
+          else if (expense.created_by === currentUserId) willGet += split.amount;
+        }
+      });
+    });
+    expect(willPay).toBe(0);
+    expect(willGet).toBe(0);
+  });
+
   it("should not count rejected splits in totals", () => {
     const splits = [
       { amount: 100, status: "accepted", is_paid: false },
@@ -184,6 +297,26 @@ describe("Expense Calculation Logic", () => {
     const activeSplits = splits.filter(s => s.status !== "rejected");
     const allPaid = activeSplits.every(s => s.is_paid);
     expect(allPaid).toBe(true);
+  });
+
+  it("should not settle bill when some accepted splits unpaid", () => {
+    const splits = [
+      { is_paid: true, status: "accepted" },
+      { is_paid: false, status: "accepted" },
+    ];
+    const activeSplits = splits.filter(s => s.status !== "rejected");
+    const allPaid = activeSplits.every(s => s.is_paid);
+    expect(allPaid).toBe(false);
+  });
+
+  it("should handle empty splits array gracefully", () => {
+    const splits: { amount: number; status: string; is_paid: boolean }[] = [];
+    const pending = splits
+      .filter(s => s.status === "accepted" && !s.is_paid)
+      .reduce((sum, s) => sum + s.amount, 0);
+    expect(pending).toBe(0);
+    const allPaid = splits.filter(s => s.status !== "rejected").every(s => s.is_paid);
+    expect(allPaid).toBe(true); // vacuously true
   });
 });
 
