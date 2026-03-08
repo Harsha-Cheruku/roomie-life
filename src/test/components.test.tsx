@@ -27,7 +27,7 @@ describe("BottomNav Component", () => {
 
   it("should call onTabChange when clicking a tab", async () => {
     const onTabChange = vi.fn();
-    const { user } = renderWithProviders(<BottomNav activeTab="home" onTabChange={onTabChange} />);
+    renderWithProviders(<BottomNav activeTab="home" onTabChange={onTabChange} />);
     
     const tasksTab = screen.getByText("Tasks").closest("button");
     tasksTab?.click();
