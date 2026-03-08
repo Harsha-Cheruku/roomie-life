@@ -181,7 +181,7 @@ export const RoomSetup = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6">
         <div className="w-full max-w-sm animate-slide-up">
           <button
-            onClick={() => isAddingRoom ? navigate(-1) : setStep("choice")}
+            onClick={handleGoBack}
             className="text-muted-foreground mb-6 flex items-center gap-2 hover:text-foreground transition-colors press-effect"
           >
             ← Back
