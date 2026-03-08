@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { renderWithProviders, screen, mockAuthContext } from "./test-utils";
+import { renderWithProviders, mockAuthContext } from "./test-utils";
+import { screen } from "@testing-library/react";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { FloatingActionButton } from "@/components/home/FloatingActionButton";
 import { QuickActions } from "@/components/home/QuickActions";
