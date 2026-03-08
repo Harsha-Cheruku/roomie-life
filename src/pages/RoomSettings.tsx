@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AvatarPicker } from "@/components/profile/AvatarPicker";
 
 interface RoomMemberWithProfile {
   user_id: string;
