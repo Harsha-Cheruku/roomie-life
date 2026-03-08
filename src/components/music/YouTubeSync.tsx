@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Youtube, Share2, Users, Link2, Play, X, Music } from "lucide-react";
+import { Youtube, Share2, Users, Play, X, Music, ExternalLink, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -42,9 +42,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [sharedBy, setSharedBy] = useState<string>("");
   const [syncedUsers, setSyncedUsers] = useState<SyncedUser[]>([]);
   const [isHost, setIsHost] = useState(false);
+  const [copied, setCopied] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // Setup realtime channel for YouTube sync
   useEffect(() => {
     if (!currentRoom?.id || !user || !profile) return;
 
@@ -113,7 +113,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
 
-    // Broadcast to room
     if (channelRef.current) {
       await channelRef.current.send({
         type: "broadcast",
@@ -146,17 +145,61 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     }
   }, []);
 
+  const openYouTubeApp = () => {
+    // Try to open YouTube app directly, fallback to browser
+    const youtubeAppUrl = "vnd.youtube://";
+    const youtubeWebUrl = "https://www.youtube.com";
+    
+    const timeout = setTimeout(() => {
+      window.open(youtubeWebUrl, "_blank");
+    }, 500);
+
+    window.location.href = youtubeAppUrl;
+    
+    window.addEventListener("blur", () => {
+      clearTimeout(timeout);
+    }, { once: true });
+  };
+
+  const copyInviteCode = () => {
+    if (currentRoom?.invite_code) {
+      navigator.clipboard.writeText(currentRoom.invite_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success("Room invite code copied! Share it with friends to listen together.");
+    }
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          onClick={openYouTubeApp}
+          variant="outline"
+          className="h-auto py-3 flex flex-col items-center gap-2 border-destructive/30 hover:bg-destructive/5"
+        >
+          <Youtube className="h-6 w-6 text-destructive" />
+          <span className="text-xs font-medium">Open YouTube</span>
+        </Button>
+        <Button
+          onClick={copyInviteCode}
+          variant="outline"
+          className="h-auto py-3 flex flex-col items-center gap-2 border-primary/30 hover:bg-primary/5"
+        >
+          {copied ? <Check className="h-6 w-6 text-mint" /> : <Users className="h-6 w-6 text-primary" />}
+          <span className="text-xs font-medium">{copied ? "Copied!" : "Invite People"}</span>
+        </Button>
+      </div>
+
       {/* YouTube Share Card */}
       <Card>
         <CardContent className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Youtube className="h-5 w-5 text-red-500" />
-            YouTube Music
+            <Youtube className="h-5 w-5 text-destructive" />
+            Share YouTube Music
           </h3>
 
-          {/* URL Input */}
           <div className="flex gap-2 mb-3">
             <Input
               placeholder="Paste YouTube URL..."
@@ -172,7 +215,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Paste a YouTube link to share music with everyone in the room
+            Open YouTube → copy a video link → paste it here to share with everyone
           </p>
         </CardContent>
       </Card>

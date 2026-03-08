@@ -295,7 +295,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
           </Card>
         </div>
       ) : (
-        /* Day Planner View */
+        /* Day Planner View - Teams Meeting Style */
         <div className="px-4">
           <Card>
             <CardHeader className="pb-2">
@@ -316,65 +316,125 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
+              {/* Today's summary */}
+              <div className="flex gap-2 mt-2">
+                <Badge variant="secondary">
+                  {selectedDateTasks.length} task{selectedDateTasks.length !== 1 ? 's' : ''} today
+                </Badge>
+                {isSameDay(selectedDate, new Date()) && (
+                  <Badge className="bg-primary/20 text-primary">Today</Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="p-0">
-              <ScrollArea className="h-[400px]">
-                <div className="divide-y divide-border">
-                  {HOURS.map((hour) => {
-                    const hourTasks = getTasksForHour(hour);
-                    const timeLabel = format(addHours(startOfDay(selectedDate), hour), "h a");
-                    const isCurrentHour = new Date().getHours() === hour && isSameDay(new Date(), selectedDate);
+              <ScrollArea className="h-[500px]" id="day-planner-scroll">
+                <div className="relative">
+                  {/* Current time indicator line */}
+                  {isSameDay(selectedDate, new Date()) && (
+                    <CurrentTimeLine />
+                  )}
+                  <div className="divide-y divide-border">
+                    {HOURS.map((hour) => {
+                      const hourTasks = getTasksForHour(hour);
+                      const timeLabel = format(addHours(startOfDay(selectedDate), hour), "h a");
+                      const isCurrentHour = new Date().getHours() === hour && isSameDay(new Date(), selectedDate);
+                      const isPastHour = isSameDay(selectedDate, new Date()) && hour < new Date().getHours();
 
-                    return (
-                      <div
-                        key={hour}
-                        className={cn(
-                          "flex min-h-[60px]",
-                          isCurrentHour && "bg-primary/5"
-                        )}
-                      >
-                        <div className="w-16 p-2 text-right text-xs text-muted-foreground shrink-0 border-r">
-                          {timeLabel}
-                        </div>
-                        <div className="flex-1 p-2 space-y-1">
-                          {hourTasks.map((task) => (
-                            <button
-                              key={task.id}
-                              onClick={() => onTaskClick?.(task)}
-                              className={cn(
-                                "w-full text-left p-2 rounded-lg text-sm transition-colors",
-                                priorityColors[task.priority]
-                              )}
-                            >
-                              <p className="font-medium truncate">{task.title}</p>
-                              <p className="text-xs opacity-70">
-                                {task.assignee_profile?.display_name}
-                                {getTaskScheduledDate(task) && ` · ${format(getTaskScheduledDate(task)!, "h:mm a")}`}
-                              </p>
-                            </button>
-                          ))}
-                          {hourTasks.length === 0 && onCreateTask && (
-                            <button
-                              onClick={() => {
-                                const dateWithHour = addHours(startOfDay(selectedDate), hour);
-                                onCreateTask(dateWithHour);
-                              }}
-                              className="w-full h-full min-h-[40px] rounded-lg border-2 border-dashed border-muted hover:border-primary/50 transition-colors flex items-center justify-center text-xs text-muted-foreground hover:text-primary"
-                            >
-                              <Plus className="w-3 h-3 mr-1" />
-                              Add
-                            </button>
+                      return (
+                        <div
+                          key={hour}
+                          id={`hour-${hour}`}
+                          className={cn(
+                            "flex min-h-[64px] relative",
+                            isCurrentHour && "bg-primary/5 border-l-2 border-l-primary",
+                            isPastHour && "opacity-60"
                           )}
+                        >
+                          <div className={cn(
+                            "w-16 p-2 text-right text-xs shrink-0 border-r",
+                            isCurrentHour ? "text-primary font-bold" : "text-muted-foreground"
+                          )}>
+                            {timeLabel}
+                          </div>
+                          <div className="flex-1 p-2 space-y-1">
+                            {hourTasks.map((task) => (
+                              <button
+                                key={task.id}
+                                onClick={() => onTaskClick?.(task)}
+                                className={cn(
+                                  "w-full text-left p-2.5 rounded-lg text-sm transition-colors border-l-3",
+                                  task.status === "done" 
+                                    ? "bg-mint/10 border-l-mint line-through opacity-70" 
+                                    : task.status === "in_progress"
+                                    ? "bg-accent/10 border-l-accent"
+                                    : priorityColors[task.priority]
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="font-medium truncate">{task.title}</p>
+                                  <Badge className={cn("text-[10px] shrink-0", statusColors[task.status])}>
+                                    {task.status.replace("_", " ")}
+                                  </Badge>
+                                </div>
+                                <p className="text-xs opacity-70 mt-0.5">
+                                  {task.assignee_profile?.avatar} {task.assignee_profile?.display_name}
+                                  {getTaskScheduledDate(task) && ` · ${format(getTaskScheduledDate(task)!, "h:mm a")}`}
+                                </p>
+                              </button>
+                            ))}
+                            {hourTasks.length === 0 && onCreateTask && (
+                              <button
+                                onClick={() => {
+                                  const dateWithHour = addHours(startOfDay(selectedDate), hour);
+                                  onCreateTask(dateWithHour);
+                                }}
+                                className="w-full h-full min-h-[40px] rounded-lg border-2 border-dashed border-transparent hover:border-primary/30 transition-colors flex items-center justify-center text-xs text-muted-foreground hover:text-primary"
+                              >
+                                <Plus className="w-3 h-3 mr-1" />
+                                Add
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </ScrollArea>
             </CardContent>
           </Card>
         </div>
       )}
+    </div>
+  );
+};
+
+/** Red line indicating current time position in the day planner */
+const CurrentTimeLine = () => {
+  const [position, setPosition] = useState(0);
+
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+      // Each hour row = 64px min height
+      const px = (minutesSinceMidnight / 60) * 64;
+      setPosition(px);
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div
+      className="absolute left-0 right-0 z-10 pointer-events-none flex items-center"
+      style={{ top: `${position}px` }}
+    >
+      <div className="w-16 flex justify-end pr-1">
+        <div className="w-3 h-3 rounded-full bg-destructive" />
+      </div>
+      <div className="flex-1 h-0.5 bg-destructive" />
     </div>
   );
 };
