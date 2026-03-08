@@ -120,11 +120,13 @@ export const FloatingActionButton = () => {
           onClick={() => setIsOpen(!isOpen)}
           className={cn(
             "w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95",
-            isOpen ? "bg-foreground rotate-45 shadow-glow" : "bg-accent shadow-lg border-2 border-accent-foreground/10"
+            isOpen
+              ? "bg-foreground rotate-45 shadow-glow"
+              : "gradient-coral shadow-lg ring-2 ring-background"
           )}>
           {isOpen ?
             <X className="w-6 h-6 text-background" /> :
-            <Plus className="w-6 h-6 text-accent-foreground" />
+            <Plus className="w-6 h-6 text-primary-foreground" />
           }
         </button>
       </div>
