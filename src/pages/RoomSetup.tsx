@@ -36,14 +36,19 @@ export const RoomSetup = () => {
         setIsCheckingRooms(false);
       }
     } else {
-      // Adding room mode - check if user already has a room and show warning
       setIsCheckingRooms(false);
     }
   }, [user, currentRoom, userRooms, navigate, isAddingRoom]);
 
-  // Allow creating or joining rooms freely
-  const canCreateRoom = true;
   const hasExistingRoom = userRooms.length > 0;
+  
+  const handleGoBack = () => {
+    if (isAddingRoom && hasExistingRoom) {
+      navigate("/", { replace: true });
+    } else {
+      setStep("choice");
+    }
+  };
 
   const handleCreateRoom = async () => {
 
