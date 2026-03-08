@@ -759,6 +759,7 @@ export type Database = {
         Args: { _room_id: string; _user_id: string }
         Returns: boolean
       }
+      join_room_by_invite: { Args: { _invite_code: string }; Returns: string }
       lookup_room_by_invite_code: {
         Args: { code: string }
         Returns: {
@@ -775,6 +776,15 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      update_own_split: {
+        Args: {
+          _is_paid?: boolean
+          _rejection_comment?: string
+          _split_id: string
+          _status?: string
+        }
+        Returns: undefined
       }
     }
     Enums: {
