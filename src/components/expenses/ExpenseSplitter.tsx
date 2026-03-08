@@ -232,10 +232,15 @@ export const ExpenseSplitter = ({
     items.forEach((item, index) => {
       const assignedMembers = assignments[index] || [];
       if (assignedMembers.includes(userId) && assignedMembers.length > 0) {
-        total += (item.price * item.quantity) / assignedMembers.length;
+        const itemTotal = Math.round((item.price * item.quantity) * 100) / 100;
+        const baseShare = Math.floor((itemTotal / assignedMembers.length) * 100) / 100;
+        const remainder = Math.round((itemTotal - baseShare * assignedMembers.length) * 100) / 100;
+        const memberIndex = assignedMembers.indexOf(userId);
+        // First member gets the remainder to keep total accurate
+        total += memberIndex === 0 ? baseShare + remainder : baseShare;
       }
     });
-    return total;
+    return Math.round(total * 100) / 100;
   };
 
   // Get splits for locked view
@@ -317,16 +322,17 @@ export const ExpenseSplitter = ({
       createdItems.forEach((createdItem, index) => {
         const assignedMembers = assignments[index] || [];
         if (assignedMembers.length > 0) {
-          const itemTotal = items[index].price * items[index].quantity;
-          const splitAmount = itemTotal / assignedMembers.length;
+          const itemTotal = Math.round((items[index].price * items[index].quantity) * 100) / 100;
+          const baseShare = Math.floor((itemTotal / assignedMembers.length) * 100) / 100;
+          const remainder = Math.round((itemTotal - baseShare * assignedMembers.length) * 100) / 100;
 
-          assignedMembers.forEach(userId => {
+          assignedMembers.forEach((userId, i) => {
             splits.push({
               expense_id: expense.id,
               expense_item_id: createdItem.id,
               user_id: userId,
-              amount: splitAmount,
-              is_paid: userId === user.id, // Creator already paid
+              amount: i === 0 ? baseShare + remainder : baseShare,
+              is_paid: userId === user.id,
               status: userId === user.id ? 'accepted' : 'pending',
             });
           });
