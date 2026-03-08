@@ -4,8 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, ArrowRight, Sparkles } from "lucide-react";
+import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import { z } from "zod";
+import logoImg from "@/assets/logo.jpg";
 
 const emailSchema = z.string().email("Please enter a valid email");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
