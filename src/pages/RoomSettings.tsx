@@ -28,6 +28,9 @@ export const RoomSettings = () => {
   const [copied, setCopied] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
 
   useEffect(() => {
     if (!currentRoom) {
