@@ -121,6 +121,95 @@ describe("Expense Calculation Logic", () => {
     expect(totalCheck).toBeCloseTo(100, 2);
   });
 
+  it("should handle 0 total amount", () => {
+    const total = 0;
+    const memberCount = 3;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    expect(perPerson).toBe(0);
+    const splits = Array.from({ length: memberCount }, () => ({ amount: perPerson }));
+    const sum = splits.reduce((s, sp) => s + sp.amount, 0);
+    expect(sum).toBe(0);
+  });
+
+  it("should reject negative expense amounts", () => {
+    const validateAmount = (amount: number) => amount > 0;
+    expect(validateAmount(-50)).toBe(false);
+    expect(validateAmount(-0.01)).toBe(false);
+    expect(validateAmount(0)).toBe(false);
+    expect(validateAmount(0.01)).toBe(true);
+    expect(validateAmount(100)).toBe(true);
+  });
+
+  it("should handle single-member split (no split needed)", () => {
+    const total = 250;
+    const memberCount = 1;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    expect(perPerson).toBe(250);
+  });
+
+  it("should handle very small amounts split across many members", () => {
+    const total = 0.01;
+    const memberCount = 5;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    // 0.01 / 5 = 0.002, floored to 0.00
+    expect(perPerson).toBe(0);
+    // Remainder goes to first person
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100;
+    expect(remainder).toBe(0.01);
+  });
+
+  it("should handle large amounts with remainder", () => {
+    const total = 999999.99;
+    const memberCount = 7;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100;
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100;
+    const firstSplit = perPerson + remainder;
+    const totalCheck = firstSplit + perPerson * (memberCount - 1);
+    expect(Math.round(totalCheck * 100) / 100).toBe(999999.99);
+  });
+
+  it("should handle 2-way split of odd penny", () => {
+    const total = 0.03;
+    const memberCount = 2;
+    const perPerson = Math.floor((total / memberCount) * 100) / 100; // 0.01
+    const remainder = Math.round((total - perPerson * memberCount) * 100) / 100; // 0.01
+    expect(perPerson).toBe(0.01);
+    expect(remainder).toBe(0.01);
+    expect(perPerson + remainder + perPerson * (memberCount - 1)).toBeCloseTo(0.03, 2);
+  });
+
+  it("should handle 100 split across 3 members precisely", () => {
+    const total = 100;
+    const members = 3;
+    const base = Math.floor((total / members) * 100) / 100; // 33.33
+    const firstSplit = Math.round((total - base * (members - 1)) * 100) / 100; // 33.34
+    expect(base).toBe(33.33);
+    expect(firstSplit).toBe(33.34);
+    expect(firstSplit + base * (members - 1)).toBe(100);
+  });
+
+  it("should handle 1000 split across 6 members", () => {
+    const total = 1000;
+    const members = 6;
+    const base = Math.floor((total / members) * 100) / 100; // 166.66
+    const remainder = Math.round((total - base * members) * 100) / 100;
+    const firstSplit = base + remainder;
+    const totalCheck = firstSplit + base * (members - 1);
+    expect(Math.round(totalCheck * 100) / 100).toBe(1000);
+  });
+
+  it("should not allow negative split amounts in validation", () => {
+    const splits = [
+      { user_id: 'u1', amount: 50 },
+      { user_id: 'u2', amount: -10 },
+      { user_id: 'u3', amount: 60 },
+    ];
+    const hasNegative = splits.some(s => s.amount < 0);
+    expect(hasNegative).toBe(true);
+    const validSplits = splits.filter(s => s.amount >= 0);
+    expect(validSplits).toHaveLength(2);
+  });
+
   it("should track will-pay and will-get correctly", () => {
     const currentUserId = "user-1";
     const expenses = [
@@ -160,6 +249,30 @@ describe("Expense Calculation Logic", () => {
     expect(willGet).toBe(200);
   });
 
+  it("should handle all splits already paid (will-pay = 0, will-get = 0)", () => {
+    const currentUserId = "user-1";
+    const expenses = [
+      {
+        created_by: "user-1",
+        splits: [
+          { user_id: "user-2", amount: 50, is_paid: true, status: "accepted" },
+        ],
+      },
+    ];
+    let willPay = 0;
+    let willGet = 0;
+    expenses.forEach(expense => {
+      expense.splits.forEach(split => {
+        if (split.status === "accepted" && !split.is_paid) {
+          if (split.user_id === currentUserId) willPay += split.amount;
+          else if (expense.created_by === currentUserId) willGet += split.amount;
+        }
+      });
+    });
+    expect(willPay).toBe(0);
+    expect(willGet).toBe(0);
+  });
+
   it("should not count rejected splits in totals", () => {
     const splits = [
       { amount: 100, status: "accepted", is_paid: false },
@@ -184,6 +297,26 @@ describe("Expense Calculation Logic", () => {
     const activeSplits = splits.filter(s => s.status !== "rejected");
     const allPaid = activeSplits.every(s => s.is_paid);
     expect(allPaid).toBe(true);
+  });
+
+  it("should not settle bill when some accepted splits unpaid", () => {
+    const splits = [
+      { is_paid: true, status: "accepted" },
+      { is_paid: false, status: "accepted" },
+    ];
+    const activeSplits = splits.filter(s => s.status !== "rejected");
+    const allPaid = activeSplits.every(s => s.is_paid);
+    expect(allPaid).toBe(false);
+  });
+
+  it("should handle empty splits array gracefully", () => {
+    const splits: { amount: number; status: string; is_paid: boolean }[] = [];
+    const pending = splits
+      .filter(s => s.status === "accepted" && !s.is_paid)
+      .reduce((sum, s) => sum + s.amount, 0);
+    expect(pending).toBe(0);
+    const allPaid = splits.filter(s => s.status !== "rejected").every(s => s.is_paid);
+    expect(allPaid).toBe(true); // vacuously true
   });
 });
 
@@ -214,6 +347,23 @@ describe("Task Management Logic", () => {
     expect(validTransitions["done"]).toHaveLength(0);
   });
 
+  it("should reject invalid status transitions", () => {
+    const validTransitions: Record<string, string[]> = {
+      pending: ["accepted", "rejected"],
+      accepted: ["in_progress"],
+      in_progress: ["done"],
+      rejected: ["pending"],
+      done: [],
+    };
+    // Can't go from pending directly to done
+    expect(validTransitions["pending"]).not.toContain("done");
+    expect(validTransitions["pending"]).not.toContain("in_progress");
+    // Can't go from done to anything
+    expect(validTransitions["done"]).toHaveLength(0);
+    // Can't go from accepted to done directly
+    expect(validTransitions["accepted"]).not.toContain("done");
+  });
+
   it("should format due dates correctly", () => {
     const formatDueDate = (dateString: string | null): string | null => {
       if (!dateString) return null;
@@ -233,6 +383,11 @@ describe("Task Management Logic", () => {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     expect(formatDueDate(yesterday.toISOString())).toBe("Overdue");
+    
+    // Far future
+    const farFuture = new Date();
+    farFuture.setDate(farFuture.getDate() + 30);
+    expect(formatDueDate(farFuture.toISOString())).toBe("Due in 30 days");
   });
 
   it("should filter solo mode tasks correctly", () => {
@@ -248,6 +403,59 @@ describe("Task Management Logic", () => {
     );
     expect(soloTasks).toHaveLength(2);
     expect(soloTasks.map(t => t.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("should require title for task creation", () => {
+    const validateTask = (title: string) => title.trim().length > 0;
+    expect(validateTask("")).toBe(false);
+    expect(validateTask("   ")).toBe(false);
+    expect(validateTask("Clean kitchen")).toBe(true);
+  });
+
+  it("should require assigned_to for task creation", () => {
+    const validateAssignee = (assignedTo: string | null) => !!assignedTo && assignedTo.length > 0;
+    expect(validateAssignee(null)).toBe(false);
+    expect(validateAssignee("")).toBe(false);
+    expect(validateAssignee("user-1")).toBe(true);
+  });
+
+  it("should validate priority values", () => {
+    const validPriorities = ["low", "medium", "high"];
+    expect(validPriorities).toContain("low");
+    expect(validPriorities).toContain("medium");
+    expect(validPriorities).toContain("high");
+    expect(validPriorities).not.toContain("urgent");
+    expect(validPriorities).not.toContain("");
+  });
+
+  it("should handle task with no due date", () => {
+    const task = { title: "Buy groceries", due_date: null, reminder_time: null };
+    expect(task.due_date).toBeNull();
+    expect(task.reminder_time).toBeNull();
+  });
+
+  it("should handle rejection requiring a comment", () => {
+    const validateRejection = (comment: string) => comment.trim().length > 0;
+    expect(validateRejection("")).toBe(false);
+    expect(validateRejection("   ")).toBe(false);
+    expect(validateRejection("Not my turn")).toBe(true);
+  });
+
+  it("should handle self-assigned tasks (creator = assignee)", () => {
+    const task = { created_by: "user-1", assigned_to: "user-1", status: "pending" };
+    const isSelfAssigned = task.created_by === task.assigned_to;
+    expect(isSelfAssigned).toBe(true);
+    // Self-assigned tasks still need approval
+    const needsApproval = task.status === "pending" && task.assigned_to === "user-1";
+    expect(needsApproval).toBe(true);
+  });
+
+  it("should handle empty task list gracefully", () => {
+    const tasks: any[] = [];
+    const pending = tasks.filter(t => t.status === "pending");
+    const inProgress = tasks.filter(t => t.status === "in_progress");
+    expect(pending).toHaveLength(0);
+    expect(inProgress).toHaveLength(0);
   });
 });
 
@@ -283,23 +491,34 @@ describe("Navigation Logic", () => {
 });
 
 describe("Alarm Logic", () => {
-  it("should parse alarm time to minutes", () => {
-    const timeToMinutes = (time: string): number => {
-      const [h, m] = time.split(':').map(Number);
-      return h * 60 + m;
-    };
+  const timeToMinutes = (time: string): number => {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
+  };
 
+  const shouldTrigger = (alarmMinutes: number, nowMinutes: number, windowMinutes = 2) => {
+    const diff = nowMinutes - alarmMinutes;
+    return diff >= 0 && diff <= windowMinutes;
+  };
+
+  const canDismiss = (conditionType: string, isOwner: boolean, ringCount: number, conditionValue: number) => {
+    switch (conditionType) {
+      case "anyone_can_dismiss": return true;
+      case "owner_only": return isOwner;
+      case "after_rings": return ringCount >= conditionValue;
+      case "multiple_ack": return ringCount >= conditionValue;
+      default: return false;
+    }
+  };
+
+  it("should parse alarm time to minutes", () => {
     expect(timeToMinutes("08:30")).toBe(510);
     expect(timeToMinutes("00:00")).toBe(0);
     expect(timeToMinutes("23:59")).toBe(1439);
+    expect(timeToMinutes("12:00")).toBe(720);
   });
 
   it("should check if alarm should trigger within window", () => {
-    const shouldTrigger = (alarmMinutes: number, nowMinutes: number) => {
-      const diff = nowMinutes - alarmMinutes;
-      return diff >= 0 && diff <= 2;
-    };
-
     expect(shouldTrigger(510, 510)).toBe(true); // exactly on time
     expect(shouldTrigger(510, 511)).toBe(true); // 1 min late
     expect(shouldTrigger(510, 512)).toBe(true); // 2 min late
@@ -307,30 +526,115 @@ describe("Alarm Logic", () => {
     expect(shouldTrigger(510, 509)).toBe(false); // too early
   });
 
+  it("should handle midnight boundary (23:59 → 00:00)", () => {
+    // Alarm at 23:59, current time wraps to 00:00 next day
+    const alarmMin = timeToMinutes("23:59");
+    expect(alarmMin).toBe(1439);
+    // At 23:59 itself — should trigger
+    expect(shouldTrigger(1439, 1439)).toBe(true);
+    // At 00:00 (0 minutes) — wraps, diff is negative, should NOT trigger
+    expect(shouldTrigger(1439, 0)).toBe(false);
+  });
+
+  it("should handle alarm at 00:00 midnight", () => {
+    expect(shouldTrigger(0, 0)).toBe(true);
+    expect(shouldTrigger(0, 1)).toBe(true);
+    expect(shouldTrigger(0, 2)).toBe(true);
+    expect(shouldTrigger(0, 3)).toBe(false);
+  });
+
   it("should check days of week correctly", () => {
     const daysOfWeek = [1, 2, 3, 4, 5]; // weekdays
-    const monday = 1;
-    const sunday = 0;
-    
-    expect(daysOfWeek.includes(monday)).toBe(true);
-    expect(daysOfWeek.includes(sunday)).toBe(false);
+    expect(daysOfWeek.includes(1)).toBe(true); // Monday
+    expect(daysOfWeek.includes(0)).toBe(false); // Sunday
+    expect(daysOfWeek.includes(6)).toBe(false); // Saturday
+  });
+
+  it("should handle every-day alarm", () => {
+    const everyDay = [0, 1, 2, 3, 4, 5, 6];
+    for (let d = 0; d <= 6; d++) {
+      expect(everyDay.includes(d)).toBe(true);
+    }
+  });
+
+  it("should handle weekend-only alarm", () => {
+    const weekends = [0, 6]; // Sun, Sat
+    expect(weekends.includes(0)).toBe(true);
+    expect(weekends.includes(6)).toBe(true);
+    expect(weekends.includes(1)).toBe(false);
+    expect(weekends.includes(5)).toBe(false);
+  });
+
+  it("should handle empty days_of_week (disabled alarm)", () => {
+    const noDays: number[] = [];
+    for (let d = 0; d <= 6; d++) {
+      expect(noDays.includes(d)).toBe(false);
+    }
   });
 
   it("should handle dismiss conditions", () => {
-    const canDismiss = (conditionType: string, isOwner: boolean, ringCount: number, conditionValue: number) => {
-      switch (conditionType) {
-        case "anyone_can_dismiss": return true;
-        case "owner_only": return isOwner;
-        case "after_rings": return ringCount >= conditionValue;
-        default: return false;
-      }
-    };
-
     expect(canDismiss("anyone_can_dismiss", false, 0, 0)).toBe(true);
     expect(canDismiss("owner_only", true, 0, 0)).toBe(true);
     expect(canDismiss("owner_only", false, 0, 0)).toBe(false);
     expect(canDismiss("after_rings", false, 5, 3)).toBe(true);
     expect(canDismiss("after_rings", false, 2, 3)).toBe(false);
+    expect(canDismiss("after_rings", false, 3, 3)).toBe(true); // exactly at threshold
+  });
+
+  it("should enforce hard cutoff after 3 rings by default", () => {
+    const MAX_RINGS = 3;
+    const shouldStop = (ringCount: number) => ringCount >= MAX_RINGS;
+    expect(shouldStop(0)).toBe(false);
+    expect(shouldStop(1)).toBe(false);
+    expect(shouldStop(2)).toBe(false);
+    expect(shouldStop(3)).toBe(true);
+    expect(shouldStop(4)).toBe(true);
+  });
+
+  it("should handle multiple_ack dismiss condition", () => {
+    // Requires N acknowledgments
+    expect(canDismiss("multiple_ack", false, 2, 2)).toBe(true);
+    expect(canDismiss("multiple_ack", false, 1, 2)).toBe(false);
+    expect(canDismiss("multiple_ack", false, 0, 2)).toBe(false);
+  });
+
+  it("should apply timezone offset correctly", () => {
+    const applyTimezoneOffset = (alarmMinutes: number, offsetMinutes: number) => {
+      let adjusted = alarmMinutes - offsetMinutes;
+      if (adjusted < 0) adjusted += 1440;
+      if (adjusted >= 1440) adjusted -= 1440;
+      return adjusted;
+    };
+    
+    // Alarm at 08:30 IST (UTC+5:30 = 330 min offset)
+    const utcMinutes = applyTimezoneOffset(510, 330);
+    expect(utcMinutes).toBe(180); // 03:00 UTC
+
+    // Alarm at 01:00 with +120 offset → wraps to previous day
+    const wrapped = applyTimezoneOffset(60, 120);
+    expect(wrapped).toBe(1380); // 23:00 UTC previous day
+  });
+
+  it("should handle inactive alarm", () => {
+    const alarm = { is_active: false, alarm_time: "08:00", days_of_week: [1, 2, 3, 4, 5] };
+    const shouldRing = alarm.is_active;
+    expect(shouldRing).toBe(false);
+  });
+
+  it("should prevent duplicate triggers (idempotency)", () => {
+    const existingTriggers = [
+      { alarm_id: "alarm-1", triggered_at: "2026-03-08T08:00:00Z", status: "ringing" },
+    ];
+    const isDuplicate = (alarmId: string) =>
+      existingTriggers.some(t => t.alarm_id === alarmId && t.status === "ringing");
+    
+    expect(isDuplicate("alarm-1")).toBe(true);
+    expect(isDuplicate("alarm-2")).toBe(false);
+  });
+
+  it("should handle unknown dismiss condition type", () => {
+    expect(canDismiss("unknown_type", true, 100, 0)).toBe(false);
+    expect(canDismiss("", false, 0, 0)).toBe(false);
   });
 });
 
