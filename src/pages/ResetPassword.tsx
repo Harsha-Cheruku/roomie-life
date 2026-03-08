@@ -45,8 +45,14 @@ export const ResetPassword = () => {
       }
     }
 
+    if (queryError) {
+      setStatus("expired");
+      return () => { mounted = false; };
+    }
+
     // PKCE flow: exchange code for session
-    if (code && type === "recovery") {
+    // Some recovery links include only ?code=... without type=recovery
+    if (code && (type === "recovery" || type === null)) {
       supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
         if (!mounted) return;
         if (error) {
@@ -54,6 +60,8 @@ export const ResetPassword = () => {
           setStatus("expired");
         } else if (data.session) {
           setStatus("ready");
+        } else {
+          setStatus("expired");
         }
       });
       return () => { mounted = false; };
