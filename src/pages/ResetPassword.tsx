@@ -8,6 +8,7 @@ import { Lock, Check, Sparkles, Loader2, Mail, RefreshCw } from "lucide-react";
 import { z } from "zod";
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+const emailSchema = z.string().email("Please enter a valid email");
 
 export const ResetPassword = () => {
   const [password, setPassword] = useState("");
@@ -29,6 +30,7 @@ export const ResetPassword = () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const type = params.get("type");
+    const queryError = params.get("error");
 
     // Check for error in hash (Supabase redirects with #error=...&error_description=...)
     if (hash) {
@@ -43,8 +45,14 @@ export const ResetPassword = () => {
       }
     }
 
+    if (queryError) {
+      setStatus("expired");
+      return () => { mounted = false; };
+    }
+
     // PKCE flow: exchange code for session
-    if (code && type === "recovery") {
+    // Some recovery links include only ?code=... without type=recovery
+    if (code && (type === "recovery" || type === null)) {
       supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
         if (!mounted) return;
         if (error) {
@@ -52,6 +60,8 @@ export const ResetPassword = () => {
           setStatus("expired");
         } else if (data.session) {
           setStatus("ready");
+        } else {
+          setStatus("expired");
         }
       });
       return () => { mounted = false; };
@@ -128,20 +138,25 @@ export const ResetPassword = () => {
   };
 
   const handleResend = async () => {
-    if (!resendEmail.trim()) {
-      toast({ title: "Enter your email", variant: "destructive" });
+    const normalizedEmail = resendEmail.trim().toLowerCase();
+    const parsed = emailSchema.safeParse(normalizedEmail);
+
+    if (!parsed.success) {
+      toast({ title: parsed.error.errors[0].message, variant: "destructive" });
       return;
     }
+
+    setResendEmail(normalizedEmail);
     setResending(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resendEmail, {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) {
         toast({ title: "Error", description: error.message, variant: "destructive" });
       } else {
         setResent(true);
-        toast({ title: "Reset link sent! 📬", description: "Check your email for the new link." });
+        toast({ title: "Reset link sent! 📬", description: "If an account exists, check your email for the new link." });
       }
     } finally {
       setResending(false);
@@ -196,7 +211,7 @@ export const ResetPassword = () => {
               />
               <Button
                 onClick={handleResend}
-                disabled={resending || !resendEmail.trim()}
+                disabled={resending || !resendEmail.trim() || !emailSchema.safeParse(resendEmail.trim().toLowerCase()).success}
                 variant="gradient"
                 size="lg"
                 className="w-full"
