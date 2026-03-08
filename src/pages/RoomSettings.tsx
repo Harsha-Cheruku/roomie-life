@@ -366,6 +366,14 @@ export const RoomSettings = () => {
           )}
         </section>
       </div>
+
+      <AvatarPicker
+        open={showAvatarPicker}
+        onOpenChange={setShowAvatarPicker}
+        currentAvatar={profile?.avatar || "😎"}
+        onSelect={handleAvatarChange}
+        isLoading={isSavingAvatar}
+      />
     </div>
   );
 };
