@@ -196,7 +196,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       <Card>
         <CardContent className="p-4">
           <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Youtube className="h-5 w-5 text-red-500" />
+            <Youtube className="h-5 w-5 text-destructive" />
             Share YouTube Music
           </h3>
 
