@@ -34,6 +34,14 @@ const extractYouTubeId = (url: string): string | null => {
   return null;
 };
 
+const extractPlaylistUrl = (url: string): string | null => {
+  const match = url.match(/[?&]list=([^&\s]+)/);
+  if (match) {
+    return `https://youtube.com/playlist?list=${match[1]}`;
+  }
+  return null;
+};
+
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
