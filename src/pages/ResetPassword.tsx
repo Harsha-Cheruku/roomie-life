@@ -8,6 +8,7 @@ import { Lock, Check, Sparkles, Loader2, Mail, RefreshCw } from "lucide-react";
 import { z } from "zod";
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
+const emailSchema = z.string().email("Please enter a valid email");
 
 export const ResetPassword = () => {
   const [password, setPassword] = useState("");
