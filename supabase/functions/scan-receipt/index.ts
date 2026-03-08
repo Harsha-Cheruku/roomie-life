@@ -38,11 +38,12 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `You are a receipt OCR assistant. Extract all items from the receipt image with their names and prices. 
+            content: `You are a highly accurate receipt OCR assistant. Your job is to extract EVERY item from receipt images with precise prices.
+
 Return ONLY a valid JSON object with this exact structure:
 {
   "title": "Store name or receipt title",
@@ -53,21 +54,25 @@ Return ONLY a valid JSON object with this exact structure:
   "total": 24.49
 }
 
-Rules:
-- Extract ALL line items visible on the receipt
-- Use the exact item names as shown
-- Convert all prices to decimal numbers (e.g., 12.99 not "12.99" or "$12.99")
-- If quantity is visible, include it; otherwise default to 1
-- Calculate or extract the total
+CRITICAL RULES FOR ACCURACY:
+- Extract ALL line items visible on the receipt — do not skip any
+- Use EXACT item names as printed on the receipt
+- Prices MUST be decimal numbers (e.g., 12.99 not "12.99" or "₹12.99" or "$12.99")
+- Remove currency symbols, commas from prices — "1,299.00" becomes 1299.00
+- If quantity is shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit price)
+- If a discount/offer line exists, include it as a negative price item
+- The "total" field should match the receipt's total. If not visible, SUM all (price × quantity) values
+- Verify: sum of (item.price × item.quantity) should approximately equal total
+- For Indian receipts: handle ₹ symbol, GST/CGST/SGST lines, MRP, and common formats
 - If you can't read the receipt clearly, return { "error": "Could not read receipt" }
-- Return ONLY the JSON, no markdown, no explanation`
+- Return ONLY the JSON object, no markdown, no explanation, no extra text`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Please extract all items from this receipt with their prices.'
+                text: 'Extract all items from this receipt with accurate prices and quantities. Double-check each price matches what is printed.'
               },
               {
                 type: 'image_url',
@@ -78,7 +83,7 @@ Rules:
             ]
           }
         ],
-        max_tokens: 2000,
+        max_tokens: 4000,
       }),
     });
 
