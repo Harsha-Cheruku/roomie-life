@@ -232,10 +232,15 @@ export const ExpenseSplitter = ({
     items.forEach((item, index) => {
       const assignedMembers = assignments[index] || [];
       if (assignedMembers.includes(userId) && assignedMembers.length > 0) {
-        total += (item.price * item.quantity) / assignedMembers.length;
+        const itemTotal = Math.round((item.price * item.quantity) * 100) / 100;
+        const baseShare = Math.floor((itemTotal / assignedMembers.length) * 100) / 100;
+        const remainder = Math.round((itemTotal - baseShare * assignedMembers.length) * 100) / 100;
+        const memberIndex = assignedMembers.indexOf(userId);
+        // First member gets the remainder to keep total accurate
+        total += memberIndex === 0 ? baseShare + remainder : baseShare;
       }
     });
-    return total;
+    return Math.round(total * 100) / 100;
   };
 
   // Get splits for locked view
