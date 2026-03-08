@@ -7,6 +7,8 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { Auth } from "./pages/Auth";
+import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
 import { RoomSetup } from "./pages/RoomSetup";
 import { RoomSettings } from "./pages/RoomSettings";
 import { Expenses } from "./pages/Expenses";
