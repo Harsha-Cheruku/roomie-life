@@ -4,8 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Mail, Lock, User, ArrowRight, Sparkles } from "lucide-react";
+import { Mail, Lock, User, ArrowRight } from "lucide-react";
 import { z } from "zod";
+import logoImg from "@/assets/logo.jpg";
 
 const emailSchema = z.string().email("Please enter a valid email");
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -103,9 +104,7 @@ export const Auth = () => {
       <div className="flex-1 flex flex-col items-center justify-center px-6 py-12">
         {/* Logo */}
         <div className="mb-8 text-center animate-scale-in">
-          <div className="w-20 h-20 gradient-primary rounded-3xl flex items-center justify-center mx-auto mb-4 shadow-glow">
-            <Sparkles className="w-10 h-10 text-primary-foreground" />
-          </div>
+          <img src={logoImg} alt="RoomMate Logo" className="w-24 h-24 rounded-3xl mx-auto mb-4 shadow-glow object-contain" />
           <h1 className="font-display text-3xl font-bold text-foreground">RoomMate</h1>
           <p className="text-muted-foreground mt-1">Shared Living Made Easy</p>
         </div>
