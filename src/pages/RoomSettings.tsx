@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RoomMemberWithProfile {
   user_id: string;
