@@ -193,6 +193,33 @@ export const RoomSettings = () => {
       </header>
 
       <div className="p-4 space-y-6">
+        {/* Profile Section */}
+        <section className="bg-card rounded-2xl p-4 shadow-card">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-4">
+            Your Profile
+          </h2>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowAvatarPicker(true)}
+              className="relative w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl hover:bg-primary/20 transition-colors group"
+            >
+              {profile?.avatar || "😎"}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Pencil className="w-3 h-3 text-primary-foreground" />
+              </div>
+            </button>
+            <div>
+              <p className="font-medium text-foreground">{profile?.display_name || "User"}</p>
+              <button
+                onClick={() => setShowAvatarPicker(true)}
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+              >
+                Change avatar
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Room Switcher Section */}
         {userRooms.length > 0 && (
           <section className="bg-card rounded-2xl p-4 shadow-card">
