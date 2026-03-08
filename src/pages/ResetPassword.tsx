@@ -211,7 +211,7 @@ export const ResetPassword = () => {
               />
               <Button
                 onClick={handleResend}
-                disabled={resending || !resendEmail.trim()}
+                disabled={resending || !resendEmail.trim() || !emailSchema.safeParse(resendEmail.trim().toLowerCase()).success}
                 variant="gradient"
                 size="lg"
                 className="w-full"

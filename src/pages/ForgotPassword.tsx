@@ -19,16 +19,20 @@ export const ForgotPassword = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = emailSchema.safeParse(email);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = emailSchema.safeParse(normalizedEmail);
     if (!result.success) {
       setError(result.error.errors[0].message);
       return;
     }
+
+    setEmail(normalizedEmail);
     setError(undefined);
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
 
@@ -42,7 +46,7 @@ export const ForgotPassword = () => {
         setSent(true);
         toast({
           title: "Check your email 📬",
-          description: "We've sent you a password reset link.",
+          description: "If an account exists for this email, a reset link has been sent.",
         });
       }
     } finally {
