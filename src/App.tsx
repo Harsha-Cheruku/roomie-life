@@ -23,6 +23,7 @@ import Notifications from "./pages/Notifications";
 import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
+import Install from "./pages/Install";
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { useEffect } from "react";
