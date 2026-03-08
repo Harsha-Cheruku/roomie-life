@@ -72,17 +72,25 @@ export const ExpenseOverview = () => {
 
       if (error) throw error;
 
-      // Fetch room members with profiles
-      const { data: members } = await supabase
+      // Fetch room members then profiles separately (no FK between room_members and profiles)
+      const { data: roomMembers } = await supabase
         .from('room_members')
-        .select(`
-          user_id,
-          profiles:user_id (
-            display_name,
-            avatar
-          )
-        `)
+        .select('user_id')
         .eq('room_id', currentRoom.id);
+
+      const memberUserIds = roomMembers?.map((m: any) => m.user_id) || [];
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('user_id, display_name, avatar')
+        .in('user_id', memberUserIds);
+
+      const profileMap = new Map(
+        (profilesData || []).map((p: any) => [p.user_id, p])
+      );
+      const members = roomMembers?.map((m: any) => ({
+        user_id: m.user_id,
+        profiles: profileMap.get(m.user_id) || null,
+      })) || [];
 
       // Calculate totals with new labels
       let total = 0;
