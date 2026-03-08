@@ -30,6 +30,7 @@ export const ResetPassword = () => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const type = params.get("type");
+    const queryError = params.get("error");
 
     // Check for error in hash (Supabase redirects with #error=...&error_description=...)
     if (hash) {
