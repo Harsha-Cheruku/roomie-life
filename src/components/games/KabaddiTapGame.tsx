@@ -32,7 +32,7 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
   const [scores, setScores] = useState<Record<string, number>>({});
   const [currentRaider, setCurrentRaider] = useState(0);
   const [gameFinished, setGameFinished] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
 
   useEffect(() => {
     if (lobby?.game_state) {
