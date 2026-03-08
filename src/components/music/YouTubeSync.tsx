@@ -113,6 +113,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       });
     }
     toast.success("Video shared with your room! 🎶");
+    
+    // Extract and save playlist URL if present
+    const playlist = extractPlaylistUrl(youtubeUrl);
+    if (playlist) setLastPlaylistUrl(playlist);
+    
     setYoutubeUrl("");
   }, [youtubeUrl, user?.id, profile]);
 
