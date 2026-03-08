@@ -138,20 +138,25 @@ export const ResetPassword = () => {
   };
 
   const handleResend = async () => {
-    if (!resendEmail.trim()) {
-      toast({ title: "Enter your email", variant: "destructive" });
+    const normalizedEmail = resendEmail.trim().toLowerCase();
+    const parsed = emailSchema.safeParse(normalizedEmail);
+
+    if (!parsed.success) {
+      toast({ title: parsed.error.errors[0].message, variant: "destructive" });
       return;
     }
+
+    setResendEmail(normalizedEmail);
     setResending(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(resendEmail, {
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (error) {
         toast({ title: "Error", description: error.message, variant: "destructive" });
       } else {
         setResent(true);
-        toast({ title: "Reset link sent! 📬", description: "Check your email for the new link." });
+        toast({ title: "Reset link sent! 📬", description: "If an account exists, check your email for the new link." });
       }
     } finally {
       setResending(false);
