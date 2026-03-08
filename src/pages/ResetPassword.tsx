@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Lock, Check, Sparkles } from "lucide-react";
+import { Lock, Check, Sparkles, Loader2 } from "lucide-react";
 import { z } from "zod";
 
 const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
@@ -15,25 +15,60 @@ export const ResetPassword = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
-  const [isRecovery, setIsRecovery] = useState(false);
+  const [status, setStatus] = useState<"loading" | "ready" | "invalid">("loading");
   const { toast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Listen for the PASSWORD_RECOVERY event from the URL hash
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    let mounted = true;
+
+    // The recovery link redirects here with tokens in the URL hash.
+    // Supabase auto-exchanges them, firing PASSWORD_RECOVERY then SIGNED_IN.
+    // We also check if the user already has an active session (recovery already processed).
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!mounted) return;
+      
       if (event === "PASSWORD_RECOVERY") {
-        setIsRecovery(true);
+        setStatus("ready");
+      } else if (event === "SIGNED_IN" && session) {
+        // If we got here via recovery link, the session is valid for password update
+        // Give a brief moment for PASSWORD_RECOVERY to fire first
+        setTimeout(() => {
+          if (mounted) {
+            setStatus(prev => prev === "loading" ? "ready" : prev);
+          }
+        }, 500);
       }
     });
 
-    // Also check hash for type=recovery
-    const hash = window.location.hash;
-    if (hash.includes("type=recovery")) {
-      setIsRecovery(true);
-    }
+    // Check if already authenticated (recovery token already exchanged on page load)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      if (session) {
+        // User has a session — they likely came from a recovery link
+        // The hash might already be consumed. Allow password reset.
+        setTimeout(() => {
+          if (mounted) {
+            setStatus(prev => prev === "loading" ? "ready" : prev);
+          }
+        }, 1500);
+      } else {
+        // No session and no hash tokens = invalid link
+        const hash = window.location.hash;
+        if (!hash || (!hash.includes("type=recovery") && !hash.includes("access_token"))) {
+          setTimeout(() => {
+            if (mounted) {
+              setStatus(prev => prev === "loading" ? "invalid" : prev);
+            }
+          }, 2000);
+        }
+      }
+    });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const validate = () => {
@@ -75,7 +110,18 @@ export const ResetPassword = () => {
     }
   };
 
-  if (!isRecovery && !isSuccess) {
+  if (status === "loading") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm bg-card rounded-3xl p-6 shadow-card text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+          <p className="text-muted-foreground">Verifying reset link...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === "invalid") {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm bg-card rounded-3xl p-6 shadow-card text-center space-y-4">
