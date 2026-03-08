@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AvatarPicker } from "@/components/profile/AvatarPicker";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -16,7 +17,7 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomSettings = () => {
-  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms } = useAuth();
+  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms, profile, refreshProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -27,6 +28,8 @@ export const RoomSettings = () => {
   const [copied, setCopied] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [isSavingAvatar, setIsSavingAvatar] = useState(false);
 
   useEffect(() => {
     if (!currentRoom) {
@@ -155,6 +158,24 @@ export const RoomSettings = () => {
     navigate("/setup?add=true");
   };
 
+  const handleAvatarChange = async (newAvatar: string) => {
+    if (!user) return;
+    setIsSavingAvatar(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ avatar: newAvatar })
+      .eq("user_id", user.id);
+    setIsSavingAvatar(false);
+    if (error) {
+      toast({ title: "Failed to update avatar", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Avatar updated! 🎉" });
+      setShowAvatarPicker(false);
+      refreshProfile();
+      fetchMembers();
+    }
+  };
+
   if (!currentRoom) return null;
 
   return (
@@ -172,6 +193,33 @@ export const RoomSettings = () => {
       </header>
 
       <div className="p-4 space-y-6">
+        {/* Profile Section */}
+        <section className="bg-card rounded-2xl p-4 shadow-card">
+          <h2 className="font-display text-lg font-semibold text-foreground mb-4">
+            Your Profile
+          </h2>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setShowAvatarPicker(true)}
+              className="relative w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-3xl hover:bg-primary/20 transition-colors group"
+            >
+              {profile?.avatar || "😎"}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <Pencil className="w-3 h-3 text-primary-foreground" />
+              </div>
+            </button>
+            <div>
+              <p className="font-medium text-foreground">{profile?.display_name || "User"}</p>
+              <button
+                onClick={() => setShowAvatarPicker(true)}
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+              >
+                Change avatar
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Room Switcher Section */}
         {userRooms.length > 0 && (
           <section className="bg-card rounded-2xl p-4 shadow-card">
@@ -345,6 +393,14 @@ export const RoomSettings = () => {
           )}
         </section>
       </div>
+
+      <AvatarPicker
+        open={showAvatarPicker}
+        onOpenChange={setShowAvatarPicker}
+        currentAvatar={profile?.avatar || "😎"}
+        onSelect={handleAvatarChange}
+        isLoading={isSavingAvatar}
+      />
     </div>
   );
 };

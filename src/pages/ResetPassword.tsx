@@ -22,46 +22,50 @@ export const ResetPassword = () => {
   useEffect(() => {
     let mounted = true;
 
-    // The recovery link redirects here with tokens in the URL hash.
-    // Supabase auto-exchanges them, firing PASSWORD_RECOVERY then SIGNED_IN.
-    // We also check if the user already has an active session (recovery already processed).
+    // Handle both hash-based (#access_token=...) and query-based (?code=...) recovery flows
+    const hash = window.location.hash;
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const type = params.get("type");
+
+    // If there's a code param (PKCE flow), exchange it first
+    if (code && type === "recovery") {
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error }) => {
+        if (!mounted) return;
+        if (error) {
+          console.error("Code exchange error:", error);
+          setStatus("invalid");
+        } else if (data.session) {
+          setStatus("ready");
+        }
+      });
+      return () => { mounted = false; };
+    }
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       
       if (event === "PASSWORD_RECOVERY") {
         setStatus("ready");
       } else if (event === "SIGNED_IN" && session) {
-        // If we got here via recovery link, the session is valid for password update
-        // Give a brief moment for PASSWORD_RECOVERY to fire first
         setTimeout(() => {
-          if (mounted) {
-            setStatus(prev => prev === "loading" ? "ready" : prev);
-          }
+          if (mounted) setStatus(prev => prev === "loading" ? "ready" : prev);
         }, 500);
       }
     });
 
-    // Check if already authenticated (recovery token already exchanged on page load)
+    // Check if already authenticated (recovery token already exchanged)
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!mounted) return;
       if (session) {
-        // User has a session — they likely came from a recovery link
-        // The hash might already be consumed. Allow password reset.
         setTimeout(() => {
-          if (mounted) {
-            setStatus(prev => prev === "loading" ? "ready" : prev);
-          }
-        }, 1500);
-      } else {
-        // No session and no hash tokens = invalid link
-        const hash = window.location.hash;
-        if (!hash || (!hash.includes("type=recovery") && !hash.includes("access_token"))) {
-          setTimeout(() => {
-            if (mounted) {
-              setStatus(prev => prev === "loading" ? "invalid" : prev);
-            }
-          }, 2000);
-        }
+          if (mounted) setStatus(prev => prev === "loading" ? "ready" : prev);
+        }, 1000);
+      } else if (!hash || (!hash.includes("type=recovery") && !hash.includes("access_token"))) {
+        // No session, no hash tokens, no code param = invalid
+        setTimeout(() => {
+          if (mounted) setStatus(prev => prev === "loading" ? "invalid" : prev);
+        }, 2500);
       }
     });
 
@@ -103,7 +107,9 @@ export const ResetPassword = () => {
           title: "Password updated! 🎉",
           description: "You can now sign in with your new password.",
         });
-        setTimeout(() => navigate("/"), 2000);
+        // Sign out so they log in fresh with new password
+        await supabase.auth.signOut();
+        setTimeout(() => navigate("/auth"), 2000);
       }
     } finally {
       setIsLoading(false);
@@ -126,7 +132,10 @@ export const ResetPassword = () => {
       <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-sm bg-card rounded-3xl p-6 shadow-card text-center space-y-4">
           <p className="text-muted-foreground">Invalid or expired reset link.</p>
-          <Button onClick={() => navigate("/auth")} variant="outline" className="w-full">
+          <Button onClick={() => navigate("/forgot-password")} variant="outline" className="w-full">
+            Request New Link
+          </Button>
+          <Button onClick={() => navigate("/auth")} variant="ghost" className="w-full">
             Back to Sign In
           </Button>
         </div>
@@ -143,7 +152,7 @@ export const ResetPassword = () => {
               <Check className="w-8 h-8 text-primary-foreground" />
             </div>
             <h2 className="font-display text-xl font-semibold text-foreground">Password Updated!</h2>
-            <p className="text-sm text-muted-foreground">Redirecting you to the app...</p>
+            <p className="text-sm text-muted-foreground">Redirecting to sign in...</p>
           </div>
         ) : (
           <>

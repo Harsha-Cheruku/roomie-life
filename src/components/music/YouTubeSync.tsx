@@ -34,6 +34,14 @@ const extractYouTubeId = (url: string): string | null => {
   return null;
 };
 
+const extractPlaylistUrl = (url: string): string | null => {
+  const match = url.match(/[?&]list=([^&\s]+)/);
+  if (match) {
+    return `https://youtube.com/playlist?list=${match[1]}`;
+  }
+  return null;
+};
+
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -42,6 +50,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [syncedUsers, setSyncedUsers] = useState<SyncedUser[]>([]);
   const [isHost, setIsHost] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [playlistCopied, setPlaylistCopied] = useState(false);
+  const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
@@ -103,6 +113,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       });
     }
     toast.success("Video shared with your room! 🎶");
+    
+    // Extract and save playlist URL if present
+    const playlist = extractPlaylistUrl(youtubeUrl);
+    if (playlist) setLastPlaylistUrl(playlist);
+    
     setYoutubeUrl("");
   }, [youtubeUrl, user?.id, profile]);
 
@@ -187,17 +202,35 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <CardContent className="p-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <Play className="h-4 w-4 text-primary shrink-0" />
-              <span className="text-sm font-medium truncate text-foreground">
-                {isHost ? "You're sharing" : `Shared by ${sharedBy}`}
-              </span>
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <Play className="h-4 w-4 text-primary shrink-0" />
+                <span className="text-sm font-medium truncate text-foreground">
+                  {isHost ? "You're sharing" : `Shared by ${sharedBy}`}
+                </span>
+              </div>
+              {isHost && (
+                <Badge variant="secondary" className="text-[10px] shrink-0">
+                  <Music className="h-3 w-3 mr-1" /> Host
+                </Badge>
+              )}
             </div>
-            {isHost && (
-              <Badge variant="secondary" className="text-[10px] shrink-0">
-                <Music className="h-3 w-3 mr-1" /> Host
-              </Badge>
+            {lastPlaylistUrl && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-1.5 h-8 text-xs"
+                onClick={() => {
+                  navigator.clipboard.writeText(lastPlaylistUrl);
+                  setPlaylistCopied(true);
+                  setTimeout(() => setPlaylistCopied(false), 2000);
+                  toast.success("Playlist link copied!");
+                }}
+              >
+                {playlistCopied ? <Check className="h-3.5 w-3.5 text-mint" /> : <Copy className="h-3.5 w-3.5" />}
+                {playlistCopied ? "Copied!" : "Copy Playlist Link"}
+              </Button>
             )}
           </CardContent>
         </Card>
