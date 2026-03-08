@@ -224,7 +224,7 @@ export const RoomSetup = () => {
               size="lg"
               className="w-full press-effect"
               onClick={handleCreateRoom}
-              disabled={isLoading || (isAddingRoom && hasExistingRoom)}
+              disabled={isLoading}
             >
               {isLoading ? "Creating..." : "Create Room"}
               <ArrowRight className="w-5 h-5" />
