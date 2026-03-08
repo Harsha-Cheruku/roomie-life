@@ -216,7 +216,7 @@ export const RoomSetup = () => {
               onChange={(e) => setRoomName(e.target.value)}
               className="h-14 rounded-xl bg-card border border-border text-lg"
               maxLength={50}
-              disabled={isAddingRoom && hasExistingRoom}
+              
             />
 
             <Button
