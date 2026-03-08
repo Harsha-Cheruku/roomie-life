@@ -198,22 +198,13 @@ export const RoomSetup = () => {
             Give your room a name that everyone will recognize
           </p>
 
-          {/* Warning if user already has a room */}
+          {/* Info about adding another room */}
           {isAddingRoom && hasExistingRoom && (
-            <div className="bg-coral/10 border border-coral/30 rounded-xl p-4 mb-6">
-              <p className="text-coral text-sm font-medium">⚠️ You're already in a room</p>
-              <p className="text-coral/80 text-xs mt-1">
-                You need to leave your current room before creating a new one. 
-                Go to Room Settings to leave your current room.
+            <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 mb-6">
+              <p className="text-primary text-sm font-medium">ℹ️ Adding a new room</p>
+              <p className="text-muted-foreground text-xs mt-1">
+                You can be part of multiple rooms. This will create a new room you can switch between.
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3 text-coral border-coral/30 hover:bg-coral/10"
-                onClick={() => navigate('/room-settings')}
-              >
-                Go to Room Settings
-              </Button>
             </div>
           )}
 
