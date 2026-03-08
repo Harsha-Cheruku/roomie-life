@@ -99,7 +99,7 @@ const queryClient = new QueryClient({
 function AllProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>{children}</BrowserRouter>
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>{children}</BrowserRouter>
     </QueryClientProvider>
   );
 }
