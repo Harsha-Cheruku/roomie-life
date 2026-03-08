@@ -216,51 +216,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return { error: new Error("Not authenticated") };
 
     try {
-      // Use secure function to lookup room by invite code (prevents enumeration)
-      const { data: rooms, error: roomError } = await supabase
-        .rpc('lookup_room_by_invite_code', { code: inviteCode.trim() });
+      // Use secure RPC to join room by invite code (validates invite code server-side)
+      const { data: roomId, error: joinError } = await supabase
+        .rpc('join_room_by_invite', { _invite_code: inviteCode.trim() });
 
-      if (roomError) {
-        console.error("Room lookup error:", roomError);
-        return { error: new Error("Failed to find room") };
+      if (joinError) {
+        console.error("Join room error:", joinError);
+        const msg = joinError.message?.includes('Invalid invite code')
+          ? "Invalid invite code. Please check and try again."
+          : joinError.message || "Failed to join room";
+        return { error: new Error(msg) };
       }
+
+      // Fetch the room details
+      const { data: rooms } = await supabase
+        .rpc('lookup_room_by_invite_code', { code: inviteCode.trim() });
 
       const room = rooms?.[0];
       if (!room) {
-        return { error: new Error("Invalid invite code. Please check and try again.") };
-      }
-
-      // Check if already a member
-      const { data: existingMember } = await supabase
-        .from("room_members")
-        .select("id")
-        .eq("room_id", room.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (existingMember) {
-        // Already a member - just set the room
-        const newRoom = room as Room;
-        setCurrentRoom(newRoom);
-        if (!userRooms.find(r => r.id === newRoom.id)) {
-          setUserRooms(prev => [...prev, newRoom]);
-        }
-        localStorage.setItem(LAST_ROOM_KEY, newRoom.id);
-        return { error: null };
-      }
-
-      const { error: memberError } = await supabase
-        .from("room_members")
-        .insert({ room_id: room.id, user_id: user.id, role: "member" });
-
-      if (memberError) {
-        console.error("Join room error:", memberError);
-        return { error: new Error(memberError.message || "Failed to join room") };
+        return { error: new Error("Failed to load room details") };
       }
 
       const newRoom = room as Room;
       setCurrentRoom(newRoom);
-      setUserRooms(prev => [...prev, newRoom]);
+      if (!userRooms.find(r => r.id === newRoom.id)) {
+        setUserRooms(prev => [...prev, newRoom]);
+      }
       localStorage.setItem(LAST_ROOM_KEY, newRoom.id);
       
       return { error: null };
