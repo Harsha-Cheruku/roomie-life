@@ -179,7 +179,19 @@ export const Auth = () => {
             </Button>
           </form>
 
-          <div className="mt-6 text-center">
+          {isLogin && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => navigate("/forgot-password")}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Forgot your password?
+              </button>
+            </div>
+          )}
+
+          <div className="mt-4 text-center">
             <button
               type="button"
               onClick={() => {

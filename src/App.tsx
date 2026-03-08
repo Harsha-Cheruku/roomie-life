@@ -74,6 +74,8 @@ const App = () => (
           <NativeAlarmInit />
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             <Route
               path="/setup"
               element={
