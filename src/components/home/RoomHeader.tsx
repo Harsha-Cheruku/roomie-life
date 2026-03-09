@@ -329,11 +329,11 @@ export const RoomHeader = () => {
           {members.slice(0, 4).map((member, index) => (
             <div
               key={member.user_id}
-              className="relative w-10 h-10 rounded-full bg-card border-2 border-background flex items-center justify-center text-xl shadow-sm animate-scale-in"
+              className="relative animate-scale-in"
               style={{ animationDelay: `${index * 50}ms`, zIndex: members.length - index }}
               title={`${member.display_name}${member.is_online ? ' (Online)' : ''}`}
             >
-              {member.avatar || "😎"}
+              <ProfileAvatar avatar={member.avatar} size="md" className="border-2 border-background shadow-sm" />
               {/* Online indicator */}
               <span 
                 className={cn(
