@@ -79,7 +79,7 @@ export const LockedBillView = ({
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Paid by</span>
               <div className="flex items-center gap-2">
-                <span className="text-xl">{paidBy.avatar}</span>
+                <ProfileAvatar avatar={paidBy.avatar} size="sm" />
                 <span className="font-medium">{paidBy.name}</span>
               </div>
             </div>
