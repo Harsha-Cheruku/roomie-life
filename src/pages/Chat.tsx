@@ -466,11 +466,7 @@ export const Chat = () => {
                   >
                     <div className="w-8 shrink-0">
                       {showAvatar && !isOwnMessage && (
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="text-sm bg-primary/20">
-                            {senderProfile?.avatar || '😊'}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={senderProfile?.avatar} size="sm" />
                       )}
                     </div>
 
