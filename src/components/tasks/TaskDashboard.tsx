@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
