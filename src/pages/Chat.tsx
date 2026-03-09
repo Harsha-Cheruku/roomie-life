@@ -13,6 +13,7 @@ import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
 import { AttachmentPicker, AttachmentPreview } from '@/components/chat/AttachmentPicker';
 import { SecureAttachment } from '@/components/chat/SecureAttachment';
 import { toast } from 'sonner';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface Message {
   id: string;
