@@ -13,6 +13,7 @@ import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
 import { ReminderBellIcon } from "@/components/reminders/ReminderBellIcon";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SettledBillsSection } from "@/components/expenses/SettledBillsSection";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
