@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { Check, X, Loader2, Calendar, Clock, User, Flag, ArrowLeft, Play, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';

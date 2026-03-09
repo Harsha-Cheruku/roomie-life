@@ -10,6 +10,7 @@ import { RejectCommentDialog } from '@/components/tasks/RejectCommentDialog';
 import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface ExpenseSplit {
   id: string;

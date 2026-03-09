@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { LockedBillView } from './LockedBillView';
 
