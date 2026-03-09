@@ -414,11 +414,7 @@ export const Chat = () => {
         </div>
         <div className="flex -space-x-2">
           {roomMembers.slice(0, 4).map((member) => (
-            <Avatar key={member.user_id} className="w-8 h-8 border-2 border-card">
-              <AvatarFallback className="text-sm bg-primary/20">
-                {member.profile.avatar}
-              </AvatarFallback>
-            </Avatar>
+            <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="border-2 border-card" />
           ))}
           {roomMembers.length > 4 && (
             <Avatar className="w-8 h-8 border-2 border-card">
