@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight } from "lucide-react";
+import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface SyncedUser {
   user_id: string;
