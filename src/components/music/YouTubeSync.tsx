@@ -148,6 +148,24 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     }
   };
 
+  const handleJoinSession = async () => {
+    const code = joinCode.trim();
+    if (!code) {
+      toast.error("Enter an invite code");
+      return;
+    }
+    setIsJoining(true);
+    const { error } = await joinRoom(code);
+    setIsJoining(false);
+    if (error) {
+      toast.error(error.message || "Failed to join. Check the code and try again.");
+    } else {
+      toast.success("Joined room! You're now synced 🎶");
+      setJoinCode("");
+      await refreshRooms();
+    }
+  };
+
   return (
     <div className={cn("space-y-4", className)}>
       {/* Step-by-step Guide */}
