@@ -274,9 +274,7 @@ export const ExpenseDetailSheet = ({
             {/* Paid By */}
             <div className="bg-card rounded-2xl p-4 shadow-card">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-mint/20 flex items-center justify-center text-2xl">
-                  {expense.payer_profile?.avatar || '😊'}
-                </div>
+                <ProfileAvatar avatar={expense.payer_profile?.avatar} size="lg" />
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground">Paid by</p>
                   <p className="font-semibold text-foreground">
