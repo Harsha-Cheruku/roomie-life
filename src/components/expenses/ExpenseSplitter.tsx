@@ -513,11 +513,7 @@ export const ExpenseSplitter = ({
                                   : 'border-border hover:border-primary/50'
                               }`}
                             >
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback className="bg-primary/20">
-                                  {member.profile.avatar}
-                                </AvatarFallback>
-                              </Avatar>
+                              <ProfileAvatar avatar={member.profile.avatar} size="sm" />
                               <span className="flex-1 text-left text-sm truncate">
                                 {member.profile.display_name}
                               </span>
