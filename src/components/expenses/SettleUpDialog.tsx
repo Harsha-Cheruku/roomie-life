@@ -153,11 +153,7 @@ export const SettleUpDialog = ({
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
-                        <Avatar className="w-12 h-12">
-                          <AvatarFallback className="bg-mint/20 text-xl">
-                            {person.avatar}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={person.avatar} size="lg" />
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-mint font-semibold">
