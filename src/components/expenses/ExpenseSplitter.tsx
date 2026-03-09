@@ -427,11 +427,7 @@ export const ExpenseSplitter = ({
                       {(assignments[index] || []).slice(0, 3).map(userId => {
                         const member = roomMembers.find(m => m.user_id === userId);
                         return (
-                          <Avatar key={userId} className="w-6 h-6 border-2 border-background">
-                            <AvatarFallback className="text-xs bg-primary/20">
-                              {member?.profile.avatar || '😊'}
-                            </AvatarFallback>
-                          </Avatar>
+                          <ProfileAvatar key={userId} avatar={member?.profile.avatar} size="xs" className="border-2 border-background" />
                         );
                       })}
                       {(assignments[index] || []).length > 3 && (
