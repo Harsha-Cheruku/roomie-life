@@ -259,11 +259,7 @@ export const TaskDetailSheet = ({
                 <span className="text-sm">Assigned To</span>
               </div>
               <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="text-lg bg-primary/20">
-                    {task.assignee_profile?.avatar || '😊'}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfileAvatar avatar={task.assignee_profile?.avatar} size="md" />
                 <div>
                   <p className="font-medium text-foreground">
                     {isAssignedToMe ? 'You' : task.assignee_profile?.display_name || 'Unknown'}
