@@ -44,7 +44,7 @@ const extractPlaylistUrl = (url: string): string | null => {
 };
 
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
-  const { user, currentRoom, profile } = useAuth();
+  const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [sharedBy, setSharedBy] = useState<string>("");
@@ -53,6 +53,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [copied, setCopied] = useState(false);
   const [playlistCopied, setPlaylistCopied] = useState(false);
   const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
