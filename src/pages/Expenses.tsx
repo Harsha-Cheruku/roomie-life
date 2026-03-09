@@ -736,7 +736,7 @@ export const Expenses = () => {
                 className="flex-shrink-0 bg-card rounded-2xl p-4 shadow-card min-w-[140px] animate-scale-in"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="text-3xl mb-2">{person.avatar}</div>
+                <ProfileAvatar avatar={person.avatar} size="lg" className="mb-2" />
                 <p className="text-sm font-medium text-foreground">{person.name}</p>
                 <p className={cn("text-sm font-bold", person.owes > 0 ? "text-coral" : "text-mint")}>
                   {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(0)}` : `Will Get ₹${Math.abs(person.owes).toFixed(0)}`}
