@@ -209,14 +209,9 @@ export const SettleUpDialog = ({
             <div className="space-y-6">
               {/* Selected person header */}
               <div className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-3">
-                  <AvatarFallback className={cn(
-                    "text-3xl",
-                    selectedPerson.owes > 0 ? "bg-mint/20" : "bg-coral/20"
-                  )}>
-                    {selectedPerson.avatar}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="mx-auto mb-3">
+                  <ProfileAvatar avatar={selectedPerson.avatar} size="xl" />
+                </div>
                 <p className="font-semibold text-lg">{selectedPerson.name}</p>
                 <p className={cn(
                   "text-sm font-medium",

@@ -1,4 +1,5 @@
 import { Bell, Settings, Users, LogOut, Copy, Check, DoorOpen, Cog, RefreshCw, Circle, User, Crown } from "lucide-react";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useEffect } from "react";

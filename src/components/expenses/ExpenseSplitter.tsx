@@ -562,11 +562,7 @@ export const ExpenseSplitter = ({
               return (
                 <div key={member.user_id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-primary/20">
-                        {member.profile.avatar}
-                      </AvatarFallback>
-                    </Avatar>
+                    <ProfileAvatar avatar={member.profile.avatar} size="sm" />
                     <span className="text-sm">{member.profile.display_name}</span>
                     {member.user_id === user?.id && (
                       <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">

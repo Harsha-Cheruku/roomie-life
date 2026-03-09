@@ -128,7 +128,7 @@ export const LockedBillView = ({
                   className="flex items-center justify-between p-3 bg-muted/50 rounded-xl"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">{split.avatar}</span>
+                    <ProfileAvatar avatar={split.avatar} size="sm" />
                     <span className="font-medium">{split.name}</span>
                   </div>
                   <span className="font-semibold text-primary">

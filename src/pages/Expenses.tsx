@@ -865,7 +865,7 @@ export const Expenses = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-lg">{expense.payer_profile?.avatar || '😊'}</span>
+                    <ProfileAvatar avatar={expense.payer_profile?.avatar} size="sm" />
                     <span className="text-xs text-muted-foreground">
                       {expense.paid_by === user?.id ? 'You' : expense.payer_profile?.display_name} paid
                     </span>

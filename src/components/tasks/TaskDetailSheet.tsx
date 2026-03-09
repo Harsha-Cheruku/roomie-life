@@ -275,11 +275,7 @@ export const TaskDetailSheet = ({
                 <span className="text-sm">Created By</span>
               </div>
               <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="text-lg bg-mint/20">
-                    {task.creator_profile?.avatar || '😊'}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfileAvatar avatar={task.creator_profile?.avatar} size="md" />
                 <div>
                   <p className="font-medium text-foreground">
                     {isCreatedByMe ? 'You' : task.creator_profile?.display_name || 'Unknown'}
