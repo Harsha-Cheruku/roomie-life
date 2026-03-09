@@ -6,9 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight } from "lucide-react";
+import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface SyncedUser {
   user_id: string;
@@ -43,7 +44,7 @@ const extractPlaylistUrl = (url: string): string | null => {
 };
 
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
-  const { user, currentRoom, profile } = useAuth();
+  const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const [sharedBy, setSharedBy] = useState<string>("");
@@ -52,6 +53,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [copied, setCopied] = useState(false);
   const [playlistCopied, setPlaylistCopied] = useState(false);
   const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
+  const [joinCode, setJoinCode] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
@@ -142,6 +145,24 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       toast.success("Invite code copied!");
+    }
+  };
+
+  const handleJoinSession = async () => {
+    const code = joinCode.trim();
+    if (!code) {
+      toast.error("Enter an invite code");
+      return;
+    }
+    setIsJoining(true);
+    const { error } = await joinRoom(code);
+    setIsJoining(false);
+    if (error) {
+      toast.error(error.message || "Failed to join. Check the code and try again.");
+    } else {
+      toast.success("Joined room! You're now synced 🎶");
+      setJoinCode("");
+      await refreshRooms();
     }
   };
 
@@ -238,8 +259,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
 
       {/* Listeners & Invite */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-3">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between mb-1">
             <h3 className="text-sm font-semibold flex items-center gap-2 text-foreground">
               <Users className="h-4 w-4 text-primary" />
               {syncedUsers.length > 0 ? `${syncedUsers.length} Listening Now` : "No one else here yet"}
@@ -253,9 +274,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             <div className="flex flex-wrap gap-2">
               {syncedUsers.map((u) => (
                 <div key={u.user_id} className="flex items-center gap-1.5 bg-muted rounded-full px-3 py-1.5">
-                  <Avatar className="w-5 h-5">
-                    <AvatarFallback className="text-[10px] bg-primary/20">{u.avatar}</AvatarFallback>
-                  </Avatar>
+                  <ProfileAvatar avatar={u.avatar} size="xs" />
                   <span className="text-xs font-medium text-foreground">{u.user_id === user?.id ? "You" : u.display_name}</span>
                 </div>
               ))}
@@ -263,6 +282,30 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           ) : (
             <p className="text-xs text-muted-foreground">Share the invite code so your roommates can join and listen together!</p>
           )}
+
+          {/* Join Session Input */}
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-2">Have an invite code? Join a session:</p>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter invite code..."
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === "Enter" && handleJoinSession()}
+                className="flex-1 h-10 rounded-xl uppercase tracking-widest font-semibold text-center"
+                maxLength={6}
+              />
+              <Button
+                onClick={handleJoinSession}
+                disabled={!joinCode.trim() || isJoining}
+                className="h-10 px-4 rounded-xl gap-1.5"
+                size="sm"
+              >
+                <LogIn className="h-4 w-4" />
+                {isJoining ? "Joining..." : "Join"}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
