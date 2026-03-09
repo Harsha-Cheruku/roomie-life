@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -336,9 +337,7 @@ export const TaskDashboard = ({ tasks }: TaskDashboardProps) => {
                   key={task.id} 
                   className="flex items-center gap-3 p-3 bg-muted/30 rounded-xl"
                 >
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
-                    {task.assignee_profile?.avatar || '😊'}
-                  </div>
+                  <ProfileAvatar avatar={task.assignee_profile?.avatar} size="md" />
                   <div className="flex-1 min-w-0">
                     <p className={cn(
                       "font-medium text-sm truncate",

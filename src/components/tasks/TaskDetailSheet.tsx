@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { Check, X, Loader2, Calendar, Clock, User, Flag, ArrowLeft, Play, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -259,11 +260,7 @@ export const TaskDetailSheet = ({
                 <span className="text-sm">Assigned To</span>
               </div>
               <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="text-lg bg-primary/20">
-                    {task.assignee_profile?.avatar || '😊'}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfileAvatar avatar={task.assignee_profile?.avatar} size="md" />
                 <div>
                   <p className="font-medium text-foreground">
                     {isAssignedToMe ? 'You' : task.assignee_profile?.display_name || 'Unknown'}
@@ -279,11 +276,7 @@ export const TaskDetailSheet = ({
                 <span className="text-sm">Created By</span>
               </div>
               <div className="flex items-center gap-3">
-                <Avatar className="w-10 h-10">
-                  <AvatarFallback className="text-lg bg-mint/20">
-                    {task.creator_profile?.avatar || '😊'}
-                  </AvatarFallback>
-                </Avatar>
+                <ProfileAvatar avatar={task.creator_profile?.avatar} size="md" />
                 <div>
                   <p className="font-medium text-foreground">
                     {isCreatedByMe ? 'You' : task.creator_profile?.display_name || 'Unknown'}

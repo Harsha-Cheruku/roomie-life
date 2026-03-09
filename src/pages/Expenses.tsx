@@ -13,6 +13,7 @@ import { MarkAsPaidDialog } from "@/components/expenses/MarkAsPaidDialog";
 import { RejectCommentDialog } from "@/components/tasks/RejectCommentDialog";
 import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
 import { ReminderBellIcon } from "@/components/reminders/ReminderBellIcon";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SettledBillsSection } from "@/components/expenses/SettledBillsSection";
 import { useNavigate } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
@@ -736,7 +737,7 @@ export const Expenses = () => {
                 className="flex-shrink-0 bg-card rounded-2xl p-4 shadow-card min-w-[140px] animate-scale-in"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="text-3xl mb-2">{person.avatar}</div>
+                <ProfileAvatar avatar={person.avatar} size="lg" className="mb-2" />
                 <p className="text-sm font-medium text-foreground">{person.name}</p>
                 <p className={cn("text-sm font-bold", person.owes > 0 ? "text-coral" : "text-mint")}>
                   {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(0)}` : `Will Get ₹${Math.abs(person.owes).toFixed(0)}`}
@@ -865,7 +866,7 @@ export const Expenses = () => {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{expense.title}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-lg">{expense.payer_profile?.avatar || '😊'}</span>
+                    <ProfileAvatar avatar={expense.payer_profile?.avatar} size="sm" />
                     <span className="text-xs text-muted-foreground">
                       {expense.paid_by === user?.id ? 'You' : expense.payer_profile?.display_name} paid
                     </span>

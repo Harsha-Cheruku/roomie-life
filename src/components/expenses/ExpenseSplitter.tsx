@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { LockedBillView } from './LockedBillView';
 
@@ -427,11 +428,7 @@ export const ExpenseSplitter = ({
                       {(assignments[index] || []).slice(0, 3).map(userId => {
                         const member = roomMembers.find(m => m.user_id === userId);
                         return (
-                          <Avatar key={userId} className="w-6 h-6 border-2 border-background">
-                            <AvatarFallback className="text-xs bg-primary/20">
-                              {member?.profile.avatar || '😊'}
-                            </AvatarFallback>
-                          </Avatar>
+                          <ProfileAvatar key={userId} avatar={member?.profile.avatar} size="xs" className="border-2 border-background" />
                         );
                       })}
                       {(assignments[index] || []).length > 3 && (
@@ -517,11 +514,7 @@ export const ExpenseSplitter = ({
                                   : 'border-border hover:border-primary/50'
                               }`}
                             >
-                              <Avatar className="w-8 h-8">
-                                <AvatarFallback className="bg-primary/20">
-                                  {member.profile.avatar}
-                                </AvatarFallback>
-                              </Avatar>
+                              <ProfileAvatar avatar={member.profile.avatar} size="sm" />
                               <span className="flex-1 text-left text-sm truncate">
                                 {member.profile.display_name}
                               </span>
@@ -570,11 +563,7 @@ export const ExpenseSplitter = ({
               return (
                 <div key={member.user_id} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-primary/20">
-                        {member.profile.avatar}
-                      </AvatarFallback>
-                    </Avatar>
+                    <ProfileAvatar avatar={member.profile.avatar} size="sm" />
                     <span className="text-sm">{member.profile.display_name}</span>
                     {member.user_id === user?.id && (
                       <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">

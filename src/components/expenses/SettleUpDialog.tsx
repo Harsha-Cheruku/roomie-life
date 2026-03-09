@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface Balance {
   user_id: string;
@@ -153,11 +154,7 @@ export const SettleUpDialog = ({
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
-                        <Avatar className="w-12 h-12">
-                          <AvatarFallback className="bg-mint/20 text-xl">
-                            {person.avatar}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={person.avatar} size="lg" />
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-mint font-semibold">
@@ -187,11 +184,7 @@ export const SettleUpDialog = ({
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
-                        <Avatar className="w-12 h-12">
-                          <AvatarFallback className="bg-coral/20 text-xl">
-                            {person.avatar}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={person.avatar} size="lg" />
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-coral font-semibold">
@@ -217,14 +210,9 @@ export const SettleUpDialog = ({
             <div className="space-y-6">
               {/* Selected person header */}
               <div className="text-center">
-                <Avatar className="w-20 h-20 mx-auto mb-3">
-                  <AvatarFallback className={cn(
-                    "text-3xl",
-                    selectedPerson.owes > 0 ? "bg-mint/20" : "bg-coral/20"
-                  )}>
-                    {selectedPerson.avatar}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="mx-auto mb-3">
+                  <ProfileAvatar avatar={selectedPerson.avatar} size="xl" />
+                </div>
                 <p className="font-semibold text-lg">{selectedPerson.name}</p>
                 <p className={cn(
                   "text-sm font-medium",

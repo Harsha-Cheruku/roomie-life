@@ -13,6 +13,7 @@ import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
 import { AttachmentPicker, AttachmentPreview } from '@/components/chat/AttachmentPicker';
 import { SecureAttachment } from '@/components/chat/SecureAttachment';
 import { toast } from 'sonner';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface Message {
   id: string;
@@ -413,11 +414,7 @@ export const Chat = () => {
         </div>
         <div className="flex -space-x-2">
           {roomMembers.slice(0, 4).map((member) => (
-            <Avatar key={member.user_id} className="w-8 h-8 border-2 border-card">
-              <AvatarFallback className="text-sm bg-primary/20">
-                {member.profile.avatar}
-              </AvatarFallback>
-            </Avatar>
+            <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="border-2 border-card" />
           ))}
           {roomMembers.length > 4 && (
             <Avatar className="w-8 h-8 border-2 border-card">
@@ -469,11 +466,7 @@ export const Chat = () => {
                   >
                     <div className="w-8 shrink-0">
                       {showAvatar && !isOwnMessage && (
-                        <Avatar className="w-8 h-8">
-                          <AvatarFallback className="text-sm bg-primary/20">
-                            {senderProfile?.avatar || '😊'}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={senderProfile?.avatar} size="sm" />
                       )}
                     </div>
 

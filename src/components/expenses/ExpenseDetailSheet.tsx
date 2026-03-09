@@ -10,6 +10,7 @@ import { RejectCommentDialog } from '@/components/tasks/RejectCommentDialog';
 import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface ExpenseSplit {
   id: string;
@@ -274,9 +275,7 @@ export const ExpenseDetailSheet = ({
             {/* Paid By */}
             <div className="bg-card rounded-2xl p-4 shadow-card">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-mint/20 flex items-center justify-center text-2xl">
-                  {expense.payer_profile?.avatar || '😊'}
-                </div>
+                <ProfileAvatar avatar={expense.payer_profile?.avatar} size="lg" />
                 <div className="flex-1">
                   <p className="text-sm text-muted-foreground">Paid by</p>
                   <p className="font-semibold text-foreground">
@@ -306,9 +305,7 @@ export const ExpenseDetailSheet = ({
                   return (
                     <div key={split.id} className="border border-border rounded-xl p-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
-                          {splitProfile?.avatar || '😊'}
-                        </div>
+                        <ProfileAvatar avatar={splitProfile?.avatar} size="md" />
                         <div className="flex-1">
                           <p className="font-medium text-foreground">
                             {isMe ? 'You' : splitProfile?.display_name || 'Unknown'}

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 
 interface ExtractedItem {
   name: string;
@@ -79,7 +80,7 @@ export const LockedBillView = ({
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Paid by</span>
               <div className="flex items-center gap-2">
-                <span className="text-xl">{paidBy.avatar}</span>
+                <ProfileAvatar avatar={paidBy.avatar} size="sm" />
                 <span className="font-medium">{paidBy.name}</span>
               </div>
             </div>
@@ -128,7 +129,7 @@ export const LockedBillView = ({
                   className="flex items-center justify-between p-3 bg-muted/50 rounded-xl"
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">{split.avatar}</span>
+                    <ProfileAvatar avatar={split.avatar} size="sm" />
                     <span className="font-medium">{split.name}</span>
                   </div>
                   <span className="font-semibold text-primary">
