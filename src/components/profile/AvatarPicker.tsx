@@ -8,9 +8,10 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { Camera, Loader2, Upload } from "lucide-react";
+import { Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const AVATAR_OPTIONS = [
   "😎", "😊", "🤩", "🥳", "🤗", "😇", "🤠", "🥰",
@@ -18,6 +19,9 @@ const AVATAR_OPTIONS = [
   "🌟", "🔥", "💎", "🎯", "🎨", "🎵", "🚀", "⚡",
   "🌈", "🌸", "🍀", "🌺", "🍕", "☕", "🎮", "🏆",
 ];
+
+const ALLOWED_TYPES = ["image/jpeg", "image/png"];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 interface AvatarPickerProps {
   open: boolean;
@@ -40,22 +44,25 @@ export const AvatarPicker = ({
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const isUrl = (val: string) => val.startsWith("http");
+  const isUrl = (val: string) => val.startsWith("http") || val.startsWith("blob:") || val.startsWith("data:");
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    if (!file.type.startsWith("image/")) {
+    // Validate file type - only PNG and JPG
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      toast.error("Only JPG and PNG images are allowed");
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      return; // 5MB limit
+    if (file.size > MAX_FILE_SIZE) {
+      toast.error("Image must be under 5MB");
+      return;
     }
 
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
+      const ext = file.type === "image/png" ? "png" : "jpg";
       const path = `${user.id}/avatar.${ext}`;
 
       // Upload (upsert to replace old)
@@ -73,8 +80,9 @@ export const AvatarPicker = ({
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
       setPreview(publicUrl);
       setSelected(publicUrl);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Upload failed:", err);
+      toast.error(err.message || "Upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -133,7 +141,7 @@ export const AvatarPicker = ({
               <input
                 ref={fileRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp"
+                accept="image/jpeg,image/png"
                 className="hidden"
                 onChange={handleFileChange}
               />
@@ -149,7 +157,7 @@ export const AvatarPicker = ({
                   <><Camera className="w-4 h-4" /> {preview ? "Change Photo" : "Upload Photo"}</>
                 )}
               </Button>
-              <p className="text-xs text-muted-foreground text-center">JPG, PNG or WebP · Max 5MB</p>
+              <p className="text-xs text-muted-foreground text-center">JPG or PNG only · Max 5MB</p>
             </div>
           </TabsContent>
         </Tabs>

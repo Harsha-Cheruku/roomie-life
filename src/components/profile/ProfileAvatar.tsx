@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface ProfileAvatarProps {
   avatar: string | null | undefined;
@@ -15,7 +16,8 @@ const sizeMap = {
 };
 
 export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarProps) => {
-  const isUrl = avatar?.startsWith("http");
+  const [imgError, setImgError] = useState(false);
+  const isUrl = avatar && (avatar.startsWith("http") || avatar.startsWith("blob:") || avatar.startsWith("data:"));
 
   return (
     <div
@@ -25,10 +27,16 @@ export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarP
         className
       )}
     >
-      {isUrl ? (
-        <img src={avatar!} alt="avatar" className="w-full h-full object-cover" />
+      {isUrl && !imgError ? (
+        <img
+          src={avatar}
+          alt="avatar"
+          className="w-full h-full object-cover"
+          onError={() => setImgError(true)}
+          loading="lazy"
+        />
       ) : (
-        <span>{avatar || "😎"}</span>
+        <span>{avatar && !isUrl ? avatar : "😎"}</span>
       )}
     </div>
   );

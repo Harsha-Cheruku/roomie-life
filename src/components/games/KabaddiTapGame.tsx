@@ -11,11 +11,6 @@ import { Trophy, ArrowLeft, RotateCcw, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Kabaddi Tap — Inspired by Kabaddi raiding
-// Raider taps as fast as possible in 30s while saying "kabaddi"
-// Defender must tap at right moments to tackle
-// Turn-based: each player raids once, highest taps wins
-
 interface KabaddiProps {
   onBack: () => void;
 }
@@ -33,6 +28,7 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
   const [currentRaider, setCurrentRaider] = useState(0);
   const [gameFinished, setGameFinished] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const tapsRef = useRef(0);
 
   useEffect(() => {
     if (lobby?.game_state) {
@@ -57,6 +53,7 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
   const startRaid = () => {
     if (!isMyTurn || isRaiding) return;
     setTaps(0);
+    tapsRef.current = 0;
     setTimeLeft(15);
     setIsRaiding(true);
 
@@ -76,48 +73,44 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
 
   const handleTap = () => {
     if (!isRaiding) return;
-    setTaps((t) => t + 1);
+    tapsRef.current += 1;
+    setTaps(tapsRef.current);
   };
 
   const finishRaid = async () => {
     if (!user || !lobby) return;
 
-    // Use the latest taps count via callback
-    setTaps((currentTaps) => {
-      const newScores = { ...scores, [user.id]: currentTaps };
-      const nextRaider = currentRaider + 1;
-      const isLastRaider = nextRaider >= players.length;
+    const currentTaps = tapsRef.current;
+    const newScores = { ...scores, [user.id]: currentTaps };
+    const nextRaider = currentRaider + 1;
+    const isLastRaider = nextRaider >= players.length;
 
-      if (isLastRaider) {
-        // Find winner
-        const winnerId = Object.entries(newScores).sort(([, a], [, b]) => b - a)[0]?.[0];
-        
-        saveGameResult({
-          gameType: "kabaddi_tap",
-          winnerId,
-          playerIds: players.map((p) => p.user_id),
-          result: "completed",
-          score: newScores as Record<string, unknown>,
-        });
+    if (isLastRaider) {
+      const winnerId = Object.entries(newScores).sort(([, a], [, b]) => b - a)[0]?.[0];
+      
+      saveGameResult({
+        gameType: "kabaddi_tap",
+        winnerId,
+        playerIds: players.map((p) => p.user_id),
+        result: "completed",
+        score: newScores as Record<string, unknown>,
+      });
 
-        gameLobby.updateGameState({
+      await gameLobby.updateGameState({
+        scores: newScores,
+        currentRaider: nextRaider,
+        gameFinished: true,
+      });
+    } else {
+      await gameLobby.updateGameState(
+        {
           scores: newScores,
           currentRaider: nextRaider,
-          gameFinished: true,
-        });
-      } else {
-        gameLobby.updateGameState(
-          {
-            scores: newScores,
-            currentRaider: nextRaider,
-            gameFinished: false,
-          },
-          players[nextRaider].user_id
-        );
-      }
-
-      return currentTaps;
-    });
+          gameFinished: false,
+        },
+        players[nextRaider].user_id
+      );
+    }
   };
 
   useEffect(() => {
@@ -177,11 +170,10 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
       <div className="text-center">
         <h2 className="text-lg font-bold">🤼 Kabaddi Tap</h2>
         <p className="text-xs text-muted-foreground">
-          Raider {currentRaider + 1}/{players.length}
+          Raider {Math.min(currentRaider + 1, players.length)}/{players.length}
         </p>
       </div>
 
-      {/* Raid area */}
       {isMyTurn && !gameFinished && (
         <div className="space-y-3">
           {!isRaiding ? (
@@ -219,7 +211,6 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
         </div>
       )}
 
-      {/* Scores */}
       {sortedScores.length > 0 && (
         <div className="space-y-2 bg-card rounded-xl p-4">
           <h3 className="text-sm font-semibold flex items-center gap-2">

@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -56,47 +55,75 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!currentRoom?.id || !user || !profile) return;
-    const channel = supabase.channel(`youtube-sync-${currentRoom.id}`);
-    channelRef.current = channel;
 
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        const users: SyncedUser[] = [];
-        Object.values(state).forEach((presences: any) => {
-          presences.forEach((p: any) => {
-            if (p.user_id && !users.find((u) => u.user_id === p.user_id)) {
-              users.push({ user_id: p.user_id, display_name: p.display_name, avatar: p.avatar });
-            }
-          });
-        });
-        setSyncedUsers(users);
-      })
-      .on("broadcast", { event: "youtube_play" }, (payload) => {
-        const data = payload.payload;
-        if (data.sender_id !== user.id) {
-          setActiveVideoId(data.video_id);
-          setSharedBy(data.sender_name);
-          setIsHost(false);
-          toast(`🎵 ${data.sender_name} shared a video!`);
-        }
-      })
-      .on("broadcast", { event: "youtube_stop" }, () => {
-        setActiveVideoId(null);
-        setSharedBy("");
-        setIsHost(false);
-      })
-      .subscribe(async (status) => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({ user_id: user.id, display_name: profile.display_name, avatar: profile.avatar });
-        }
+    const setupChannel = () => {
+      // Cleanup previous channel
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+
+      const channel = supabase.channel(`youtube-sync-${currentRoom.id}`, {
+        config: { presence: { key: user.id } },
       });
+      channelRef.current = channel;
 
-    return () => { supabase.removeChannel(channel); };
-  }, [currentRoom?.id, user?.id, profile]);
+      channel
+        .on("presence", { event: "sync" }, () => {
+          const state = channel.presenceState();
+          const users: SyncedUser[] = [];
+          Object.values(state).forEach((presences: any) => {
+            presences.forEach((p: any) => {
+              if (p.user_id && !users.find((u) => u.user_id === p.user_id)) {
+                users.push({ user_id: p.user_id, display_name: p.display_name, avatar: p.avatar });
+              }
+            });
+          });
+          setSyncedUsers(users);
+        })
+        .on("broadcast", { event: "youtube_play" }, (payload) => {
+          const data = payload.payload;
+          if (data.sender_id !== user.id) {
+            setActiveVideoId(data.video_id);
+            setSharedBy(data.sender_name);
+            setIsHost(false);
+            toast(`🎵 ${data.sender_name} shared a video!`);
+          }
+        })
+        .on("broadcast", { event: "youtube_stop" }, (payload) => {
+          const data = payload.payload;
+          if (data?.sender_id !== user.id) {
+            setActiveVideoId(null);
+            setSharedBy("");
+            setIsHost(false);
+          }
+        })
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") {
+            await channel.track({
+              user_id: user.id,
+              display_name: profile.display_name,
+              avatar: profile.avatar,
+            });
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            // Auto-reconnect after error
+            console.warn("YouTube sync channel error, reconnecting...");
+            if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = setTimeout(setupChannel, 3000);
+          }
+        });
+    };
+
+    setupChannel();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+    };
+  }, [currentRoom?.id, user?.id, profile?.display_name, profile?.avatar]);
 
   const shareVideo = useCallback(async () => {
     const videoId = extractYouTubeId(youtubeUrl);
@@ -109,18 +136,23 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     setIsHost(true);
 
     if (channelRef.current) {
-      await channelRef.current.send({
-        type: "broadcast",
-        event: "youtube_play",
-        payload: { video_id: videoId, sender_id: user?.id, sender_name: profile?.display_name || "Someone" },
-      });
+      try {
+        await channelRef.current.send({
+          type: "broadcast",
+          event: "youtube_play",
+          payload: { video_id: videoId, sender_id: user?.id, sender_name: profile?.display_name || "Someone" },
+        });
+        toast.success("Video shared with your room! 🎶");
+      } catch (err) {
+        console.error("Failed to broadcast video:", err);
+        toast.error("Failed to share. Please try again.");
+      }
     }
-    toast.success("Video shared with your room! 🎶");
-    
+
     // Extract and save playlist URL if present
     const playlist = extractPlaylistUrl(youtubeUrl);
     if (playlist) setLastPlaylistUrl(playlist);
-    
+
     setYoutubeUrl("");
   }, [youtubeUrl, user?.id, profile]);
 
@@ -129,9 +161,17 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     setSharedBy("");
     setIsHost(false);
     if (channelRef.current) {
-      await channelRef.current.send({ type: "broadcast", event: "youtube_stop", payload: {} });
+      try {
+        await channelRef.current.send({
+          type: "broadcast",
+          event: "youtube_stop",
+          payload: { sender_id: user?.id },
+        });
+      } catch (err) {
+        console.error("Failed to broadcast stop:", err);
+      }
     }
-  }, []);
+  }, [user?.id]);
 
   const openYouTubeApp = () => {
     const timeout = setTimeout(() => { window.open("https://www.youtube.com", "_blank"); }, 500);
@@ -155,14 +195,19 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       return;
     }
     setIsJoining(true);
-    const { error } = await joinRoom(code);
-    setIsJoining(false);
-    if (error) {
-      toast.error(error.message || "Failed to join. Check the code and try again.");
-    } else {
-      toast.success("Joined room! You're now synced 🎶");
-      setJoinCode("");
-      await refreshRooms();
+    try {
+      const { error } = await joinRoom(code);
+      if (error) {
+        toast.error(error.message || "Failed to join. Check the code and try again.");
+      } else {
+        toast.success("Joined room! You're now synced 🎶");
+        setJoinCode("");
+        await refreshRooms();
+      }
+    } catch (err) {
+      toast.error("Something went wrong. Try again.");
+    } finally {
+      setIsJoining(false);
     }
   };
 
