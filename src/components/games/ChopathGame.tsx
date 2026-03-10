@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -10,18 +10,13 @@ import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Chaupar/Chopat - Ancient Indian cross-board game
-// Simplified: Race game with cowrie shell dice (values 1-6 with special rules)
-// Each player has 4 pawns racing around the cross-shaped board (68 cells + safe zones)
-
 const BOARD_SIZE = 68;
 const SAFE_CELLS = [0, 9, 17, 26, 34, 43, 51, 60];
 const PLAYER_EMOJIS = ["🔴", "🟠", "🟢", "🔵"];
-const PLAYER_NAMES_DEFAULT = ["Red", "Orange", "Green", "Blue"];
 const PLAYER_BG = ["bg-red-500/15", "bg-orange-500/15", "bg-green-500/15", "bg-blue-500/15"];
 
 interface ChopathPawn {
-  position: number; // 0=yard, 1-68=board, 69=finished
+  position: number;
   isFinished: boolean;
 }
 
@@ -41,23 +36,21 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   const [pawnStates, setPawnStates] = useState<Record<string, ChopathPawn[]>>({});
   const [hasRolled, setHasRolled] = useState(false);
   const [message, setMessage] = useState("");
+  const rollingRef = useRef(false);
 
   useEffect(() => {
     if (lobby?.game_state) {
       if (lobby.game_state.pawnStates) setPawnStates(lobby.game_state.pawnStates);
-      if (lobby.game_state.winner) setWinner(lobby.game_state.winner);
+      if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
       if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
-      if (lobby.game_state.message) setMessage(lobby.game_state.message);
+      if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
       setHasRolled(lobby.game_state.hasRolled || false);
     }
   }, [lobby?.game_state]);
 
-  // Cowrie shell throw: returns 1-6 with ancient distribution
   const throwCowries = (): number => {
-    // Simulate 6 cowrie shells: each has 50% chance of landing face up
     const shells = Array.from({ length: 6 }, () => Math.random() > 0.5);
     const faceUp = shells.filter(Boolean).length;
-    // 0 face up = 6 (special), rest = count
     return faceUp === 0 ? 6 : faceUp;
   };
 
@@ -66,9 +59,8 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   };
 
   const handleStartGame = async () => {
-    const startOffsets = [0, 17, 34, 51];
     const initial: Record<string, ChopathPawn[]> = {};
-    players.forEach((p, i) => {
+    players.forEach((p) => {
       initial[p.user_id] = Array(4).fill(null).map(() => ({ position: 0, isFinished: false }));
     });
 
@@ -82,7 +74,8 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   };
 
   const rollDice = async () => {
-    if (!isMyTurn || rolling || winner || hasRolled) return;
+    if (!isMyTurn || rollingRef.current || winner || hasRolled) return;
+    rollingRef.current = true;
     setRolling(true);
 
     const dice = throwCowries();
@@ -94,8 +87,8 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         clearInterval(interval);
         setDiceValue(dice);
         setRolling(false);
+        rollingRef.current = false;
 
-        // Check movable pawns
         const myPawns = pawnStates[user!.id];
         const canMoveAny = myPawns?.some(
           (p) => !p.isFinished && (p.position > 0 || dice === 6 || dice === 1)
@@ -155,7 +148,6 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
       }
     }
 
-    // Check win
     const allFinished = newStates[user.id].every((p) => p.isFinished);
     let nextPlayer: string | undefined;
     let msg = "";
@@ -250,16 +242,12 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         )}
       </div>
 
-      {/* Player boards */}
       <div className="grid grid-cols-2 gap-2">
         {players.map((p, idx) => {
           const pawns = pawnStates[p.user_id] || [];
           const isCurrentTurn = lobby.current_turn_user_id === p.user_id;
           return (
-            <div
-              key={p.user_id}
-              className={cn("rounded-xl p-3 border", PLAYER_BG[idx], isCurrentTurn && "ring-2 ring-primary")}
-            >
+            <div key={p.user_id} className={cn("rounded-xl p-3 border", PLAYER_BG[idx], isCurrentTurn && "ring-2 ring-primary")}>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-lg">{PLAYER_EMOJIS[idx]}</span>
                 <span className="text-xs font-semibold truncate">{p.display_name}</span>
@@ -272,10 +260,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
                   <button
                     key={pi}
                     onClick={() => handlePawnClick(pi)}
-                    disabled={
-                      !isMyTurn || !hasRolled || p.user_id !== user?.id ||
-                      !diceValue || !canMovePawn(pawn, diceValue)
-                    }
+                    disabled={!isMyTurn || !hasRolled || p.user_id !== user?.id || !diceValue || !canMovePawn(pawn, diceValue)}
                     className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
                       pawn.isFinished

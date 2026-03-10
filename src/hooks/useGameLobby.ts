@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -35,10 +35,16 @@ export const useGameLobby = () => {
   const [lobby, setLobby] = useState<GameLobby | null>(null);
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // Subscribe to lobby changes
   useEffect(() => {
     if (!lobby?.id) return;
+
+    // Cleanup previous channel
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
 
     const lobbyChannel = supabase
       .channel(`lobby-${lobby.id}`)
@@ -47,7 +53,8 @@ export const useGameLobby = () => {
         { event: "*", schema: "public", table: "game_lobbies", filter: `id=eq.${lobby.id}` },
         (payload) => {
           if (payload.eventType === "UPDATE") {
-            setLobby(payload.new as unknown as GameLobby);
+            const updated = payload.new as unknown as GameLobby;
+            setLobby(updated);
           } else if (payload.eventType === "DELETE") {
             setLobby(null);
             setPlayers([]);
@@ -64,8 +71,11 @@ export const useGameLobby = () => {
       )
       .subscribe();
 
+    channelRef.current = lobbyChannel;
+
     return () => {
       supabase.removeChannel(lobbyChannel);
+      channelRef.current = null;
     };
   }, [lobby?.id]);
 
@@ -219,6 +229,9 @@ export const useGameLobby = () => {
     async (initialState: Record<string, any> = {}) => {
       if (!lobby || !user || lobby.host_id !== user.id) return false;
 
+      // Refresh players to get latest state
+      await fetchPlayers(lobby.id);
+
       const allReady = players.every((p) => p.is_ready);
       if (!allReady) {
         toast.error("All players must be ready!");
@@ -251,12 +264,17 @@ export const useGameLobby = () => {
     async (state: Record<string, any>, nextTurnUserId?: string) => {
       if (!lobby) return;
       const update: any = { game_state: state };
-      if (nextTurnUserId) update.current_turn_user_id = nextTurnUserId;
+      if (nextTurnUserId !== undefined) update.current_turn_user_id = nextTurnUserId;
 
-      await supabase
+      const { error } = await supabase
         .from("game_lobbies" as any)
         .update(update)
         .eq("id", lobby.id);
+
+      if (error) {
+        console.error("Failed to update game state:", error);
+        toast.error("Sync error. Please try again.");
+      }
     },
     [lobby]
   );

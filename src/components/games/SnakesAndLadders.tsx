@@ -1,7 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useGameLobby } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
@@ -11,7 +10,6 @@ import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Snakes and Ladders board config (10x10 = 100 cells)
 const SNAKES: Record<number, number> = {
   16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78,
 };
@@ -37,35 +35,22 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const [winner, setWinner] = useState<string | null>(null);
   const [positions, setPositions] = useState<Record<string, number>>({});
   const [message, setMessage] = useState("");
+  const rollingRef = useRef(false);
 
-  // Sync positions from game state
   useEffect(() => {
-    if (lobby?.game_state?.positions) {
-      setPositions(lobby.game_state.positions);
-    }
-    if (lobby?.game_state?.winner) {
-      setWinner(lobby.game_state.winner);
-    }
-    if (lobby?.game_state?.lastDice) {
-      setDiceValue(lobby.game_state.lastDice);
-    }
-    if (lobby?.game_state?.message) {
-      setMessage(lobby.game_state.message);
-    }
+    if (lobby?.game_state?.positions) setPositions(lobby.game_state.positions);
+    if (lobby?.game_state?.winner !== undefined) setWinner(lobby.game_state.winner);
+    if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
+    if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
   }, [lobby?.game_state]);
 
   const handleCreateGame = async () => {
     await gameLobby.createLobby("snakes_and_ladders", 6);
   };
 
-  const handleJoinGame = async (code: string) => {
-    return gameLobby.joinLobby(code);
-  };
-
   const handleStartGame = async () => {
     const initialPositions: Record<string, number> = {};
     players.forEach((p) => (initialPositions[p.user_id] = 0));
-
     await gameLobby.startGame({
       positions: initialPositions,
       winner: null,
@@ -74,13 +59,12 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     });
   };
 
-  const rollDice = async () => {
-    if (!isMyTurn || rolling || winner) return;
+  const rollDice = useCallback(async () => {
+    if (!isMyTurn || rollingRef.current || winner) return;
+    rollingRef.current = true;
     setRolling(true);
 
     const dice = Math.floor(Math.random() * 6) + 1;
-
-    // Animate
     let count = 0;
     const interval = setInterval(() => {
       setDiceValue(Math.floor(Math.random() * 6) + 1);
@@ -89,10 +73,11 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         clearInterval(interval);
         setDiceValue(dice);
         setRolling(false);
+        rollingRef.current = false;
         movePlayer(dice);
       }
     }, 100);
-  };
+  }, [isMyTurn, winner, positions, players, user, lobby]);
 
   const movePlayer = async (dice: number) => {
     if (!user || !lobby) return;
@@ -101,17 +86,17 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     let msg = `Rolled ${dice}`;
 
     if (newPos > 100) {
-      // Can't move past 100
       msg = `Rolled ${dice} — need exact number to win!`;
-      await updateState(positions, null, msg, dice);
+      // Pass turn even when can't move
+      const currentIdx = players.findIndex((p) => p.user_id === user.id);
+      const nextIdx = (currentIdx + 1) % players.length;
+      await updateState(positions, null, msg, dice, players[nextIdx].user_id);
       return;
     }
 
     if (newPos === 100) {
-      // Winner!
       const newPositions = { ...positions, [user.id]: 100 };
       await updateState(newPositions, user.id, `🎉 Winner!`, dice);
-
       saveGameResult({
         gameType: "snakes_and_ladders",
         winnerId: user.id,
@@ -123,25 +108,18 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       return;
     }
 
-    // Check for snakes
     if (SNAKES[newPos]) {
-      msg = `Rolled ${dice} → landed on 🐍 snake at ${newPos}, slid down to ${SNAKES[newPos]}!`;
+      msg = `Rolled ${dice} → 🐍 snake at ${newPos}, slid to ${SNAKES[newPos]}!`;
       newPos = SNAKES[newPos];
-    }
-    // Check for ladders
-    else if (LADDERS[newPos]) {
-      msg = `Rolled ${dice} → found 🪜 ladder at ${newPos}, climbed to ${LADDERS[newPos]}!`;
+    } else if (LADDERS[newPos]) {
+      msg = `Rolled ${dice} → 🪜 ladder at ${newPos}, climbed to ${LADDERS[newPos]}!`;
       newPos = LADDERS[newPos];
     }
 
     const newPositions = { ...positions, [user.id]: newPos };
-
-    // Next player turn
     const currentIdx = players.findIndex((p) => p.user_id === user.id);
     const nextIdx = (currentIdx + 1) % players.length;
-    const nextPlayerId = players[nextIdx].user_id;
-
-    await updateState(newPositions, null, msg, dice, nextPlayerId);
+    await updateState(newPositions, null, msg, dice, players[nextIdx].user_id);
   };
 
   const updateState = async (
@@ -157,7 +135,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     );
   };
 
-  // Get cell number for visual board (snakes & ladders style, bottom-left = 1)
   const getCellNumber = (row: number, col: number) => {
     const r = 9 - row;
     return r % 2 === 0 ? r * 10 + col + 1 : r * 10 + (9 - col) + 1;
@@ -168,10 +145,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   };
 
   const getDiceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
-
   const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);
 
-  // Show lobby if not playing
   if (!lobby) {
     return (
       <div className="space-y-4">
@@ -183,7 +158,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
           <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>
             Create Game
           </Button>
-          <JoinInput onJoin={handleJoinGame} isLoading={gameLobby.isLoading} />
+          <JoinInput onJoin={(code) => gameLobby.joinLobby(code)} isLoading={gameLobby.isLoading} />
           <Button variant="outline" onClick={onBack} className="w-full">
             <ArrowLeft className="h-4 w-4 mr-2" /> Back
           </Button>
@@ -209,7 +184,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     );
   }
 
-  // Game board
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -226,7 +200,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         )}
       </div>
 
-      {/* Board */}
       <div className="grid grid-cols-10 gap-[1px] bg-border rounded-lg overflow-hidden text-[9px]">
         {Array.from({ length: 10 }).map((_, row) =>
           Array.from({ length: 10 }).map((_, col) => {
@@ -252,7 +225,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
                 {playersHere.length > 0 && (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="flex -space-x-1">
-                      {playersHere.map((p, i) => (
+                      {playersHere.map((p) => (
                         <span key={p.user_id} className={cn("text-[10px]", PLAYER_COLORS[players.indexOf(p)])} title={p.display_name}>
                           {p.avatar}
                         </span>
@@ -266,42 +239,29 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         )}
       </div>
 
-      {/* Players positions */}
       <div className="flex flex-wrap gap-2">
         {players.map((p, i) => (
           <Badge
             key={p.user_id}
             variant="outline"
-            className={cn(
-              "text-xs",
-              PLAYER_BG[i],
-              lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary"
-            )}
+            className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}
           >
             {p.avatar} {p.display_name}: {positions[p.user_id] || 0}
           </Badge>
         ))}
       </div>
 
-      {/* Message */}
       {message && (
         <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
           {message}
         </div>
       )}
 
-      {/* Dice & Actions */}
       <div className="flex items-center gap-3">
-        {diceValue && (
-          <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>
-        )}
+        {diceValue && <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>}
         <div className="flex-1 space-y-2">
           {!winner && (
-            <Button
-              onClick={rollDice}
-              disabled={!isMyTurn || rolling}
-              className="w-full gradient-primary"
-            >
+            <Button onClick={rollDice} disabled={!isMyTurn || rolling} className="w-full gradient-primary">
               <Dices className="h-4 w-4 mr-2" />
               {rolling ? "Rolling..." : isMyTurn ? "Roll Dice" : "Wait for your turn"}
             </Button>
@@ -320,7 +280,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   );
 };
 
-// Shared join input component
 const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<boolean>; isLoading: boolean }) => {
   const [code, setCode] = useState("");
   return (
@@ -332,12 +291,7 @@ const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<bo
         className="flex-1 font-mono tracking-wider"
         maxLength={6}
       />
-      <Button
-        onClick={async () => {
-          if (await onJoin(code)) setCode("");
-        }}
-        disabled={!code.trim() || isLoading}
-      >
+      <Button onClick={async () => { if (await onJoin(code)) setCode(""); }} disabled={!code.trim() || isLoading}>
         Join
       </Button>
     </div>
