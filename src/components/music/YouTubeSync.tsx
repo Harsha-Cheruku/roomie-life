@@ -56,6 +56,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [isJoining, setIsJoining] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!currentRoom?.id || !user || !profile) return;
@@ -64,6 +70,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       // Cleanup previous channel
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
       }
 
       const channel = supabase.channel(`youtube-sync-${currentRoom.id}`, {
@@ -73,6 +80,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
 
       channel
         .on("presence", { event: "sync" }, () => {
+          if (!isMountedRef.current) return;
           const state = channel.presenceState();
           const users: SyncedUser[] = [];
           Object.values(state).forEach((presences: any) => {
@@ -85,15 +93,18 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           setSyncedUsers(users);
         })
         .on("broadcast", { event: "youtube_play" }, (payload) => {
+          if (!isMountedRef.current) return;
           const data = payload.payload;
           if (data.sender_id !== user.id) {
             setActiveVideoId(data.video_id);
             setSharedBy(data.sender_name);
             setIsHost(false);
+            if (data.playlist_url) setLastPlaylistUrl(data.playlist_url);
             toast(`🎵 ${data.sender_name} shared a video!`);
           }
         })
         .on("broadcast", { event: "youtube_stop" }, (payload) => {
+          if (!isMountedRef.current) return;
           const data = payload.payload;
           if (data?.sender_id !== user.id) {
             setActiveVideoId(null);
@@ -102,6 +113,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           }
         })
         .subscribe(async (status) => {
+          if (!isMountedRef.current) return;
           if (status === "SUBSCRIBED") {
             await channel.track({
               user_id: user.id,
@@ -109,10 +121,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               avatar: profile.avatar,
             });
           } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-            // Auto-reconnect after error
-            console.warn("YouTube sync channel error, reconnecting...");
+            console.warn("YouTube sync channel error, reconnecting in 3s...");
             if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-            reconnectTimeoutRef.current = setTimeout(setupChannel, 3000);
+            reconnectTimeoutRef.current = setTimeout(() => {
+              if (isMountedRef.current) setupChannel();
+            }, 3000);
           }
         });
     };
@@ -120,7 +133,10 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     setupChannel();
 
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     };
   }, [currentRoom?.id, user?.id, profile?.display_name, profile?.avatar]);
@@ -131,6 +147,10 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       toast.error("Paste a valid YouTube link (e.g. youtube.com/watch?v=...)");
       return;
     }
+
+    const playlist = extractPlaylistUrl(youtubeUrl);
+    if (playlist) setLastPlaylistUrl(playlist);
+
     setActiveVideoId(videoId);
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
@@ -140,7 +160,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         await channelRef.current.send({
           type: "broadcast",
           event: "youtube_play",
-          payload: { video_id: videoId, sender_id: user?.id, sender_name: profile?.display_name || "Someone" },
+          payload: {
+            video_id: videoId,
+            sender_id: user?.id,
+            sender_name: profile?.display_name || "Someone",
+            playlist_url: playlist,
+          },
         });
         toast.success("Video shared with your room! 🎶");
       } catch (err) {
@@ -148,10 +173,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         toast.error("Failed to share. Please try again.");
       }
     }
-
-    // Extract and save playlist URL if present
-    const playlist = extractPlaylistUrl(youtubeUrl);
-    if (playlist) setLastPlaylistUrl(playlist);
 
     setYoutubeUrl("");
   }, [youtubeUrl, user?.id, profile]);
@@ -262,7 +283,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
               title="YouTube video"
-              sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"
             />
             <Button variant="destructive" size="icon" className="absolute top-2 right-2 w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
               <X className="h-4 w-4" />
