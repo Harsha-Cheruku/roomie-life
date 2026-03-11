@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { Copy, Crown, Check, Users, Lock, Play, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { LobbyPlayer, GameLobby as GameLobbyType } from "@/hooks/useGameLobby";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface GameLobbyProps {
   lobby: GameLobbyType;
@@ -90,9 +90,7 @@ export const GameLobbyComponent = ({
             )}
           >
             <div className="relative">
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="text-lg">{player.avatar}</AvatarFallback>
-              </Avatar>
+              <ProfileAvatar avatar={player.avatar} size="md" />
               {player.user_id === lobby.host_id && (
                 <Crown className="h-3 w-3 text-yellow-500 absolute -top-1 -right-1" />
               )}

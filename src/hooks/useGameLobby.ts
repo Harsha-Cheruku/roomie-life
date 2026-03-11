@@ -79,13 +79,15 @@ export const useGameLobby = () => {
     };
   }, [lobby?.id]);
 
-  const fetchPlayers = async (lobbyId: string) => {
+  const fetchPlayers = async (lobbyId: string): Promise<LobbyPlayer[]> => {
     const { data } = await supabase
       .from("game_lobby_players" as any)
       .select("*")
       .eq("lobby_id", lobbyId)
       .order("player_order");
-    if (data) setPlayers(data as unknown as LobbyPlayer[]);
+    const result = (data as unknown as LobbyPlayer[]) || [];
+    setPlayers(result);
+    return result;
   };
 
   const createLobby = useCallback(
@@ -143,7 +145,6 @@ export const useGameLobby = () => {
       setIsLoading(true);
 
       try {
-        // Find lobby by join code
         const { data: lobbies, error: findError } = await supabase
           .from("game_lobbies" as any)
           .select("*")
@@ -229,15 +230,15 @@ export const useGameLobby = () => {
     async (initialState: Record<string, any> = {}) => {
       if (!lobby || !user || lobby.host_id !== user.id) return false;
 
-      // Refresh players to get latest state
-      await fetchPlayers(lobby.id);
+      // Fetch fresh player data and use it directly (avoids stale state)
+      const freshPlayers = await fetchPlayers(lobby.id);
 
-      const allReady = players.every((p) => p.is_ready);
+      const allReady = freshPlayers.every((p) => p.is_ready);
       if (!allReady) {
         toast.error("All players must be ready!");
         return false;
       }
-      if (players.length < 2) {
+      if (freshPlayers.length < 2) {
         toast.error("Need at least 2 players!");
         return false;
       }
@@ -246,7 +247,7 @@ export const useGameLobby = () => {
         .from("game_lobbies" as any)
         .update({
           status: "playing",
-          current_turn_user_id: players[0].user_id,
+          current_turn_user_id: freshPlayers[0].user_id,
           game_state: initialState,
         } as any)
         .eq("id", lobby.id);
@@ -257,7 +258,7 @@ export const useGameLobby = () => {
       }
       return true;
     },
-    [lobby, user, players]
+    [lobby, user]
   );
 
   const updateGameState = useCallback(
@@ -307,6 +308,12 @@ export const useGameLobby = () => {
 
   const leaveLobby = useCallback(async () => {
     if (!lobby || !user) return;
+
+    // Cleanup channel before leaving
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
 
     await supabase
       .from("game_lobby_players" as any)
