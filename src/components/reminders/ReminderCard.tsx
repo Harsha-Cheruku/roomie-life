@@ -157,7 +157,7 @@ export function ReminderCard({ reminder, currentUserId, memberProfiles, onUpdate
               {creatorProfile && (
                 <span className="text-muted-foreground flex items-center gap-1">
                   <User className="h-3 w-3" />
-                  {creatorProfile.avatar} {creatorProfile.display_name}
+                  <ProfileAvatar avatar={creatorProfile.avatar} size="xs" /> {creatorProfile.display_name}
                 </span>
               )}
             </div>
