@@ -164,7 +164,7 @@ export function ReminderCard({ reminder, currentUserId, memberProfiles, onUpdate
 
             {reminder.status === 'completed' && completerProfile && (
               <p className="text-xs text-green-600 mt-2">
-                ✓ Completed by {completerProfile.avatar} {completerProfile.display_name}
+                ✓ Completed by <ProfileAvatar avatar={completerProfile.avatar} size="xs" className="inline-block" /> {completerProfile.display_name}
                 {reminder.completed_at && (
                   <span className="text-muted-foreground ml-1">
                     at {format(new Date(reminder.completed_at), 'h:mm a')}

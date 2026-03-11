@@ -243,7 +243,7 @@ export const ExpenseOverview = () => {
                 className="flex items-center gap-3 animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="text-2xl">{member.avatar}</div>
+                <ProfileAvatar avatar={member.avatar} size="md" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
