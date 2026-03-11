@@ -27,6 +27,7 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
 import { AdminDeleteDialog } from "@/components/admin/AdminDeleteDialog";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Task {
