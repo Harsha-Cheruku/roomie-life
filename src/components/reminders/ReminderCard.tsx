@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface Reminder {
   id: string;
@@ -157,14 +158,14 @@ export function ReminderCard({ reminder, currentUserId, memberProfiles, onUpdate
               {creatorProfile && (
                 <span className="text-muted-foreground flex items-center gap-1">
                   <User className="h-3 w-3" />
-                  {creatorProfile.avatar} {creatorProfile.display_name}
+                  <ProfileAvatar avatar={creatorProfile.avatar} size="xs" /> {creatorProfile.display_name}
                 </span>
               )}
             </div>
 
             {reminder.status === 'completed' && completerProfile && (
               <p className="text-xs text-green-600 mt-2">
-                ✓ Completed by {completerProfile.avatar} {completerProfile.display_name}
+                ✓ Completed by <ProfileAvatar avatar={completerProfile.avatar} size="xs" className="inline-block" /> {completerProfile.display_name}
                 {reminder.completed_at && (
                   <span className="text-muted-foreground ml-1">
                     at {format(new Date(reminder.completed_at), 'h:mm a')}

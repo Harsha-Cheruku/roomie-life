@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageCircle } from "lucide-react";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RecentMessage {
   id: string;
@@ -97,9 +98,8 @@ export const RecentMessagesPreview = () => {
             onClick={() => navigate("/chat")}
             className="flex flex-col items-center gap-1.5 min-w-[64px] max-w-[80px] group"
           >
-            <div className="relative w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-xl flex-shrink-0 group-hover:ring-2 ring-primary/30 transition-all">
-              {msg.sender_avatar}
-              {/* New message indicator */}
+            <div className="relative flex-shrink-0 group-hover:ring-2 ring-primary/30 transition-all rounded-full">
+              <ProfileAvatar avatar={msg.sender_avatar} size="lg" />
               <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-accent border-2 border-background" />
             </div>
             <span className="text-[11px] font-medium text-foreground truncate w-full text-center">

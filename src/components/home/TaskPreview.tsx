@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -245,7 +246,7 @@ export const TaskPreview = () => {
                       {task.title}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
+                      <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="xs" />
                       <span className="text-xs text-muted-foreground">
                         {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
                       </span>

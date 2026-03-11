@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigation } from "@/hooks/useNavigation";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 type TaskStatus = "pending" | "accepted" | "rejected" | "in_progress" | "done";
 type Priority = "low" | "medium" | "high";
@@ -442,9 +443,7 @@ export const Tasks = () => {
                     )}
                     style={{ animationDelay: `${index * 30}ms` }}
                   >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
-                      {task.assignee_profile?.avatar || '😊'}
-                    </div>
+                    <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className={cn(
                         "font-medium text-sm truncate",
@@ -655,7 +654,7 @@ export const Tasks = () => {
                       {task.title}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-lg">{task.assignee_profile?.avatar || '😊'}</span>
+                      <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="xs" />
                       <span className="text-xs text-muted-foreground">
                         {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
                       </span>

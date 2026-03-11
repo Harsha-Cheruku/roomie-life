@@ -27,6 +27,7 @@ import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { CreateTaskDialog } from "@/components/tasks/CreateTaskDialog";
 import { CreateExpenseDialog } from "@/components/expenses/CreateExpenseDialog";
 import { AdminDeleteDialog } from "@/components/admin/AdminDeleteDialog";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Task {
@@ -239,7 +240,7 @@ export default function AdminPanel() {
               <CardContent className="space-y-2">
                 {members.map((member) => (
                   <div key={member.user_id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/50">
-                    <div className="w-10 h-10 rounded-full bg-card flex items-center justify-center text-xl">{member.avatar}</div>
+                    <ProfileAvatar avatar={member.avatar} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{member.display_name}{member.user_id === user?.id && <span className="text-muted-foreground text-sm ml-2">(You)</span>}</p>
                       {member.role === 'admin' && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />Admin</Badge>}

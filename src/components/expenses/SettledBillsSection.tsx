@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface SettledExpense {
   id: string;
@@ -143,7 +144,7 @@ export const SettledBillsSection = ({ onExpenseClick }: SettledBillsSectionProps
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate text-foreground">{expense.title}</p>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-lg">{expense.payer_profile?.avatar || '😊'}</span>
+                    <ProfileAvatar avatar={expense.payer_profile?.avatar || '😊'} size="xs" />
                     <span className="text-xs text-muted-foreground">
                       {expense.payer_profile?.display_name || 'Unknown'} paid
                     </span>

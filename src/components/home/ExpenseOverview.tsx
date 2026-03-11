@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface ExpenseData {
   total: number;
@@ -243,7 +244,7 @@ export const ExpenseOverview = () => {
                 className="flex items-center gap-3 animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="text-2xl">{member.avatar}</div>
+                <ProfileAvatar avatar={member.avatar} size="md" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
