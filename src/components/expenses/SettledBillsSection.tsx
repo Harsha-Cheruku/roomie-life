@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface SettledExpense {
   id: string;

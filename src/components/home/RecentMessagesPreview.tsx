@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageCircle } from "lucide-react";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RecentMessage {
   id: string;
