@@ -442,9 +442,7 @@ export const Tasks = () => {
                     )}
                     style={{ animationDelay: `${index * 30}ms` }}
                   >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-lg">
-                      {task.assignee_profile?.avatar || '😊'}
-                    </div>
+                    <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className={cn(
                         "font-medium text-sm truncate",
