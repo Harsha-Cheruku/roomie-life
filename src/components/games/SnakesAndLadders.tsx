@@ -86,7 +86,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
 
   const movePlayer = async (dice: number) => {
     if (!user || !lobby) return;
-    const currentPos = positions[user.id] || 0;
+    const currentPositions = positionsRef.current;
+    const currentPos = currentPositions[user.id] || 0;
     let newPos = currentPos + dice;
     let msg = `Rolled ${dice}`;
 
