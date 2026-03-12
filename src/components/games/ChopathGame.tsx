@@ -93,7 +93,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         setRolling(false);
         rollingRef.current = false;
 
-        const myPawns = pawnStates[user!.id];
+        const myPawns = pawnStatesRef.current[user!.id];
         const canMoveAny = myPawns?.some(
           (p) => !p.isFinished && (p.position > 0 || dice === 6 || dice === 1)
         );
