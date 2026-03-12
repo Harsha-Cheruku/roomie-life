@@ -151,7 +151,8 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const handleTokenClick = async (tokenIndex: number) => {
     if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue) return;
 
-    const myState = playerStates[user.id];
+    const currentStates = playerStatesRef.current;
+    const myState = currentStates[user.id];
     if (!myState) return;
 
     const token = myState.tokens[tokenIndex];
