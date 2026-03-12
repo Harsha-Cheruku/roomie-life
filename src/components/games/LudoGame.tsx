@@ -45,10 +45,14 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const [hasRolled, setHasRolled] = useState(false);
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
+  const playerStatesRef = useRef<Record<string, LudoPlayerState>>({});
 
   useEffect(() => {
     if (lobby?.game_state) {
-      if (lobby.game_state.playerStates) setPlayerStates(lobby.game_state.playerStates);
+      if (lobby.game_state.playerStates) {
+        setPlayerStates(lobby.game_state.playerStates);
+        playerStatesRef.current = lobby.game_state.playerStates;
+      }
       if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
       if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
