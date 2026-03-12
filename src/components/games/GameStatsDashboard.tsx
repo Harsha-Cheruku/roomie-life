@@ -238,9 +238,7 @@ export const GameStatsDashboard = ({ onClose }: GameStatsDashboardProps) => {
                   <span className="w-6 text-center font-bold text-sm">
                     {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}`}
                   </span>
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="text-sm">{player.avatar}</AvatarFallback>
-                  </Avatar>
+                  <ProfileAvatar avatar={player.avatar} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
                       {player.display_name}

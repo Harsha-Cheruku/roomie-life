@@ -599,11 +599,7 @@ export const CreateExpenseDialog = ({
                         onClick={() => toggleMemberSelection(member.user_id)}
                         className="flex items-center gap-2 flex-1"
                       >
-                        <Avatar className="w-10 h-10">
-                          <AvatarFallback className="bg-primary/20 text-lg">
-                            {member.profile.avatar}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={member.profile.avatar} size="md" />
                         <div className="text-left">
                           <p className="font-medium text-sm">{member.profile.display_name}</p>
                           {member.user_id === user?.id && (

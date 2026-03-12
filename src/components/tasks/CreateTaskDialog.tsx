@@ -195,11 +195,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated, initialDue
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-primary/20">
-                        {member.avatar}
-                      </AvatarFallback>
-                    </Avatar>
+                    <ProfileAvatar avatar={member.avatar} size="sm" />
                     <span className="flex-1 text-left text-sm truncate">
                       {member.user_id === user?.id ? 'Myself' : member.display_name}
                     </span>

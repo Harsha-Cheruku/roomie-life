@@ -246,7 +246,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
             variant="outline"
             className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}
           >
-            {p.avatar} {p.display_name}: {positions[p.user_id] || 0}
+            <ProfileAvatar avatar={p.avatar} size="xs" /> {p.display_name}: {positions[p.user_id] || 0}
           </Badge>
         ))}
       </div>
