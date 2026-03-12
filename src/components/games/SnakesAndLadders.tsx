@@ -122,7 +122,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       newPos = LADDERS[newPos];
     }
 
-    const newPositions = { ...positions, [user.id]: newPos };
+    const newPositions = { ...currentPositions, [user.id]: newPos };
     const currentIdx = players.findIndex((p) => p.user_id === user.id);
     const nextIdx = (currentIdx + 1) % players.length;
     await updateState(newPositions, null, msg, dice, players[nextIdx].user_id);
