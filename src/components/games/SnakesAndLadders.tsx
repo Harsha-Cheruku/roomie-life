@@ -227,7 +227,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
                     <div className="flex -space-x-1">
                       {playersHere.map((p) => (
                         <span key={p.user_id} className={cn("text-[10px]", PLAYER_COLORS[players.indexOf(p)])} title={p.display_name}>
-                          {p.avatar}
+                          <ProfileAvatar avatar={p.avatar} size="xs" />
                         </span>
                       ))}
                     </div>
