@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Youtube, Share2, Users, Play, X, Music, Copy, Check, Link, ArrowRight, LogIn } from "lucide-react";
+import { Youtube, Share2, Users, Play, Pause, X, Music, Copy, Check, Link, ArrowRight, LogIn } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
@@ -42,6 +42,29 @@ const extractPlaylistUrl = (url: string): string | null => {
   return null;
 };
 
+// Load YouTube IFrame API once globally
+let ytApiLoaded = false;
+let ytApiLoadPromise: Promise<void> | null = null;
+const loadYouTubeApi = (): Promise<void> => {
+  if (ytApiLoaded) return Promise.resolve();
+  if (ytApiLoadPromise) return ytApiLoadPromise;
+  ytApiLoadPromise = new Promise((resolve) => {
+    if ((window as any).YT && (window as any).YT.Player) {
+      ytApiLoaded = true;
+      resolve();
+      return;
+    }
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    (window as any).onYouTubeIframeAPIReady = () => {
+      ytApiLoaded = true;
+      resolve();
+    };
+  });
+  return ytApiLoadPromise;
+};
+
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -54,20 +77,86 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
+  const playerRef = useRef<any>(null);
+  const playerContainerRef = useRef<HTMLDivElement>(null);
+  const isHostRef = useRef(false);
+  const ignoreBroadcastRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
+  // Keep isHostRef in sync
+  useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+
+  // Initialize YouTube player when video becomes active
+  useEffect(() => {
+    if (!activeVideoId || !playerContainerRef.current) return;
+
+    let destroyed = false;
+    const initPlayer = async () => {
+      await loadYouTubeApi();
+      if (destroyed || !isMountedRef.current) return;
+
+      // Destroy previous player
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+
+      playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
+        videoId: activeVideoId,
+        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+        events: {
+          onStateChange: (event: any) => {
+            if (!isMountedRef.current || !isHostRef.current) return;
+            const state = event.data;
+            const YT = (window as any).YT.PlayerState;
+            // Host broadcasts pause/play
+            if (state === YT.PAUSED) {
+              setIsPaused(true);
+              broadcastPlaybackState("paused", event.target.getCurrentTime());
+            } else if (state === YT.PLAYING) {
+              setIsPaused(false);
+              broadcastPlaybackState("playing", event.target.getCurrentTime(), event.target.getPlaybackRate());
+            }
+          },
+          onPlaybackRateChange: (event: any) => {
+            if (!isMountedRef.current || !isHostRef.current) return;
+            broadcastPlaybackState("speed", event.target.getCurrentTime(), event.data);
+          },
+        },
+      });
+    };
+
+    initPlayer();
+    return () => {
+      destroyed = true;
+      if (playerRef.current) {
+        try { playerRef.current.destroy(); } catch {}
+        playerRef.current = null;
+      }
+    };
+  }, [activeVideoId]);
+
+  const broadcastPlaybackState = useCallback((action: string, currentTime: number, rate?: number) => {
+    if (!channelRef.current) return;
+    channelRef.current.send({
+      type: "broadcast",
+      event: "youtube_playback",
+      payload: { action, currentTime, rate, sender_id: user?.id, timestamp: Date.now() },
+    }).catch((err: any) => console.error("Failed to broadcast playback:", err));
+  }, [user?.id]);
+
   useEffect(() => {
     if (!currentRoom?.id || !user || !profile) return;
 
     const setupChannel = () => {
-      // Cleanup previous channel
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -110,6 +199,33 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             setActiveVideoId(null);
             setSharedBy("");
             setIsHost(false);
+          }
+        })
+        .on("broadcast", { event: "youtube_playback" }, (payload) => {
+          if (!isMountedRef.current || ignoreBroadcastRef.current) return;
+          const data = payload.payload;
+          if (data.sender_id === user.id) return; // Ignore own broadcasts
+          
+          const player = playerRef.current;
+          if (!player || typeof player.seekTo !== "function") return;
+
+          try {
+            if (data.action === "paused") {
+              player.seekTo(data.currentTime, true);
+              player.pauseVideo();
+              setIsPaused(true);
+            } else if (data.action === "playing") {
+              // Account for network delay
+              const networkDelay = (Date.now() - data.timestamp) / 1000;
+              player.seekTo(data.currentTime + networkDelay, true);
+              if (data.rate) player.setPlaybackRate(data.rate);
+              player.playVideo();
+              setIsPaused(false);
+            } else if (data.action === "speed") {
+              if (data.rate) player.setPlaybackRate(data.rate);
+            }
+          } catch (err) {
+            console.error("Failed to sync playback:", err);
           }
         })
         .subscribe(async (status) => {
@@ -178,9 +294,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   }, [youtubeUrl, user?.id, profile]);
 
   const stopVideo = useCallback(async () => {
+    if (playerRef.current) {
+      try { playerRef.current.destroy(); } catch {}
+      playerRef.current = null;
+    }
     setActiveVideoId(null);
     setSharedBy("");
     setIsHost(false);
+    setIsPaused(false);
     if (channelRef.current) {
       try {
         await channelRef.current.send({
@@ -193,6 +314,19 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       }
     }
   }, [user?.id]);
+
+  const togglePlayPause = useCallback(() => {
+    const player = playerRef.current;
+    if (!player || typeof player.getPlayerState !== "function") return;
+    const YT = (window as any).YT?.PlayerState;
+    if (!YT) return;
+    
+    if (player.getPlayerState() === YT.PLAYING) {
+      player.pauseVideo();
+    } else {
+      player.playVideo();
+    }
+  }, []);
 
   const openYouTubeApp = () => {
     const timeout = setTimeout(() => { window.open("https://www.youtube.com", "_blank"); }, 500);
@@ -273,27 +407,28 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         </Button>
       </div>
 
-      {/* Active Video */}
+      {/* Active Video with YouTube IFrame Player API */}
       {activeVideoId && (
         <Card className="overflow-hidden shadow-lg">
           <div className="relative">
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${activeVideoId}?autoplay=1&rel=0&modestbranding=1`}
-              className="w-full aspect-video"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-              title="YouTube video"
-            />
-            <Button variant="destructive" size="icon" className="absolute top-2 right-2 w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
-              <X className="h-4 w-4" />
-            </Button>
+            <div ref={playerContainerRef} className="w-full aspect-video" />
+            <div className="absolute top-2 right-2 flex gap-1">
+              {isHost && (
+                <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
+                  {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                </Button>
+              )}
+              <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <Play className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-medium truncate text-foreground">
-                  {isHost ? "You're sharing" : `Shared by ${sharedBy}`}
+                  {isHost ? "You're sharing (you control playback)" : `Shared by ${sharedBy} (synced)`}
                 </span>
               </div>
               {isHost && (
@@ -302,6 +437,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
                 </Badge>
               )}
             </div>
+            {!isHost && (
+              <p className="text-[10px] text-muted-foreground">
+                Playback is synced with the host. Pause, play & speed changes sync automatically.
+              </p>
+            )}
             {lastPlaylistUrl && (
               <Button
                 size="sm"

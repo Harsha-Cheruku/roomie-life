@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -195,11 +196,7 @@ export const CreateTaskDialog = ({ open, onOpenChange, onTaskCreated, initialDue
                         : 'border-border hover:border-primary/50'
                     )}
                   >
-                    <Avatar className="w-8 h-8">
-                      <AvatarFallback className="bg-primary/20">
-                        {member.avatar}
-                      </AvatarFallback>
-                    </Avatar>
+                    <ProfileAvatar avatar={member.avatar} size="sm" />
                     <span className="flex-1 text-left text-sm truncate">
                       {member.user_id === user?.id ? 'Myself' : member.display_name}
                     </span>

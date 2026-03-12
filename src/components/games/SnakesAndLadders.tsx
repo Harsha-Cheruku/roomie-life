@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 const SNAKES: Record<number, number> = {
   16: 6, 47: 26, 49: 11, 56: 53, 62: 19, 64: 60, 87: 24, 93: 73, 95: 75, 98: 78,
@@ -36,9 +37,13 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const [positions, setPositions] = useState<Record<string, number>>({});
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
+  const positionsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    if (lobby?.game_state?.positions) setPositions(lobby.game_state.positions);
+    if (lobby?.game_state?.positions) {
+      setPositions(lobby.game_state.positions);
+      positionsRef.current = lobby.game_state.positions;
+    }
     if (lobby?.game_state?.winner !== undefined) setWinner(lobby.game_state.winner);
     if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
     if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
@@ -59,7 +64,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     });
   };
 
-  const rollDice = useCallback(async () => {
+  const rollDice = async () => {
     if (!isMyTurn || rollingRef.current || winner) return;
     rollingRef.current = true;
     setRolling(true);
@@ -77,11 +82,12 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         movePlayer(dice);
       }
     }, 100);
-  }, [isMyTurn, winner, positions, players, user, lobby]);
+  };
 
   const movePlayer = async (dice: number) => {
     if (!user || !lobby) return;
-    const currentPos = positions[user.id] || 0;
+    const currentPositions = positionsRef.current;
+    const currentPos = currentPositions[user.id] || 0;
     let newPos = currentPos + dice;
     let msg = `Rolled ${dice}`;
 
@@ -116,7 +122,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       newPos = LADDERS[newPos];
     }
 
-    const newPositions = { ...positions, [user.id]: newPos };
+    const newPositions = { ...currentPositions, [user.id]: newPos };
     const currentIdx = players.findIndex((p) => p.user_id === user.id);
     const nextIdx = (currentIdx + 1) % players.length;
     await updateState(newPositions, null, msg, dice, players[nextIdx].user_id);
@@ -227,7 +233,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
                     <div className="flex -space-x-1">
                       {playersHere.map((p) => (
                         <span key={p.user_id} className={cn("text-[10px]", PLAYER_COLORS[players.indexOf(p)])} title={p.display_name}>
-                          {p.avatar}
+                          <ProfileAvatar avatar={p.avatar} size="xs" />
                         </span>
                       ))}
                     </div>
@@ -246,7 +252,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
             variant="outline"
             className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}
           >
-            {p.avatar} {p.display_name}: {positions[p.user_id] || 0}
+            <ProfileAvatar avatar={p.avatar} size="xs" /> {p.display_name}: {positions[p.user_id] || 0}
           </Badge>
         ))}
       </div>

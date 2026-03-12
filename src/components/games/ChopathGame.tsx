@@ -37,10 +37,14 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   const [hasRolled, setHasRolled] = useState(false);
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
+  const pawnStatesRef = useRef<Record<string, ChopathPawn[]>>({});
 
   useEffect(() => {
     if (lobby?.game_state) {
-      if (lobby.game_state.pawnStates) setPawnStates(lobby.game_state.pawnStates);
+      if (lobby.game_state.pawnStates) {
+        setPawnStates(lobby.game_state.pawnStates);
+        pawnStatesRef.current = lobby.game_state.pawnStates;
+      }
       if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
       if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
@@ -89,7 +93,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         setRolling(false);
         rollingRef.current = false;
 
-        const myPawns = pawnStates[user!.id];
+        const myPawns = pawnStatesRef.current[user!.id];
         const canMoveAny = myPawns?.some(
           (p) => !p.isFinished && (p.position > 0 || dice === 6 || dice === 1)
         );
@@ -129,13 +133,14 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   const handlePawnClick = async (pawnIdx: number) => {
     if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue) return;
 
-    const myPawns = pawnStates[user.id];
+    const currentStates = pawnStatesRef.current;
+    const myPawns = currentStates[user.id];
     if (!myPawns || !canMovePawn(myPawns[pawnIdx], diceValue)) {
       toast.error("Can't move this pawn!");
       return;
     }
 
-    const newStates = JSON.parse(JSON.stringify(pawnStates)) as Record<string, ChopathPawn[]>;
+    const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, ChopathPawn[]>;
     const pawn = newStates[user.id][pawnIdx];
 
     if (pawn.position === 0) {

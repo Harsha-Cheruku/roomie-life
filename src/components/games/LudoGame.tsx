@@ -45,10 +45,14 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const [hasRolled, setHasRolled] = useState(false);
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
+  const playerStatesRef = useRef<Record<string, LudoPlayerState>>({});
 
   useEffect(() => {
     if (lobby?.game_state) {
-      if (lobby.game_state.playerStates) setPlayerStates(lobby.game_state.playerStates);
+      if (lobby.game_state.playerStates) {
+        setPlayerStates(lobby.game_state.playerStates);
+        playerStatesRef.current = lobby.game_state.playerStates;
+      }
       if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
       if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
@@ -101,7 +105,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
   const handleDiceResult = async (dice: number) => {
     if (!user || !lobby) return;
-    const myState = playerStates[user.id];
+    const myState = playerStatesRef.current[user.id];
     if (!myState) return;
 
     const canMove = myState.tokens.some((t) => canMoveToken(t, dice));
@@ -147,7 +151,8 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const handleTokenClick = async (tokenIndex: number) => {
     if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue) return;
 
-    const myState = playerStates[user.id];
+    const currentStates = playerStatesRef.current;
+    const myState = currentStates[user.id];
     if (!myState) return;
 
     const token = myState.tokens[tokenIndex];
@@ -156,7 +161,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       return;
     }
 
-    const newStates = JSON.parse(JSON.stringify(playerStates)) as Record<string, LudoPlayerState>;
+    const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, LudoPlayerState>;
     const newTokens = newStates[user.id].tokens;
 
     if (token.position === 0 && diceValue === 6) {

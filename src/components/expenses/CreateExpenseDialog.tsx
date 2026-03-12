@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -526,9 +527,9 @@ export const CreateExpenseDialog = ({
                 </SelectTrigger>
                 <SelectContent>
                   {roomMembers.map(member => (
-                    <SelectItem key={member.user_id} value={member.user_id}>
+                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
-                        <span>{member.profile.avatar}</span>
+                        <ProfileAvatar avatar={member.profile.avatar} size="xs" />
                         <span>{member.profile.display_name}</span>
                         {member.user_id === user?.id && <span className="text-xs text-primary">(You)</span>}
                       </div>
@@ -599,11 +600,7 @@ export const CreateExpenseDialog = ({
                         onClick={() => toggleMemberSelection(member.user_id)}
                         className="flex items-center gap-2 flex-1"
                       >
-                        <Avatar className="w-10 h-10">
-                          <AvatarFallback className="bg-primary/20 text-lg">
-                            {member.profile.avatar}
-                          </AvatarFallback>
-                        </Avatar>
+                        <ProfileAvatar avatar={member.profile.avatar} size="md" />
                         <div className="text-left">
                           <p className="font-medium text-sm">{member.profile.display_name}</p>
                           {member.user_id === user?.id && (

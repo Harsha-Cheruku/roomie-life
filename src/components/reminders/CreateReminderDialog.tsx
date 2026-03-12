@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { Bell, Calendar, Clock } from 'lucide-react';
 
 interface RoomMember {
@@ -185,7 +186,7 @@ export function CreateReminderDialog({
                       onCheckedChange={() => toggleCompleter(member.user_id)}
                     />
                     <label htmlFor={member.user_id} className="text-sm flex items-center gap-1 cursor-pointer">
-                      <span>{member.avatar}</span>
+                      <ProfileAvatar avatar={member.avatar} size="xs" />
                       <span>{member.display_name}</span>
                     </label>
                   </div>
