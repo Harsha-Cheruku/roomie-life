@@ -526,9 +526,9 @@ export const CreateExpenseDialog = ({
                 </SelectTrigger>
                 <SelectContent>
                   {roomMembers.map(member => (
-                    <SelectItem key={member.user_id} value={member.user_id}>
+                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
-                        <span>{member.profile.avatar}</span>
+                        <ProfileAvatar avatar={member.profile.avatar} size="xs" />
                         <span>{member.profile.display_name}</span>
                         {member.user_id === user?.id && <span className="text-xs text-primary">(You)</span>}
                       </div>
