@@ -105,7 +105,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
   const handleDiceResult = async (dice: number) => {
     if (!user || !lobby) return;
-    const myState = playerStates[user.id];
+    const myState = playerStatesRef.current[user.id];
     if (!myState) return;
 
     const canMove = myState.tokens.some((t) => canMoveToken(t, dice));
