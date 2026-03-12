@@ -37,9 +37,13 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const [positions, setPositions] = useState<Record<string, number>>({});
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
+  const positionsRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
-    if (lobby?.game_state?.positions) setPositions(lobby.game_state.positions);
+    if (lobby?.game_state?.positions) {
+      setPositions(lobby.game_state.positions);
+      positionsRef.current = lobby.game_state.positions;
+    }
     if (lobby?.game_state?.winner !== undefined) setWinner(lobby.game_state.winner);
     if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
     if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
@@ -60,7 +64,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     });
   };
 
-  const rollDice = useCallback(async () => {
+  const rollDice = async () => {
     if (!isMyTurn || rollingRef.current || winner) return;
     rollingRef.current = true;
     setRolling(true);
@@ -78,7 +82,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         movePlayer(dice);
       }
     }, 100);
-  }, [isMyTurn, winner, positions, players, user, lobby]);
+  };
 
   const movePlayer = async (dice: number) => {
     if (!user || !lobby) return;
