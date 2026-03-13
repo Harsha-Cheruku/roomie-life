@@ -115,20 +115,21 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
         events: {
           onStateChange: (event: any) => {
-            if (!isMountedRef.current || !isHostRef.current) return;
+            if (!isMountedRef.current || ignoreBroadcastRef.current) return;
             const state = event.data;
             const YT = (window as any).YT.PlayerState;
-            // Host broadcasts pause/play
+
+            // Broadcast state changes from any participant; last action wins.
             if (state === YT.PAUSED) {
               setIsPaused(true);
-              broadcastPlaybackState("paused", event.target.getCurrentTime());
+              broadcastPlaybackState("paused", event.target.getCurrentTime(), event.target.getPlaybackRate());
             } else if (state === YT.PLAYING) {
               setIsPaused(false);
               broadcastPlaybackState("playing", event.target.getCurrentTime(), event.target.getPlaybackRate());
             }
           },
           onPlaybackRateChange: (event: any) => {
-            if (!isMountedRef.current || !isHostRef.current) return;
+            if (!isMountedRef.current || ignoreBroadcastRef.current) return;
             broadcastPlaybackState("speed", event.target.getCurrentTime(), event.data);
           },
         },
