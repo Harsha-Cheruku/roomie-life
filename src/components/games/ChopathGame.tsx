@@ -143,6 +143,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
     }
 
     const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, ChopathPawn[]>;
+    pawnStatesRef.current = newStates;
     const pawn = newStates[user.id][pawnIdx];
 
     if (pawn.position === 0) {
