@@ -114,7 +114,8 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       if (dice === 6 && myState.tokens.some((t) => t.position === 0 && !t.isFinished)) {
         setMessage(`Rolled 6! Click a token at home to bring it out.`);
         await gameLobby.updateGameState({
-          ...lobby.game_state,
+          playerStates: playerStatesRef.current,
+          winner,
           lastDice: dice,
           hasRolled: true,
           message: `Rolled 6! Choose a token.`,
@@ -125,7 +126,13 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       // No valid moves — pass turn
       const nextPlayer = getNextPlayer();
       await gameLobby.updateGameState(
-        { ...lobby.game_state, lastDice: dice, hasRolled: false, message: `No valid moves. Turn passed.` },
+        {
+          playerStates: playerStatesRef.current,
+          winner,
+          lastDice: dice,
+          hasRolled: false,
+          message: `No valid moves. Turn passed.`,
+        },
         nextPlayer
       );
       return;
@@ -133,7 +140,8 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
     setMessage(`Rolled ${dice}! Click a token to move.`);
     await gameLobby.updateGameState({
-      ...lobby.game_state,
+      playerStates: playerStatesRef.current,
+      winner,
       lastDice: dice,
       hasRolled: true,
       message: `Rolled ${dice}! Choose a token.`,
@@ -162,6 +170,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     }
 
     const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, LudoPlayerState>;
+    playerStatesRef.current = newStates;
     const newTokens = newStates[user.id].tokens;
 
     if (token.position === 0 && diceValue === 6) {

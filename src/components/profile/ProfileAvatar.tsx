@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface ProfileAvatarProps {
   avatar: string | null | undefined;
@@ -15,9 +15,40 @@ const sizeMap = {
   xl: "w-16 h-16 text-3xl",
 };
 
+const IMAGE_EXT_RE = /\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i;
+
+const resolveAvatarImageSrc = (avatar: string | null | undefined): string | null => {
+  if (!avatar) return null;
+  const value = avatar.trim();
+  if (!value) return null;
+
+  if (value.startsWith("http") || value.startsWith("blob:") || value.startsWith("data:")) return value;
+  if (value.startsWith("//")) return `https:${value}`;
+
+  const looksLikeImagePath = IMAGE_EXT_RE.test(value);
+  if (!looksLikeImagePath) return null;
+
+  const baseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+  if (value.startsWith("avatars/")) {
+    return `${baseUrl}/storage/v1/object/public/${value}`;
+  }
+
+  if (/^[^/]+\/[^/]+\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(value)) {
+    return `${baseUrl}/storage/v1/object/public/avatars/${value}`;
+  }
+
+  if (value.startsWith("/")) return value;
+  return null;
+};
+
 export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarProps) => {
   const [imgError, setImgError] = useState(false);
-  const isUrl = avatar && (avatar.startsWith("http") || avatar.startsWith("blob:") || avatar.startsWith("data:"));
+  const imageSrc = useMemo(() => resolveAvatarImageSrc(avatar), [avatar]);
+
+  useEffect(() => {
+    setImgError(false);
+  }, [imageSrc]);
 
   return (
     <div
@@ -27,16 +58,17 @@ export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarP
         className
       )}
     >
-      {isUrl && !imgError ? (
+      {imageSrc && !imgError ? (
         <img
-          src={avatar}
-          alt="avatar"
+          src={imageSrc}
+          alt="Profile photo"
           className="w-full h-full object-cover"
           onError={() => setImgError(true)}
           loading="lazy"
+          decoding="async"
         />
       ) : (
-        <span>{avatar && !isUrl ? avatar : "😎"}</span>
+        <span>{avatar && !imageSrc ? avatar : "😎"}</span>
       )}
     </div>
   );

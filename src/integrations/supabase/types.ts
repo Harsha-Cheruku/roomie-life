@@ -777,6 +777,15 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      update_game_lobby_state: {
+        Args: {
+          _expected_turn_user_id?: string
+          _lobby_id: string
+          _next_turn_user_id?: string
+          _state: Json
+        }
+        Returns: boolean
+      }
       update_own_split: {
         Args: {
           _is_paid?: boolean

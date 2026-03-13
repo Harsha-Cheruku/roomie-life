@@ -10,6 +10,7 @@ import { GameLobbyComponent } from "./GameLobby";
 import { Trophy, ArrowLeft, RotateCcw, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface KabaddiProps {
   onBack: () => void;
@@ -223,7 +224,7 @@ export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
                 {i === 0 && gameFinished && "🥇"}
                 {i === 1 && gameFinished && "🥈"}
                 {i === 2 && gameFinished && "🥉"}
-                {entry.player?.avatar} {entry.player?.display_name}
+                <ProfileAvatar avatar={entry.player?.avatar} size="xs" /> {entry.player?.display_name}
               </span>
               <Badge variant={i === 0 ? "default" : "secondary"}>{entry.score} taps</Badge>
             </div>

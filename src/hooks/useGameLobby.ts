@@ -262,22 +262,42 @@ export const useGameLobby = () => {
   );
 
   const updateGameState = useCallback(
-    async (state: Record<string, any>, nextTurnUserId?: string) => {
-      if (!lobby) return;
-      const update: any = { game_state: state };
-      if (nextTurnUserId !== undefined) update.current_turn_user_id = nextTurnUserId;
+    async (
+      state: Record<string, any>,
+      nextTurnUserId?: string,
+      options?: { enforceTurn?: boolean }
+    ) => {
+      if (!lobby || !user) return false;
 
-      const { error } = await supabase
-        .from("game_lobbies" as any)
-        .update(update)
-        .eq("id", lobby.id);
+      const shouldEnforceTurn = options?.enforceTurn ?? lobby.status === "playing";
 
-      if (error) {
+      const { data, error } = await supabase.rpc("update_game_lobby_state" as any, {
+        _lobby_id: lobby.id,
+        _state: state,
+        _next_turn_user_id: nextTurnUserId ?? null,
+        _expected_turn_user_id: shouldEnforceTurn ? user.id : null,
+      } as any);
+
+      if (error || !data) {
         console.error("Failed to update game state:", error);
-        toast.error("Sync error. Please try again.");
+        toast.error(shouldEnforceTurn ? "Turn already moved. Syncing latest state..." : "Sync error. Please try again.");
+        return false;
       }
+
+      // Optimistic local update for instant UI response while realtime event arrives
+      setLobby((prev) =>
+        prev
+          ? {
+              ...prev,
+              game_state: state,
+              current_turn_user_id: nextTurnUserId ?? prev.current_turn_user_id,
+            }
+          : prev
+      );
+
+      return true;
     },
-    [lobby]
+    [lobby, user]
   );
 
   const updatePlayerState = useCallback(

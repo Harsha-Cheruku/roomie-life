@@ -99,8 +99,8 @@ export const Chat = () => {
           if (newMsg.sender_id !== user?.id) {
             const senderProfile = profilesMap.get(newMsg.sender_id);
             toastHook({
-              title: `${senderProfile?.avatar || '💬'} ${senderProfile?.display_name || 'Someone'}`,
-              description: newMsg.message_type === 'text' 
+              title: senderProfile?.display_name || 'Someone',
+              description: newMsg.message_type === 'text'
                 ? newMsg.content.slice(0, 50) + (newMsg.content.length > 50 ? '...' : '')
                 : `Sent a ${newMsg.message_type}`,
             });
