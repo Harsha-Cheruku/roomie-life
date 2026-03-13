@@ -10,6 +10,7 @@ import { GameLobbyComponent } from "./GameLobby";
 import { Trophy, ArrowLeft, RotateCcw, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface KabaddiProps {
   onBack: () => void;

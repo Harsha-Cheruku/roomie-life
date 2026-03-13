@@ -193,9 +193,7 @@ export const DeleteExpenseDialog = ({
                       key={approval.user_id}
                       className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
                     >
-                      <div className="w-8 h-8 rounded-full bg-card flex items-center justify-center text-sm">
-                        {approval.avatar}
-                      </div>
+                      <ProfileAvatar avatar={approval.avatar} size="sm" className="bg-card" />
                       <span className="flex-1 text-sm font-medium">
                         {approval.display_name}
                         {approval.user_id === user?.id && ' (You)'}

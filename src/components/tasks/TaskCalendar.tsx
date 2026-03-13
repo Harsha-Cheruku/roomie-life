@@ -377,8 +377,9 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                                     {task.status.replace("_", " ")}
                                   </Badge>
                                 </div>
-                                <p className="text-xs opacity-70 mt-0.5">
-                                  {task.assignee_profile?.avatar} {task.assignee_profile?.display_name}
+                                <p className="text-xs opacity-70 mt-0.5 flex items-center gap-1.5">
+                                  <ProfileAvatar avatar={task.assignee_profile?.avatar} size="xs" />
+                                  <span className="truncate">{task.assignee_profile?.display_name}</span>
                                   {getTaskScheduledDate(task) && ` · ${format(getTaskScheduledDate(task)!, "h:mm a")}`}
                                 </p>
                               </button>
