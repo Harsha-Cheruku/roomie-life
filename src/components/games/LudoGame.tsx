@@ -170,6 +170,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     }
 
     const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, LudoPlayerState>;
+    playerStatesRef.current = newStates;
     const newTokens = newStates[user.id].tokens;
 
     if (token.position === 0 && diceValue === 6) {
