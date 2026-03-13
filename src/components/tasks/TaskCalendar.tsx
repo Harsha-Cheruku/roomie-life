@@ -8,6 +8,7 @@ import { Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight, Plus } from
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { format, isSameDay, startOfDay, addHours } from "date-fns";
 
 interface Task {
