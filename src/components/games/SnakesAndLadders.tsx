@@ -96,12 +96,12 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       // Pass turn even when can't move
       const currentIdx = players.findIndex((p) => p.user_id === user.id);
       const nextIdx = (currentIdx + 1) % players.length;
-      await updateState(positions, null, msg, dice, players[nextIdx].user_id);
+      await updateState(currentPositions, null, msg, dice, players[nextIdx].user_id);
       return;
     }
 
     if (newPos === 100) {
-      const newPositions = { ...positions, [user.id]: 100 };
+      const newPositions = { ...currentPositions, [user.id]: 100 };
       await updateState(newPositions, user.id, `🎉 Winner!`, dice);
       saveGameResult({
         gameType: "snakes_and_ladders",
