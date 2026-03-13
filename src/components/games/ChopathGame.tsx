@@ -102,7 +102,8 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
           const nextPlayer = getNextPlayer();
           gameLobby.updateGameState(
             {
-              ...lobby!.game_state,
+              pawnStates: pawnStatesRef.current,
+              winner,
               lastDice: dice,
               hasRolled: false,
               message: `Threw ${dice} 🐚 — no valid moves!`,
@@ -113,7 +114,8 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         }
 
         gameLobby.updateGameState({
-          ...lobby!.game_state,
+          pawnStates: pawnStatesRef.current,
+          winner,
           lastDice: dice,
           hasRolled: true,
           message: `Threw ${dice} 🐚 — choose a pawn!`,
