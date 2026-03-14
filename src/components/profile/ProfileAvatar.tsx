@@ -22,6 +22,7 @@ const resolveAvatarImageSrc = (avatar: string | null | undefined): string | null
   const value = avatar.trim();
   if (!value) return null;
 
+  // Full URLs (http, blob, data)
   if (value.startsWith("http") || value.startsWith("blob:") || value.startsWith("data:")) return value;
   if (value.startsWith("//")) return `https:${value}`;
 
@@ -30,16 +31,28 @@ const resolveAvatarImageSrc = (avatar: string | null | undefined): string | null
 
   const baseUrl = import.meta.env.VITE_SUPABASE_URL;
 
+  // Supabase storage paths
   if (value.startsWith("avatars/")) {
     return `${baseUrl}/storage/v1/object/public/${value}`;
   }
 
+  // Pattern: userId/filename.ext
   if (/^[^/]+\/[^/]+\.(png|jpe?g|webp|gif|bmp|svg)(\?.*)?$/i.test(value)) {
     return `${baseUrl}/storage/v1/object/public/avatars/${value}`;
   }
 
   if (value.startsWith("/")) return value;
   return null;
+};
+
+// Simple check: emoji or very short string that doesn't look like a path
+const isEmoji = (val: string): boolean => {
+  // If it resolves to an image URL, it's not an emoji
+  if (resolveAvatarImageSrc(val)) return false;
+  // Short strings (1-4 chars) are likely emojis
+  if (val.length <= 4) return true;
+  // Longer strings that don't look like paths are probably emoji combos
+  return !/[./:]/.test(val);
 };
 
 export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarProps) => {
@@ -68,7 +81,7 @@ export const ProfileAvatar = ({ avatar, size = "md", className }: ProfileAvatarP
           decoding="async"
         />
       ) : (
-        <span>{avatar && !imageSrc ? avatar : "😎"}</span>
+        <span>{avatar && isEmoji(avatar) ? avatar : "😎"}</span>
       )}
     </div>
   );

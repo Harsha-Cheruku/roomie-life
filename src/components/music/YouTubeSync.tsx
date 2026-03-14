@@ -65,6 +65,11 @@ const loadYouTubeApi = (): Promise<void> => {
   return ytApiLoadPromise;
 };
 
+// Drift threshold in seconds — only seek if off by more than this
+const DRIFT_THRESHOLD = 1.5;
+// How often the host sends a heartbeat (ms)
+const HEARTBEAT_INTERVAL = 5000;
+
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
   const [youtubeUrl, setYoutubeUrl] = useState("");
@@ -80,11 +85,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [isPaused, setIsPaused] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isMountedRef = useRef(true);
   const playerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const isHostRef = useRef(false);
+  // Guard to prevent broadcast feedback loops when we programmatically control the player
   const ignoreBroadcastRef = useRef(false);
 
   useEffect(() => {
@@ -119,7 +125,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             const state = event.data;
             const YT = (window as any).YT.PlayerState;
 
-            // Broadcast state changes from any participant; last action wins.
             if (state === YT.PAUSED) {
               setIsPaused(true);
               broadcastPlaybackState("paused", event.target.getCurrentTime(), event.target.getPlaybackRate());
@@ -145,6 +150,34 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       }
     };
   }, [activeVideoId]);
+
+  // Host heartbeat: periodically broadcast current position so listeners can correct drift
+  useEffect(() => {
+    if (heartbeatRef.current) {
+      clearInterval(heartbeatRef.current);
+      heartbeatRef.current = null;
+    }
+
+    if (!isHost || !activeVideoId) return;
+
+    heartbeatRef.current = setInterval(() => {
+      const player = playerRef.current;
+      if (!player || typeof player.getCurrentTime !== "function") return;
+      const YT = (window as any).YT?.PlayerState;
+      if (!YT) return;
+      const state = player.getPlayerState();
+      if (state === YT.PLAYING) {
+        broadcastPlaybackState("heartbeat", player.getCurrentTime(), player.getPlaybackRate());
+      }
+    }, HEARTBEAT_INTERVAL);
+
+    return () => {
+      if (heartbeatRef.current) {
+        clearInterval(heartbeatRef.current);
+        heartbeatRef.current = null;
+      }
+    };
+  }, [isHost, activeVideoId]);
 
   const broadcastPlaybackState = useCallback((action: string, currentTime: number, rate?: number) => {
     if (!channelRef.current) return;
@@ -204,30 +237,54 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           }
         })
         .on("broadcast", { event: "youtube_playback" }, (payload) => {
-          if (!isMountedRef.current || ignoreBroadcastRef.current) return;
+          if (!isMountedRef.current) return;
           const data = payload.payload;
           if (data.sender_id === user.id) return; // Ignore own broadcasts
           
           const player = playerRef.current;
           if (!player || typeof player.seekTo !== "function") return;
 
+          // Set guard to prevent our programmatic changes from re-broadcasting
+          ignoreBroadcastRef.current = true;
+
           try {
+            const networkDelay = (Date.now() - data.timestamp) / 1000;
+
             if (data.action === "paused") {
               player.seekTo(data.currentTime, true);
               player.pauseVideo();
               setIsPaused(true);
             } else if (data.action === "playing") {
-              // Account for network delay
-              const networkDelay = (Date.now() - data.timestamp) / 1000;
-              player.seekTo(data.currentTime + networkDelay, true);
+              const targetTime = data.currentTime + networkDelay;
+              player.seekTo(targetTime, true);
               if (data.rate) player.setPlaybackRate(data.rate);
               player.playVideo();
               setIsPaused(false);
             } else if (data.action === "speed") {
               if (data.rate) player.setPlaybackRate(data.rate);
+            } else if (data.action === "heartbeat") {
+              // Only correct drift if playing and off by more than threshold
+              const YT = (window as any).YT?.PlayerState;
+              if (YT && player.getPlayerState() === YT.PLAYING) {
+                const expectedTime = data.currentTime + networkDelay;
+                const actualTime = player.getCurrentTime();
+                const drift = Math.abs(expectedTime - actualTime);
+                if (drift > DRIFT_THRESHOLD) {
+                  player.seekTo(expectedTime, true);
+                }
+                // Also sync playback rate
+                if (data.rate && player.getPlaybackRate() !== data.rate) {
+                  player.setPlaybackRate(data.rate);
+                }
+              }
             }
           } catch (err) {
             console.error("Failed to sync playback:", err);
+          } finally {
+            // Release guard after a short delay to let YT state change events pass
+            setTimeout(() => {
+              ignoreBroadcastRef.current = false;
+            }, 300);
           }
         })
         .subscribe(async (status) => {
@@ -415,11 +472,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           <div className="relative">
             <div ref={playerContainerRef} className="w-full aspect-video" />
             <div className="absolute top-2 right-2 flex gap-1">
-              {isHost && (
-                <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
-                  {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                </Button>
-              )}
+              <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
+                {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+              </Button>
               <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
                 <X className="h-4 w-4" />
               </Button>

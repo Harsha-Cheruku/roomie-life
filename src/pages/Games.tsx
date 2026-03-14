@@ -8,7 +8,6 @@ import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Gamepad2, Dices, Target, Timer, Trophy, RotateCcw, Zap,
   Grid3X3, Users, Share2, BarChart3, ArrowLeft
@@ -34,7 +33,7 @@ interface MemoryCard {
 
 export default function Games() {
   const navigate = useNavigate();
-  const { currentRoom, profile, user } = useAuth();
+  const { currentRoom, profile, user, isSoloMode } = useAuth();
   const { saveGameResult } = useGameStats();
   const gameLobby = useGameLobby();
   const [currentGame, setCurrentGame] = useState<GameType>('menu');
@@ -42,11 +41,10 @@ export default function Games() {
   // Global join code
   const [joinCodeInput, setJoinCodeInput] = useState("");
   
-  // Tic Tac Toe state (using lobby system now)
+  // Tic Tac Toe state
   const [tttBoard, setTttBoard] = useState<(string | null)[]>(Array(9).fill(null));
   const [tttIsXNext, setTttIsXNext] = useState(true);
   const [tttWinner, setTttWinner] = useState<string | null>(null);
-  const [tttMySymbol, setTttMySymbol] = useState<'X' | 'O' | null>(null);
   
   // Memory Game state
   const [memoryCards, setMemoryCards] = useState<MemoryCard[]>([]);
@@ -81,7 +79,6 @@ export default function Games() {
 
     const success = await gameLobby.joinLobby(joinCodeInput);
     if (success && gameLobby.lobby) {
-      // Route to the correct game based on lobby game type
       const gameTypeMap: Record<string, GameType> = {
         snakes_and_ladders: 'snakes',
         ludo: 'ludo',
@@ -95,7 +92,7 @@ export default function Games() {
     }
   };
 
-  // Tic Tac Toe logic (simplified local play)
+  // Tic Tac Toe logic
   const calculateWinner = (squares: (string | null)[]) => {
     const lines = [
       [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -247,6 +244,11 @@ export default function Games() {
     { id: 'dice' as GameType, name: 'Dice Roller', icon: '🎲', desc: 'Roll dice together', gradient: 'bg-muted', multiplayer: false, category: 'quick' },
   ];
 
+  // In solo mode, only show local/quick games
+  const filteredGames = isSoloMode
+    ? GAME_LIST.filter(g => !g.multiplayer)
+    : GAME_LIST;
+
   const renderGame = () => {
     switch (currentGame) {
       case 'snakes': return <SnakesAndLadders onBack={() => setCurrentGame('menu')} />;
@@ -388,56 +390,60 @@ export default function Games() {
         // GAME MENU
         return (
           <div className="space-y-5">
-            {/* Join Game */}
-            <Card className="border-primary/20 bg-primary/5">
-              <CardContent className="p-4">
-                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                  <Share2 className="h-4 w-4 text-primary" />
-                  Join a Game
-                </h3>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="Enter game code..."
-                    value={joinCodeInput}
-                    onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                    className="flex-1 font-mono tracking-wider"
-                    maxLength={6}
-                  />
-                  <Button onClick={handleGlobalJoin} disabled={!joinCodeInput.trim()}>
-                    Join
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            {/* Join Game - hidden in solo mode */}
+            {!isSoloMode && (
+              <Card className="border-primary/20 bg-primary/5">
+                <CardContent className="p-4">
+                  <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Share2 className="h-4 w-4 text-primary" />
+                    Join a Game
+                  </h3>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Enter game code..."
+                      value={joinCodeInput}
+                      onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 font-mono tracking-wider"
+                      maxLength={6}
+                    />
+                    <Button onClick={handleGlobalJoin} disabled={!joinCodeInput.trim()}>
+                      Join
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Multiplayer Board Games */}
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Multiplayer Games
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                {GAME_LIST.filter(g => g.multiplayer).map((game) => (
-                  <Card
-                    key={game.id}
-                    className="cursor-pointer hover:shadow-md transition-all press-effect overflow-hidden"
-                    onClick={() => setCurrentGame(game.id)}
-                  >
-                    <CardContent className="p-4 text-center">
-                      <div className={cn("w-12 h-12 mx-auto mb-2 rounded-xl flex items-center justify-center text-2xl", game.gradient)}>
-                        {game.icon}
-                      </div>
-                      <h4 className="font-semibold text-sm">{game.name}</h4>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{game.desc}</p>
-                      <Badge variant="outline" className="mt-2 text-[9px]">
-                        <Share2 className="h-2 w-2 mr-1" />
-                        Online
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
+            {/* Multiplayer Board Games - hidden in solo mode */}
+            {!isSoloMode && (
+              <div>
+                <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  Multiplayer Games
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {filteredGames.filter(g => g.multiplayer).map((game) => (
+                    <Card
+                      key={game.id}
+                      className="cursor-pointer hover:shadow-md transition-all press-effect overflow-hidden"
+                      onClick={() => setCurrentGame(game.id)}
+                    >
+                      <CardContent className="p-4 text-center">
+                        <div className={cn("w-12 h-12 mx-auto mb-2 rounded-xl flex items-center justify-center text-2xl", game.gradient)}>
+                          {game.icon}
+                        </div>
+                        <h4 className="font-semibold text-sm">{game.name}</h4>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{game.desc}</p>
+                        <Badge variant="outline" className="mt-2 text-[9px]">
+                          <Share2 className="h-2 w-2 mr-1" />
+                          Online
+                        </Badge>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Quick / Local Games */}
             <div>
@@ -446,7 +452,7 @@ export default function Games() {
                 Quick Games
               </h3>
               <div className="grid grid-cols-2 gap-3">
-                {GAME_LIST.filter(g => !g.multiplayer).map((game) => (
+                {filteredGames.filter(g => !g.multiplayer).map((game) => (
                   <Card
                     key={game.id}
                     className="cursor-pointer hover:shadow-md transition-all press-effect"

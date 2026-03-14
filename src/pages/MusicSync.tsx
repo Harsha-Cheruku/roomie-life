@@ -25,7 +25,7 @@ interface Track {
 
 export default function MusicSync() {
   const navigate = useNavigate();
-  const { currentRoom } = useAuth();
+  const { currentRoom, isSoloMode } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
@@ -39,7 +39,7 @@ export default function MusicSync() {
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'youtube' | 'local'>('youtube');
+  const [activeTab, setActiveTab] = useState<'youtube' | 'local'>(isSoloMode ? 'local' : 'youtube');
 
   useEffect(() => {
     if (audioRef.current) {
@@ -148,15 +148,17 @@ export default function MusicSync() {
       <div className="p-4 max-w-2xl mx-auto space-y-5">
         {/* Tab Switcher */}
         <div className="flex bg-muted rounded-2xl p-1 gap-1">
-          <button
-            onClick={() => setActiveTab('youtube')}
-            className={cn(
-              "flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2",
-              activeTab === 'youtube' ? "bg-destructive text-destructive-foreground shadow-md" : "text-muted-foreground"
-            )}
-          >
-            <span className="text-base">▶️</span> YouTube
-          </button>
+          {!isSoloMode && (
+            <button
+              onClick={() => setActiveTab('youtube')}
+              className={cn(
+                "flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2",
+                activeTab === 'youtube' ? "bg-destructive text-destructive-foreground shadow-md" : "text-muted-foreground"
+              )}
+            >
+              <span className="text-base">▶️</span> YouTube
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('local')}
             className={cn(
@@ -168,8 +170,8 @@ export default function MusicSync() {
           </button>
         </div>
 
-        {/* YouTube Tab */}
-        {activeTab === 'youtube' && <YouTubeSync />}
+        {/* YouTube Tab - hidden in solo mode */}
+        {activeTab === 'youtube' && !isSoloMode && <YouTubeSync />}
 
         {/* Local Music Tab */}
         {activeTab === 'local' && (
