@@ -39,7 +39,7 @@ export default function MusicSync() {
   const [isShuffled, setIsShuffled] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'youtube' | 'local'>('youtube');
+  const [activeTab, setActiveTab] = useState<'youtube' | 'local'>(isSoloMode ? 'local' : 'youtube');
 
   useEffect(() => {
     if (audioRef.current) {
