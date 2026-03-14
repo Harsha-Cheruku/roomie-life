@@ -25,7 +25,7 @@ interface Track {
 
 export default function MusicSync() {
   const navigate = useNavigate();
-  const { currentRoom } = useAuth();
+  const { currentRoom, isSoloMode } = useAuth();
   const audioRef = useRef<HTMLAudioElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
