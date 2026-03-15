@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -38,6 +38,18 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
   const pawnStatesRef = useRef<Record<string, ChopathPawn[]>>({});
+  const winnerRef = useRef<string | null>(null);
+  const diceValueRef = useRef<number | null>(null);
+
+  // Stable refs to avoid stale closures in setInterval
+  const updateGameStateRef = useRef(gameLobby.updateGameState);
+  const playersRef = useRef(players);
+  const userRef = useRef(user);
+  const lobbyRef = useRef(lobby);
+  useEffect(() => { updateGameStateRef.current = gameLobby.updateGameState; }, [gameLobby.updateGameState]);
+  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { lobbyRef.current = lobby; }, [lobby]);
 
   useEffect(() => {
     if (lobby?.game_state) {
@@ -45,8 +57,14 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
         setPawnStates(lobby.game_state.pawnStates);
         pawnStatesRef.current = lobby.game_state.pawnStates;
       }
-      if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
-      if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
+      if (lobby.game_state.winner !== undefined) {
+        setWinner(lobby.game_state.winner);
+        winnerRef.current = lobby.game_state.winner;
+      }
+      if (lobby.game_state.lastDice) {
+        setDiceValue(lobby.game_state.lastDice);
+        diceValueRef.current = lobby.game_state.lastDice;
+      }
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
       setHasRolled(lobby.game_state.hasRolled || false);
     }
@@ -77,8 +95,23 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
     });
   };
 
-  const rollDice = async () => {
-    if (!isMyTurn || rollingRef.current || winner || hasRolled) return;
+  const canMovePawn = (pawn: ChopathPawn, dice: number) => {
+    if (pawn.isFinished) return false;
+    if (pawn.position === 0) return dice === 6 || dice === 1;
+    const newPos = pawn.position + dice;
+    if (newPos > BOARD_SIZE + 1) return false;
+    return true;
+  };
+
+  const getNextPlayer = useCallback((): string => {
+    const currentUser = userRef.current;
+    const currentPlayers = playersRef.current;
+    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser?.id);
+    return currentPlayers[(idx + 1) % currentPlayers.length].user_id;
+  }, []);
+
+  const rollDice = useCallback(() => {
+    if (!isMyTurn || rollingRef.current || winnerRef.current || hasRolled) return;
     rollingRef.current = true;
     setRolling(true);
 
@@ -90,20 +123,23 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
       if (count >= 10) {
         clearInterval(interval);
         setDiceValue(dice);
+        diceValueRef.current = dice;
         setRolling(false);
         rollingRef.current = false;
 
-        const myPawns = pawnStatesRef.current[user!.id];
+        // Use refs to get fresh state
+        const currentUser = userRef.current;
+        const myPawns = pawnStatesRef.current[currentUser!.id];
         const canMoveAny = myPawns?.some(
           (p) => !p.isFinished && (p.position > 0 || dice === 6 || dice === 1)
         );
 
         if (!canMoveAny) {
           const nextPlayer = getNextPlayer();
-          gameLobby.updateGameState(
+          updateGameStateRef.current(
             {
               pawnStates: pawnStatesRef.current,
-              winner,
+              winner: winnerRef.current,
               lastDice: dice,
               hasRolled: false,
               message: `Threw ${dice} 🐚 — no valid moves!`,
@@ -113,24 +149,16 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
           return;
         }
 
-        gameLobby.updateGameState({
+        updateGameStateRef.current({
           pawnStates: pawnStatesRef.current,
-          winner,
+          winner: winnerRef.current,
           lastDice: dice,
           hasRolled: true,
           message: `Threw ${dice} 🐚 — choose a pawn!`,
         });
       }
     }, 100);
-  };
-
-  const canMovePawn = (pawn: ChopathPawn, dice: number) => {
-    if (pawn.isFinished) return false;
-    if (pawn.position === 0) return dice === 6 || dice === 1;
-    const newPos = pawn.position + dice;
-    if (newPos > BOARD_SIZE + 1) return false;
-    return true;
-  };
+  }, [isMyTurn, hasRolled, getNextPlayer]);
 
   const handlePawnClick = async (pawnIdx: number) => {
     if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue) return;
@@ -162,6 +190,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
 
     if (allFinished) {
       setWinner(user.id);
+      winnerRef.current = user.id;
       msg = `🏆 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
       saveGameResult({
         gameType: "chopat",
@@ -187,11 +216,6 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
       },
       nextPlayer
     );
-  };
-
-  const getNextPlayer = (): string => {
-    const idx = players.findIndex((p) => p.user_id === user?.id);
-    return players[(idx + 1) % players.length].user_id;
   };
 
   const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);

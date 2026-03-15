@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -46,6 +46,18 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
   const playerStatesRef = useRef<Record<string, LudoPlayerState>>({});
+  const winnerRef = useRef<string | null>(null);
+  const diceValueRef = useRef<number | null>(null);
+
+  // Stable refs to avoid stale closures in setInterval
+  const updateGameStateRef = useRef(gameLobby.updateGameState);
+  const playersRef = useRef(players);
+  const userRef = useRef(user);
+  const lobbyRef = useRef(lobby);
+  useEffect(() => { updateGameStateRef.current = gameLobby.updateGameState; }, [gameLobby.updateGameState]);
+  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { lobbyRef.current = lobby; }, [lobby]);
 
   useEffect(() => {
     if (lobby?.game_state) {
@@ -53,8 +65,14 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
         setPlayerStates(lobby.game_state.playerStates);
         playerStatesRef.current = lobby.game_state.playerStates;
       }
-      if (lobby.game_state.winner !== undefined) setWinner(lobby.game_state.winner);
-      if (lobby.game_state.lastDice) setDiceValue(lobby.game_state.lastDice);
+      if (lobby.game_state.winner !== undefined) {
+        setWinner(lobby.game_state.winner);
+        winnerRef.current = lobby.game_state.winner;
+      }
+      if (lobby.game_state.lastDice) {
+        setDiceValue(lobby.game_state.lastDice);
+        diceValueRef.current = lobby.game_state.lastDice;
+      }
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
       setHasRolled(lobby.game_state.hasRolled || false);
     }
@@ -83,8 +101,28 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     });
   };
 
-  const rollDice = async () => {
-    if (!isMyTurn || rollingRef.current || winner || hasRolled) return;
+  const canMoveToken = (token: LudoToken, dice: number): boolean => {
+    if (token.isFinished) return false;
+    if (token.position === 0) return dice === 6;
+    const newPos = token.position + dice;
+    if (newPos > BOARD_SIZE + HOME_STRETCH) return false;
+    return true;
+  };
+
+  const getAbsolutePosition = (relPos: number, startOffset: number): number => {
+    if (relPos === 0 || relPos > BOARD_SIZE) return -1;
+    return ((relPos - 1 + startOffset) % BOARD_SIZE) + 1;
+  };
+
+  const getNextPlayer = useCallback((): string => {
+    const currentUser = userRef.current;
+    const currentPlayers = playersRef.current;
+    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser?.id);
+    return currentPlayers[(idx + 1) % currentPlayers.length].user_id;
+  }, []);
+
+  const rollDice = useCallback(() => {
+    if (!isMyTurn || rollingRef.current || winnerRef.current || hasRolled) return;
     rollingRef.current = true;
     setRolling(true);
 
@@ -96,16 +134,20 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       if (count >= 8) {
         clearInterval(interval);
         setDiceValue(dice);
+        diceValueRef.current = dice;
         setRolling(false);
         rollingRef.current = false;
-        handleDiceResult(dice);
+        handleDiceResultWithRefs(dice);
       }
     }, 100);
-  };
+  }, [isMyTurn, hasRolled]);
 
-  const handleDiceResult = async (dice: number) => {
-    if (!user || !lobby) return;
-    const myState = playerStatesRef.current[user.id];
+  const handleDiceResultWithRefs = async (dice: number) => {
+    const currentUser = userRef.current;
+    const currentLobby = lobbyRef.current;
+    if (!currentUser || !currentLobby) return;
+    
+    const myState = playerStatesRef.current[currentUser.id];
     if (!myState) return;
 
     const canMove = myState.tokens.some((t) => canMoveToken(t, dice));
@@ -113,9 +155,9 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     if (!canMove) {
       if (dice === 6 && myState.tokens.some((t) => t.position === 0 && !t.isFinished)) {
         setMessage(`Rolled 6! Click a token at home to bring it out.`);
-        await gameLobby.updateGameState({
+        await updateGameStateRef.current({
           playerStates: playerStatesRef.current,
-          winner,
+          winner: winnerRef.current,
           lastDice: dice,
           hasRolled: true,
           message: `Rolled 6! Choose a token.`,
@@ -125,10 +167,10 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
       // No valid moves — pass turn
       const nextPlayer = getNextPlayer();
-      await gameLobby.updateGameState(
+      await updateGameStateRef.current(
         {
           playerStates: playerStatesRef.current,
-          winner,
+          winner: winnerRef.current,
           lastDice: dice,
           hasRolled: false,
           message: `No valid moves. Turn passed.`,
@@ -139,21 +181,13 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     }
 
     setMessage(`Rolled ${dice}! Click a token to move.`);
-    await gameLobby.updateGameState({
+    await updateGameStateRef.current({
       playerStates: playerStatesRef.current,
-      winner,
+      winner: winnerRef.current,
       lastDice: dice,
       hasRolled: true,
       message: `Rolled ${dice}! Choose a token.`,
     });
-  };
-
-  const canMoveToken = (token: LudoToken, dice: number): boolean => {
-    if (token.isFinished) return false;
-    if (token.position === 0) return dice === 6;
-    const newPos = token.position + dice;
-    if (newPos > BOARD_SIZE + HOME_STRETCH) return false;
-    return true;
   };
 
   const handleTokenClick = async (tokenIndex: number) => {
@@ -208,6 +242,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
     if (allFinished) {
       setWinner(user.id);
+      winnerRef.current = user.id;
       msg = `🎉 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
       saveGameResult({
         gameType: "ludo",
@@ -234,16 +269,6 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       },
       nextPlayer
     );
-  };
-
-  const getAbsolutePosition = (relPos: number, startOffset: number): number => {
-    if (relPos === 0 || relPos > BOARD_SIZE) return -1;
-    return ((relPos - 1 + startOffset) % BOARD_SIZE) + 1;
-  };
-
-  const getNextPlayer = (): string => {
-    const idx = players.findIndex((p) => p.user_id === user?.id);
-    return players[(idx + 1) % players.length].user_id;
   };
 
   const getDiceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
