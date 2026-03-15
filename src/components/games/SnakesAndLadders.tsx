@@ -38,13 +38,27 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const [message, setMessage] = useState("");
   const rollingRef = useRef(false);
   const positionsRef = useRef<Record<string, number>>({});
+  const winnerRef = useRef<string | null>(null);
+
+  // Keep stable refs to lobby functions to avoid stale closures in setInterval
+  const updateGameStateRef = useRef(gameLobby.updateGameState);
+  const playersRef = useRef(players);
+  const userRef = useRef(user);
+  const lobbyRef = useRef(lobby);
+  useEffect(() => { updateGameStateRef.current = gameLobby.updateGameState; }, [gameLobby.updateGameState]);
+  useEffect(() => { playersRef.current = players; }, [players]);
+  useEffect(() => { userRef.current = user; }, [user]);
+  useEffect(() => { lobbyRef.current = lobby; }, [lobby]);
 
   useEffect(() => {
     if (lobby?.game_state?.positions) {
       setPositions(lobby.game_state.positions);
       positionsRef.current = lobby.game_state.positions;
     }
-    if (lobby?.game_state?.winner !== undefined) setWinner(lobby.game_state.winner);
+    if (lobby?.game_state?.winner !== undefined) {
+      setWinner(lobby.game_state.winner);
+      winnerRef.current = lobby.game_state.winner;
+    }
     if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
     if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
   }, [lobby?.game_state]);
@@ -64,8 +78,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     });
   };
 
-  const rollDice = async () => {
-    if (!isMyTurn || rollingRef.current || winner) return;
+  const rollDice = useCallback(() => {
+    if (!isMyTurn || rollingRef.current || winnerRef.current) return;
     rollingRef.current = true;
     setRolling(true);
 
@@ -79,34 +93,43 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         setDiceValue(dice);
         setRolling(false);
         rollingRef.current = false;
-        movePlayer(dice);
+        // Use refs to avoid stale closure
+        movePlayerWithRefs(dice);
       }
     }, 100);
-  };
+  }, [isMyTurn]);
 
-  const movePlayer = async (dice: number) => {
-    if (!user || !lobby) return;
+  const movePlayerWithRefs = async (dice: number) => {
+    const currentUser = userRef.current;
+    const currentLobby = lobbyRef.current;
+    const currentPlayers = playersRef.current;
+    if (!currentUser || !currentLobby) return;
+
     const currentPositions = positionsRef.current;
-    const currentPos = currentPositions[user.id] || 0;
+    const currentPos = currentPositions[currentUser.id] || 0;
     let newPos = currentPos + dice;
     let msg = `Rolled ${dice}`;
 
     if (newPos > 100) {
       msg = `Rolled ${dice} — need exact number to win!`;
-      // Pass turn even when can't move
-      const currentIdx = players.findIndex((p) => p.user_id === user.id);
-      const nextIdx = (currentIdx + 1) % players.length;
-      await updateState(currentPositions, null, msg, dice, players[nextIdx].user_id);
+      const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
+      const nextIdx = (currentIdx + 1) % currentPlayers.length;
+      await updateGameStateRef.current(
+        { positions: currentPositions, winner: null, lastDice: dice, message: msg },
+        currentPlayers[nextIdx].user_id
+      );
       return;
     }
 
     if (newPos === 100) {
-      const newPositions = { ...currentPositions, [user.id]: 100 };
-      await updateState(newPositions, user.id, `🎉 Winner!`, dice);
+      const newPositions = { ...currentPositions, [currentUser.id]: 100 };
+      await updateGameStateRef.current(
+        { positions: newPositions, winner: currentUser.id, lastDice: dice, message: `🎉 Winner!` }
+      );
       saveGameResult({
         gameType: "snakes_and_ladders",
-        winnerId: user.id,
-        playerIds: players.map((p) => p.user_id),
+        winnerId: currentUser.id,
+        playerIds: currentPlayers.map((p) => p.user_id),
         result: "completed",
         score: { final_position: 100 },
       });
@@ -122,22 +145,12 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       newPos = LADDERS[newPos];
     }
 
-    const newPositions = { ...currentPositions, [user.id]: newPos };
-    const currentIdx = players.findIndex((p) => p.user_id === user.id);
-    const nextIdx = (currentIdx + 1) % players.length;
-    await updateState(newPositions, null, msg, dice, players[nextIdx].user_id);
-  };
-
-  const updateState = async (
-    newPositions: Record<string, number>,
-    winnerId: string | null,
-    msg: string,
-    dice: number,
-    nextTurnUserId?: string
-  ) => {
-    await gameLobby.updateGameState(
-      { positions: newPositions, winner: winnerId, lastDice: dice, message: msg },
-      nextTurnUserId
+    const newPositions = { ...currentPositions, [currentUser.id]: newPos };
+    const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
+    const nextIdx = (currentIdx + 1) % currentPlayers.length;
+    await updateGameStateRef.current(
+      { positions: newPositions, winner: null, lastDice: dice, message: msg },
+      currentPlayers[nextIdx].user_id
     );
   };
 

@@ -65,10 +65,9 @@ const loadYouTubeApi = (): Promise<void> => {
   return ytApiLoadPromise;
 };
 
-// Drift threshold in seconds — only seek if off by more than this
-const DRIFT_THRESHOLD = 1.5;
-// How often the host sends a heartbeat (ms)
-const HEARTBEAT_INTERVAL = 5000;
+// Tighter sync: 0.8s drift threshold, 3s heartbeat
+const DRIFT_THRESHOLD = 0.8;
+const HEARTBEAT_INTERVAL = 3000;
 
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
@@ -92,6 +91,8 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const isHostRef = useRef(false);
   // Guard to prevent broadcast feedback loops when we programmatically control the player
   const ignoreBroadcastRef = useRef(false);
+  // Track the host's authoritative timestamp for continuous correction
+  const lastHostSyncRef = useRef<{ time: number; hostTime: number; rate: number } | null>(null);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -179,6 +180,33 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     };
   }, [isHost, activeVideoId]);
 
+  // Listener-side continuous drift correction between heartbeats
+  useEffect(() => {
+    if (isHost || !activeVideoId) return;
+
+    const correctionInterval = setInterval(() => {
+      const player = playerRef.current;
+      const sync = lastHostSyncRef.current;
+      if (!player || !sync || typeof player.getCurrentTime !== "function") return;
+      const YT = (window as any).YT?.PlayerState;
+      if (!YT || player.getPlayerState() !== YT.PLAYING) return;
+
+      // Calculate where the host should be now based on last sync + elapsed time
+      const elapsed = (Date.now() - sync.time) / 1000;
+      const expectedTime = sync.hostTime + elapsed * sync.rate;
+      const actualTime = player.getCurrentTime();
+      const drift = Math.abs(expectedTime - actualTime);
+
+      if (drift > DRIFT_THRESHOLD) {
+        ignoreBroadcastRef.current = true;
+        player.seekTo(expectedTime, true);
+        setTimeout(() => { ignoreBroadcastRef.current = false; }, 200);
+      }
+    }, 1000);
+
+    return () => clearInterval(correctionInterval);
+  }, [isHost, activeVideoId]);
+
   const broadcastPlaybackState = useCallback((action: string, currentTime: number, rate?: number) => {
     if (!channelRef.current) return;
     channelRef.current.send({
@@ -254,19 +282,29 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               player.seekTo(data.currentTime, true);
               player.pauseVideo();
               setIsPaused(true);
+              lastHostSyncRef.current = null; // Stop drift correction while paused
             } else if (data.action === "playing") {
               const targetTime = data.currentTime + networkDelay;
               player.seekTo(targetTime, true);
               if (data.rate) player.setPlaybackRate(data.rate);
               player.playVideo();
               setIsPaused(false);
+              // Record sync point for continuous drift correction
+              lastHostSyncRef.current = { time: Date.now(), hostTime: targetTime, rate: data.rate || 1 };
             } else if (data.action === "speed") {
               if (data.rate) player.setPlaybackRate(data.rate);
+              // Update sync ref rate
+              if (lastHostSyncRef.current) {
+                lastHostSyncRef.current.rate = data.rate || 1;
+              }
             } else if (data.action === "heartbeat") {
-              // Only correct drift if playing and off by more than threshold
+              // Update authoritative sync point for continuous correction
+              const expectedTime = data.currentTime + networkDelay;
+              lastHostSyncRef.current = { time: Date.now(), hostTime: expectedTime, rate: data.rate || 1 };
+              
+              // Immediate correction if drift is too large
               const YT = (window as any).YT?.PlayerState;
               if (YT && player.getPlayerState() === YT.PLAYING) {
-                const expectedTime = data.currentTime + networkDelay;
                 const actualTime = player.getCurrentTime();
                 const drift = Math.abs(expectedTime - actualTime);
                 if (drift > DRIFT_THRESHOLD) {
@@ -284,7 +322,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             // Release guard after a short delay to let YT state change events pass
             setTimeout(() => {
               ignoreBroadcastRef.current = false;
-            }, 300);
+            }, 200);
           }
         })
         .subscribe(async (status) => {
@@ -361,6 +399,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     setSharedBy("");
     setIsHost(false);
     setIsPaused(false);
+    lastHostSyncRef.current = null;
     if (channelRef.current) {
       try {
         await channelRef.current.send({
