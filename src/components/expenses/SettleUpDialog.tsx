@@ -221,7 +221,6 @@ export const SettleUpDialog = ({
                     {selectedPerson.owes > 0 
                     ? `Owes you ₹${selectedPerson.owes.toFixed(2)}`
                     : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(2)}`
-                    : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(0)}`
                   }
                 </p>
               </div>
