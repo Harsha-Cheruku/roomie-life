@@ -611,7 +611,7 @@ export const CreateExpenseDialog = ({
                       
                       {isSelected && splitType === 'equal' && (
                         <span className="font-semibold text-primary">
-                          ₹{split?.amount.toFixed(0) || 0}
+                          {split?.amount % 1 === 0 ? `₹${split?.amount}` : `₹${split?.amount.toFixed(2)}`}
                         </span>
                       )}
                       
