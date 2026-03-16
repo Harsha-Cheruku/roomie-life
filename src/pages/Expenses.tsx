@@ -740,7 +740,7 @@ export const Expenses = () => {
                 <ProfileAvatar avatar={person.avatar} size="lg" className="mb-2" />
                 <p className="text-sm font-medium text-foreground">{person.name}</p>
                 <p className={cn("text-sm font-bold", person.owes > 0 ? "text-coral" : "text-mint")}>
-                  {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(0)}` : `Will Get ₹${Math.abs(person.owes).toFixed(0)}`}
+                  {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(2)}` : `Will Get ₹${Math.abs(person.owes).toFixed(2)}`}
                 </p>
               </div>
             ))}
