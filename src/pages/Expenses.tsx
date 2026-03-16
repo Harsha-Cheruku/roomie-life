@@ -638,7 +638,7 @@ export const Expenses = () => {
                     <div className="flex-1">
                       <p className="font-semibold text-foreground">{expense.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        {expense.creator_profile?.display_name} assigned ₹{mySplit?.amount.toFixed(0)} to you
+                        {expense.creator_profile?.display_name} assigned ₹{mySplit?.amount.toFixed(2)} to you
                       </p>
                     </div>
                   </div>
