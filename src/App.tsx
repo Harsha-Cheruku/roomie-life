@@ -193,6 +193,16 @@ const App = () => (
               }
             />
             <Route path="/install" element={<Install />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
+            <Route
+              path="/delete-account"
+              element={
+                <ProtectedRoute requireRoom={false}>
+                  <DeleteAccount />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
