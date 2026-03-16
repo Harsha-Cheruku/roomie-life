@@ -81,7 +81,7 @@ export const useCreateNotification = () => {
         userId,
         type: 'expense',
         title: '💰 New expense assigned',
-        body: `You've been added to "${expense.title}" (₹${expense.total_amount.toFixed(0)})`,
+        body: `You've been added to "${expense.title}" (₹${expense.total_amount.toFixed(2)})`,
         referenceType: 'expense',
         referenceId: expense.id,
       });
@@ -214,7 +214,7 @@ export const useCreateNotification = () => {
         userId: expense.paid_by,
         type: 'expense',
         title: '💸 Payment received',
-        body: `${payerName} marked ₹${amount.toFixed(0)} as paid for "${expense.title}"`,
+        body: `${payerName} marked ₹${amount.toFixed(2)} as paid for "${expense.title}"`,
         referenceType: 'expense',
         referenceId: expense.id,
       });

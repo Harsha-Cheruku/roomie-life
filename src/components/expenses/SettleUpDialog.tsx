@@ -105,7 +105,7 @@ export const SettleUpDialog = ({
 
       toast({
         title: 'Settled up! 🎉',
-        description: `Marked ₹${settleAmount.toFixed(0)} as settled with ${selectedPerson.name}`,
+        description: `Marked ₹${settleAmount.toFixed(2)} as settled with ${selectedPerson.name}`,
       });
 
       setSelectedPerson(null);
@@ -150,7 +150,7 @@ export const SettleUpDialog = ({
                         key={person.user_id}
                         onClick={() => {
                           setSelectedPerson(person);
-                          setAmount(Math.abs(person.owes).toFixed(0));
+                          setAmount(Math.abs(person.owes).toFixed(2));
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
@@ -158,7 +158,7 @@ export const SettleUpDialog = ({
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-mint font-semibold">
-                            Owes you ₹{person.owes.toFixed(0)}
+                            Owes you ₹{person.owes.toFixed(2)}
                           </p>
                         </div>
                         <ArrowRight className="w-5 h-5 text-muted-foreground" />
@@ -180,7 +180,7 @@ export const SettleUpDialog = ({
                         key={person.user_id}
                         onClick={() => {
                           setSelectedPerson(person);
-                          setAmount(Math.abs(person.owes).toFixed(0));
+                          setAmount(Math.abs(person.owes).toFixed(2));
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
@@ -188,7 +188,7 @@ export const SettleUpDialog = ({
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-coral font-semibold">
-                            You owe ₹{Math.abs(person.owes).toFixed(0)}
+                            You owe ₹{Math.abs(person.owes).toFixed(2)}
                           </p>
                         </div>
                         <ArrowRight className="w-5 h-5 text-muted-foreground" />
@@ -218,9 +218,9 @@ export const SettleUpDialog = ({
                   "text-sm font-medium",
                   selectedPerson.owes > 0 ? "text-mint" : "text-coral"
                 )}>
-                  {selectedPerson.owes > 0 
-                    ? `Owes you ₹${selectedPerson.owes.toFixed(0)}`
-                    : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(0)}`
+                    {selectedPerson.owes > 0 
+                    ? `Owes you ₹${selectedPerson.owes.toFixed(2)}`
+                    : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(2)}`
                   }
                 </p>
               </div>

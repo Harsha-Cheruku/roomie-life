@@ -304,7 +304,7 @@ export const CreateExpenseDialog = ({
       if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
         toast({
           title: 'Invalid split amounts',
-          description: `Split amounts must total ₹${totalAmount.toFixed(0)}`,
+          description: `Split amounts must total ₹${totalAmount.toFixed(2)}`,
           variant: 'destructive',
         });
         return;
@@ -385,9 +385,9 @@ export const CreateExpenseDialog = ({
 
       toast({
         title: isSoloMode ? 'Expense recorded! 💰' : 'Expense created! 🎉',
-        description: isSoloMode 
-          ? `₹${totalAmount.toFixed(0)} expense saved`
-          : `Split ₹${totalAmount.toFixed(0)} between ${selectedSplits.length} people`,
+         description: isSoloMode 
+          ? `₹${totalAmount.toFixed(2)} expense saved`
+          : `Split ₹${totalAmount.toFixed(2)} between ${selectedSplits.length} people`,
       });
 
       // Reset form
@@ -611,7 +611,7 @@ export const CreateExpenseDialog = ({
                       
                       {isSelected && splitType === 'equal' && (
                         <span className="font-semibold text-primary">
-                          ₹{split?.amount.toFixed(0) || 0}
+                          {split?.amount % 1 === 0 ? `₹${split?.amount}` : `₹${split?.amount.toFixed(2)}`}
                         </span>
                       )}
                       
@@ -634,11 +634,11 @@ export const CreateExpenseDialog = ({
                           <span className="text-muted-foreground">₹</span>
                           <Input
                             type="number"
-                            value={split?.amount.toFixed(0) || 0}
+                            value={split?.amount || 0}
                             onChange={(e) => updateMemberAmount(member.user_id, parseFloat(e.target.value) || 0)}
                             className="w-20 h-8 rounded-lg"
                             min="0"
-                            step="1"
+                            step="0.01"
                           />
                         </div>
                       )}
@@ -653,12 +653,12 @@ export const CreateExpenseDialog = ({
               <div className="mt-2 text-sm">
                 {splitType === 'percentage' && (
                   <p className={getTotalPercentage() === 100 ? 'text-mint' : 'text-coral'}>
-                    Total: {getTotalPercentage().toFixed(0)}% {getTotalPercentage() !== 100 && '(should be 100%)'}
+                    Total: {getTotalPercentage().toFixed(1)}% {getTotalPercentage() !== 100 && '(should be 100%)'}
                   </p>
                 )}
                 {splitType === 'custom' && amount && (
                   <p className={Math.abs(getTotalSplitAmount() - parseFloat(amount)) < 0.01 ? 'text-mint' : 'text-coral'}>
-                    Total: ₹{getTotalSplitAmount().toFixed(0)} of ₹{parseFloat(amount).toFixed(0)}
+                    Total: ₹{getTotalSplitAmount().toFixed(2)} of ₹{parseFloat(amount).toFixed(2)}
                   </p>
                 )}
               </div>

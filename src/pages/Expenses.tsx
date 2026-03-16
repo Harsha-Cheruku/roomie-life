@@ -638,7 +638,7 @@ export const Expenses = () => {
                     <div className="flex-1">
                       <p className="font-semibold text-foreground">{expense.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        {expense.creator_profile?.display_name} assigned ₹{mySplit?.amount.toFixed(0)} to you
+                        {expense.creator_profile?.display_name} assigned ₹{mySplit?.amount.toFixed(2)} to you
                       </p>
                     </div>
                   </div>
@@ -693,10 +693,10 @@ export const Expenses = () => {
                     <div className="flex-1">
                       <p className="font-semibold text-foreground">{expense.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        Pay ₹{mySplit?.amount.toFixed(0)} to {expense.payer_profile?.display_name}
+                        Pay ₹{mySplit?.amount.toFixed(2)} to {expense.payer_profile?.display_name}
                       </p>
                     </div>
-                    <span className="text-lg font-bold text-coral">₹{mySplit?.amount.toFixed(0)}</span>
+                    <span className="text-lg font-bold text-coral">₹{mySplit?.amount.toFixed(2)}</span>
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -740,7 +740,7 @@ export const Expenses = () => {
                 <ProfileAvatar avatar={person.avatar} size="lg" className="mb-2" />
                 <p className="text-sm font-medium text-foreground">{person.name}</p>
                 <p className={cn("text-sm font-bold", person.owes > 0 ? "text-coral" : "text-mint")}>
-                  {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(0)}` : `Will Get ₹${Math.abs(person.owes).toFixed(0)}`}
+                  {person.owes > 0 ? `Will Pay ₹${person.owes.toFixed(2)}` : `Will Get ₹${Math.abs(person.owes).toFixed(2)}`}
                 </p>
               </div>
             ))}
@@ -887,7 +887,7 @@ export const Expenses = () => {
                         mySplit.status === 'rejected' ? 'bg-muted text-muted-foreground' :
                         'bg-accent/20 text-accent'
                       )}>
-                        {mySplit.is_paid ? '✓ Paid' : mySplit.status === 'accepted' ? '₹' + mySplit.amount.toFixed(0) : mySplit.status === 'rejected' ? '✗' : '⏳'}
+                        {mySplit.is_paid ? '✓ Paid' : mySplit.status === 'accepted' ? '₹' + mySplit.amount.toFixed(2) : mySplit.status === 'rejected' ? '✗' : '⏳'}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{formatDate(expense.created_at)}</span>

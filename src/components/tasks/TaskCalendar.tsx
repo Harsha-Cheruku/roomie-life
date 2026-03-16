@@ -97,7 +97,8 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
   const getTasksForDate = (date: Date) => {
     return tasks.filter(task => {
       const scheduledDate = getTaskScheduledDate(task);
-      if (!scheduledDate) return false;
+      // Tasks without any date show on today
+      if (!scheduledDate) return isSameDay(date, new Date());
       return isSameDay(scheduledDate, date);
     });
   };
