@@ -385,9 +385,9 @@ export const CreateExpenseDialog = ({
 
       toast({
         title: isSoloMode ? 'Expense recorded! 💰' : 'Expense created! 🎉',
-        description: isSoloMode 
-          ? `₹${totalAmount.toFixed(0)} expense saved`
-          : `Split ₹${totalAmount.toFixed(0)} between ${selectedSplits.length} people`,
+         description: isSoloMode 
+          ? `₹${totalAmount.toFixed(2)} expense saved`
+          : `Split ₹${totalAmount.toFixed(2)} between ${selectedSplits.length} people`,
       });
 
       // Reset form

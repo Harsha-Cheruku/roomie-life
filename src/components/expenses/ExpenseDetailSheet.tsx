@@ -325,7 +325,7 @@ export const ExpenseDetailSheet = ({
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-foreground">₹{split.amount.toFixed(0)}</p>
+                          <p className="font-bold text-foreground">₹{split.amount.toFixed(2)}</p>
                         </div>
                       </div>
 

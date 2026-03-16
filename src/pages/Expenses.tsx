@@ -693,10 +693,10 @@ export const Expenses = () => {
                     <div className="flex-1">
                       <p className="font-semibold text-foreground">{expense.title}</p>
                       <p className="text-sm text-muted-foreground">
-                        Pay ₹{mySplit?.amount.toFixed(0)} to {expense.payer_profile?.display_name}
+                        Pay ₹{mySplit?.amount.toFixed(2)} to {expense.payer_profile?.display_name}
                       </p>
                     </div>
-                    <span className="text-lg font-bold text-coral">₹{mySplit?.amount.toFixed(0)}</span>
+                    <span className="text-lg font-bold text-coral">₹{mySplit?.amount.toFixed(2)}</span>
                   </div>
                   <div className="flex gap-2">
                     <Button

@@ -218,8 +218,9 @@ export const SettleUpDialog = ({
                   "text-sm font-medium",
                   selectedPerson.owes > 0 ? "text-mint" : "text-coral"
                 )}>
-                  {selectedPerson.owes > 0 
-                    ? `Owes you ₹${selectedPerson.owes.toFixed(0)}`
+                    {selectedPerson.owes > 0 
+                    ? `Owes you ₹${selectedPerson.owes.toFixed(2)}`
+                    : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(2)}`
                     : `You owe ₹${Math.abs(selectedPerson.owes).toFixed(0)}`
                   }
                 </p>
