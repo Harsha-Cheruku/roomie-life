@@ -180,7 +180,7 @@ export const SettleUpDialog = ({
                         key={person.user_id}
                         onClick={() => {
                           setSelectedPerson(person);
-                          setAmount(Math.abs(person.owes).toFixed(0));
+                          setAmount(Math.abs(person.owes).toFixed(2));
                         }}
                         className="w-full p-4 rounded-2xl border border-border hover:border-primary transition-all flex items-center gap-3"
                       >
