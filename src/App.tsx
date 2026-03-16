@@ -24,6 +24,9 @@ import NotificationSettings from "./pages/NotificationSettings";
 import AdminPanel from "./pages/AdminPanel";
 import NotFound from "./pages/NotFound";
 import Install from "./pages/Install";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import DeleteAccount from "./pages/DeleteAccount";
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { useEffect } from "react";
@@ -190,6 +193,16 @@ const App = () => (
               }
             />
             <Route path="/install" element={<Install />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
+            <Route path="/terms" element={<TermsOfService />} />
+            <Route
+              path="/delete-account"
+              element={
+                <ProtectedRoute requireRoom={false}>
+                  <DeleteAccount />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>

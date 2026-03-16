@@ -393,6 +393,31 @@ export const RoomSettings = () => {
             </p>
           )}
         </section>
+
+        {/* Account & Legal */}
+        <section className="space-y-3">
+          <h2 className="font-display text-lg font-semibold text-foreground">Account & Legal</h2>
+          <div className="space-y-2">
+            <button
+              onClick={() => navigate("/privacy")}
+              className="w-full text-left p-3 rounded-xl bg-card border border-border text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              Privacy Policy
+            </button>
+            <button
+              onClick={() => navigate("/terms")}
+              className="w-full text-left p-3 rounded-xl bg-card border border-border text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              Terms of Service
+            </button>
+            <button
+              onClick={() => navigate("/delete-account")}
+              className="w-full text-left p-3 rounded-xl bg-destructive/5 border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              Delete Account
+            </button>
+          </div>
+        </section>
       </div>
 
       <AvatarPicker

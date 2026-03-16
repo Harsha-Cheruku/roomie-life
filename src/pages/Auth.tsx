@@ -205,6 +205,15 @@ export const Auth = () => {
               </span>
             </button>
           </div>
+
+          <div className="mt-4 flex justify-center gap-4 text-xs text-muted-foreground">
+            <button type="button" onClick={() => navigate("/privacy")} className="hover:text-primary transition-colors underline">
+              Privacy Policy
+            </button>
+            <button type="button" onClick={() => navigate("/terms")} className="hover:text-primary transition-colors underline">
+              Terms of Service
+            </button>
+          </div>
         </div>
       </div>
     </div>
