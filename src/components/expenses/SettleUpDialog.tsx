@@ -105,7 +105,7 @@ export const SettleUpDialog = ({
 
       toast({
         title: 'Settled up! 🎉',
-        description: `Marked ₹${settleAmount.toFixed(0)} as settled with ${selectedPerson.name}`,
+        description: `Marked ₹${settleAmount.toFixed(2)} as settled with ${selectedPerson.name}`,
       });
 
       setSelectedPerson(null);
