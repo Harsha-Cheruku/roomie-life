@@ -887,7 +887,7 @@ export const Expenses = () => {
                         mySplit.status === 'rejected' ? 'bg-muted text-muted-foreground' :
                         'bg-accent/20 text-accent'
                       )}>
-                        {mySplit.is_paid ? '✓ Paid' : mySplit.status === 'accepted' ? '₹' + mySplit.amount.toFixed(0) : mySplit.status === 'rejected' ? '✗' : '⏳'}
+                        {mySplit.is_paid ? '✓ Paid' : mySplit.status === 'accepted' ? '₹' + mySplit.amount.toFixed(2) : mySplit.status === 'rejected' ? '✗' : '⏳'}
                       </span>
                     )}
                     <span className="text-xs text-muted-foreground">{formatDate(expense.created_at)}</span>
