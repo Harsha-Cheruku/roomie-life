@@ -158,7 +158,7 @@ export const SettleUpDialog = ({
                         <div className="flex-1 text-left">
                           <p className="font-medium">{person.name}</p>
                           <p className="text-sm text-mint font-semibold">
-                            Owes you ₹{person.owes.toFixed(0)}
+                            Owes you ₹{person.owes.toFixed(2)}
                           </p>
                         </div>
                         <ArrowRight className="w-5 h-5 text-muted-foreground" />
