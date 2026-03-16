@@ -634,11 +634,11 @@ export const CreateExpenseDialog = ({
                           <span className="text-muted-foreground">₹</span>
                           <Input
                             type="number"
-                            value={split?.amount.toFixed(0) || 0}
+                            value={split?.amount || 0}
                             onChange={(e) => updateMemberAmount(member.user_id, parseFloat(e.target.value) || 0)}
                             className="w-20 h-8 rounded-lg"
                             min="0"
-                            step="1"
+                            step="0.01"
                           />
                         </div>
                       )}
