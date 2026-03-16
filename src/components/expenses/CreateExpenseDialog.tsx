@@ -304,7 +304,7 @@ export const CreateExpenseDialog = ({
       if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
         toast({
           title: 'Invalid split amounts',
-          description: `Split amounts must total ₹${totalAmount.toFixed(0)}`,
+          description: `Split amounts must total ₹${totalAmount.toFixed(2)}`,
           variant: 'destructive',
         });
         return;
