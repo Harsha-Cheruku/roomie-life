@@ -653,12 +653,12 @@ export const CreateExpenseDialog = ({
               <div className="mt-2 text-sm">
                 {splitType === 'percentage' && (
                   <p className={getTotalPercentage() === 100 ? 'text-mint' : 'text-coral'}>
-                    Total: {getTotalPercentage().toFixed(0)}% {getTotalPercentage() !== 100 && '(should be 100%)'}
+                    Total: {getTotalPercentage().toFixed(1)}% {getTotalPercentage() !== 100 && '(should be 100%)'}
                   </p>
                 )}
                 {splitType === 'custom' && amount && (
                   <p className={Math.abs(getTotalSplitAmount() - parseFloat(amount)) < 0.01 ? 'text-mint' : 'text-coral'}>
-                    Total: ₹{getTotalSplitAmount().toFixed(0)} of ₹{parseFloat(amount).toFixed(0)}
+                    Total: ₹{getTotalSplitAmount().toFixed(2)} of ₹{parseFloat(amount).toFixed(2)}
                   </p>
                 )}
               </div>
