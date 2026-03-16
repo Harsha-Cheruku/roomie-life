@@ -795,6 +795,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      user_room_ids_array: { Args: { _user_id: string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
