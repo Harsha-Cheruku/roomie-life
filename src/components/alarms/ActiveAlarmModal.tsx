@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Bell, BellOff, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useAuth } from "@/contexts/AuthContext";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 interface AlarmTrigger {
   id: string;
@@ -34,9 +35,9 @@ interface ActiveAlarmModalProps {
 }
 
 /**
- * Alarm modal — shows globally (mounted from Index.tsx).
+ * Alarm modal — shows globally (mounted from App.tsx).
  * Sound is controlled by useGlobalAlarm hook, NOT here.
- * Dismissal goes through the atomic dismiss-alarm edge function.
+ * This modal provides a "Tap to enable sound" fallback for autoplay-blocked scenarios.
  */
 export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmModalProps) {
   const RING_LENGTH_MS = 5000;
@@ -50,6 +51,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
     return Math.max(1, Math.floor(diff / RING_LENGTH_MS) + 1);
   });
   const [dismissing, setDismissing] = useState(false);
+  const [soundUnlocked, setSoundUnlocked] = useState(false);
   const hasClosedRef = useRef(false);
 
   const isOwnerDevice = Boolean(
@@ -112,6 +114,25 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
     };
   }, [trigger.id, onDismissed]);
 
+  // Unlock audio on any interaction with the modal
+  const handleUnlockSound = useCallback(() => {
+    if (soundUnlocked) return;
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      setSoundUnlocked(true);
+      // Dispatch a synthetic click to trigger the GlobalAlarmLayer's audio unlock
+      document.dispatchEvent(new Event("click"));
+      console.log("Alarm modal: Audio unlocked via user tap");
+    } catch (e) {
+      console.warn("Alarm modal: Audio unlock failed:", e);
+    }
+  }, [soundUnlocked]);
+
   const handleDismiss = async () => {
     if (!userId || dismissing) return;
 
@@ -156,7 +177,20 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
 
   return (
     <Dialog open={true}>
-      <DialogContent className="sm:max-w-md bg-destructive/10 border-destructive" hideCloseButton>
+      <DialogContent
+        className="sm:max-w-md bg-destructive/10 border-destructive"
+        hideCloseButton
+        onClick={handleUnlockSound}
+        onTouchStart={handleUnlockSound}
+        aria-describedby="alarm-description"
+      >
+        <VisuallyHidden>
+          <DialogTitle>Alarm Ringing</DialogTitle>
+        </VisuallyHidden>
+        <DialogDescription id="alarm-description" className="sr-only">
+          Alarm {alarm.title} is ringing at {alarm.alarm_time}
+        </DialogDescription>
+
         <div className="text-center space-y-6 py-4">
           <div className={isOwnerDevice ? "animate-pulse" : ""}>
             {isOwnerDevice ? (
@@ -165,6 +199,15 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
               <VolumeX className="h-16 w-16 mx-auto text-muted-foreground" />
             )}
           </div>
+
+          {isOwnerDevice && !soundUnlocked && (
+            <button
+              onClick={handleUnlockSound}
+              className="w-full py-3 rounded-lg bg-destructive text-destructive-foreground font-semibold animate-pulse text-sm"
+            >
+              🔊 Tap here to enable alarm sound
+            </button>
+          )}
 
           {!isOwnerDevice && (
             <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">

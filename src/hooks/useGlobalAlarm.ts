@@ -37,6 +37,7 @@ export function useGlobalAlarm() {
   const [activeTrigger, setActiveTrigger] = useState<AlarmTrigger | null>(null);
   const [activeAlarm, setActiveAlarm] = useState<Alarm | null>(null);
   const isPlayingRef = useRef(false);
+  const playAttemptedRef = useRef(false);
   const pollIntervalRef = useRef<number | null>(null);
 
   const roomId = currentRoom?.id || null;
@@ -87,15 +88,12 @@ export function useGlobalAlarm() {
   useEffect(() => {
     if (!roomId) return;
 
-    // Initial fetch
     fetchActiveTrigger();
 
-    // Polling fallback every 10 seconds
     pollIntervalRef.current = window.setInterval(() => {
       fetchActiveTrigger();
     }, 10000);
 
-    // Realtime subscription
     const channel = supabase
       .channel(`global-alarm-triggers-${roomId}`)
       .on(
@@ -126,12 +124,12 @@ export function useGlobalAlarm() {
   // Control sound based on active trigger + ownership
   useEffect(() => {
     if (!activeTrigger || !activeAlarm || !user) {
-      // No active alarm — stop sound if playing
       if (isPlayingRef.current) {
         console.log("Global alarm: stopping sound (no active trigger)");
         stopAlarm();
         isPlayingRef.current = false;
       }
+      playAttemptedRef.current = false;
       return;
     }
 
@@ -142,6 +140,7 @@ export function useGlobalAlarm() {
     if (isOwnerDevice && !isPlayingRef.current) {
       console.log("Global alarm: starting sound for owner device");
       isPlayingRef.current = true;
+      playAttemptedRef.current = true;
       playAlarm().catch((err) => {
         console.error("Global alarm: failed to play", err);
         isPlayingRef.current = false;
@@ -161,10 +160,27 @@ export function useGlobalAlarm() {
     }
   }, [activeTrigger, stopAlarm]);
 
+  // Called by GlobalAlarmLayer on user interaction to retry sound if autoplay was blocked
+  const retryPlayAlarm = useCallback(() => {
+    if (!activeTrigger || !activeAlarm || !user) return;
+    
+    const isOwnerDevice =
+      user.id === activeAlarm.created_by &&
+      (!activeAlarm.owner_device_id || activeAlarm.owner_device_id === deviceId);
+
+    if (isOwnerDevice && playAttemptedRef.current) {
+      // Re-attempt play — the sound hook handles dedup internally
+      playAlarm().catch((err) => {
+        console.warn("Global alarm: retry play failed", err);
+      });
+    }
+  }, [activeTrigger, activeAlarm, user, deviceId, playAlarm]);
+
   const handleDismissed = useCallback(() => {
     console.log("Global alarm: dismissed by user");
     stopAlarm();
     isPlayingRef.current = false;
+    playAttemptedRef.current = false;
     setActiveTrigger(null);
     setActiveAlarm(null);
   }, [stopAlarm]);
@@ -173,5 +189,6 @@ export function useGlobalAlarm() {
     activeTrigger,
     activeAlarm,
     handleDismissed,
+    retryPlayAlarm,
   };
 }
