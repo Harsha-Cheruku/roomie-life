@@ -65,33 +65,18 @@ export function useGlobalAlarm() {
 
       if (triggers && triggers.length > 0) {
         const t = triggers[0];
-        const newTrigger: AlarmTrigger = {
+        setActiveTrigger({
           id: t.id,
           alarm_id: t.alarm_id,
           ring_count: t.ring_count,
           status: t.status,
           dismissed_by: t.dismissed_by,
           triggered_at: t.triggered_at,
-        };
-        const newAlarm = t.alarms as unknown as Alarm;
-        
-        // Only update state if trigger changed (avoid re-renders)
-        setActiveTrigger(prev => {
-          if (prev?.id === newTrigger.id) return prev;
-          console.log("Global alarm: Active trigger found", newTrigger.id, "for alarm", newAlarm.title);
-          return newTrigger;
         });
-        setActiveAlarm(prev => {
-          if (prev?.id === newAlarm.id) return prev;
-          return newAlarm;
-        });
+        setActiveAlarm(t.alarms as unknown as Alarm);
       } else {
-        setActiveTrigger(prev => {
-          if (prev === null) return null;
-          console.log("Global alarm: No active triggers in room");
-          return null;
-        });
-        setActiveAlarm(prev => prev === null ? null : null);
+        setActiveTrigger(null);
+        setActiveAlarm(null);
       }
     } catch (err) {
       console.error("Global alarm: fetch error", err);
