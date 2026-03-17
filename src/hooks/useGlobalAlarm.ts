@@ -25,8 +25,8 @@ interface Alarm {
 }
 
 /**
- * Global alarm hook — mounted at app shell level (Index.tsx).
- * Subscribes to alarm_triggers realtime for the user's room.
+ * Global alarm hook — mounted at app shell level (App.tsx).
+ * Subscribes to alarm_triggers realtime AND polls every 10s as fallback.
  * Controls sound playback for the alarm owner's device regardless of current page.
  */
 export function useGlobalAlarm() {
@@ -37,6 +37,7 @@ export function useGlobalAlarm() {
   const [activeTrigger, setActiveTrigger] = useState<AlarmTrigger | null>(null);
   const [activeAlarm, setActiveAlarm] = useState<Alarm | null>(null);
   const isPlayingRef = useRef(false);
+  const pollIntervalRef = useRef<number | null>(null);
 
   const roomId = currentRoom?.id || null;
 
@@ -48,42 +49,68 @@ export function useGlobalAlarm() {
   const fetchActiveTrigger = useCallback(async () => {
     if (!roomId) return;
 
-    const { data: triggers, error } = await supabase
-      .from("alarm_triggers")
-      .select("*, alarms!inner(*)")
-      .eq("status", "ringing")
-      .eq("alarms.room_id", roomId)
-      .order("triggered_at", { ascending: false })
-      .limit(1);
+    try {
+      const { data: triggers, error } = await supabase
+        .from("alarm_triggers")
+        .select("*, alarms!inner(*)")
+        .eq("status", "ringing")
+        .eq("alarms.room_id", roomId)
+        .order("triggered_at", { ascending: false })
+        .limit(1);
 
-    if (error) {
-      console.error("Global alarm: error fetching active trigger", error);
-      return;
-    }
+      if (error) {
+        console.error("Global alarm: error fetching active trigger", error);
+        return;
+      }
 
-    if (triggers && triggers.length > 0) {
-      const t = triggers[0];
-      setActiveTrigger({
-        id: t.id,
-        alarm_id: t.alarm_id,
-        ring_count: t.ring_count,
-        status: t.status,
-        dismissed_by: t.dismissed_by,
-        triggered_at: t.triggered_at,
-      });
-      setActiveAlarm(t.alarms as unknown as Alarm);
-    } else {
-      setActiveTrigger(null);
-      setActiveAlarm(null);
+      if (triggers && triggers.length > 0) {
+        const t = triggers[0];
+        const newTrigger: AlarmTrigger = {
+          id: t.id,
+          alarm_id: t.alarm_id,
+          ring_count: t.ring_count,
+          status: t.status,
+          dismissed_by: t.dismissed_by,
+          triggered_at: t.triggered_at,
+        };
+        const newAlarm = t.alarms as unknown as Alarm;
+        
+        // Only update state if trigger changed (avoid re-renders)
+        setActiveTrigger(prev => {
+          if (prev?.id === newTrigger.id) return prev;
+          console.log("Global alarm: Active trigger found", newTrigger.id, "for alarm", newAlarm.title);
+          return newTrigger;
+        });
+        setActiveAlarm(prev => {
+          if (prev?.id === newAlarm.id) return prev;
+          return newAlarm;
+        });
+      } else {
+        setActiveTrigger(prev => {
+          if (prev === null) return null;
+          console.log("Global alarm: No active triggers in room");
+          return null;
+        });
+        setActiveAlarm(prev => prev === null ? null : null);
+      }
+    } catch (err) {
+      console.error("Global alarm: fetch error", err);
     }
   }, [roomId]);
 
-  // Subscribe to trigger changes once per room
+  // Subscribe to trigger changes + poll every 10s as fallback
   useEffect(() => {
     if (!roomId) return;
 
+    // Initial fetch
     fetchActiveTrigger();
 
+    // Polling fallback every 10 seconds
+    pollIntervalRef.current = window.setInterval(() => {
+      fetchActiveTrigger();
+    }, 10000);
+
+    // Realtime subscription
     const channel = supabase
       .channel(`global-alarm-triggers-${roomId}`)
       .on(
@@ -93,13 +120,20 @@ export function useGlobalAlarm() {
           schema: "public",
           table: "alarm_triggers",
         },
-        () => {
+        (payload) => {
+          console.log("Global alarm: realtime event", payload.eventType);
           fetchActiveTrigger();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Global alarm: realtime subscription status", status);
+      });
 
     return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       supabase.removeChannel(channel);
     };
   }, [roomId, fetchActiveTrigger]);
@@ -109,6 +143,7 @@ export function useGlobalAlarm() {
     if (!activeTrigger || !activeAlarm || !user) {
       // No active alarm — stop sound if playing
       if (isPlayingRef.current) {
+        console.log("Global alarm: stopping sound (no active trigger)");
         stopAlarm();
         isPlayingRef.current = false;
       }
@@ -120,18 +155,17 @@ export function useGlobalAlarm() {
       (!activeAlarm.owner_device_id || activeAlarm.owner_device_id === deviceId);
 
     if (isOwnerDevice && !isPlayingRef.current) {
+      console.log("Global alarm: starting sound for owner device");
       isPlayingRef.current = true;
-      playAlarm().catch((err) =>
-        console.error("Global alarm: failed to play", err)
-      );
+      playAlarm().catch((err) => {
+        console.error("Global alarm: failed to play", err);
+        isPlayingRef.current = false;
+      });
     } else if (!isOwnerDevice && isPlayingRef.current) {
+      console.log("Global alarm: stopping sound (not owner device)");
       stopAlarm();
       isPlayingRef.current = false;
     }
-
-    return () => {
-      // Cleanup when trigger changes
-    };
   }, [activeTrigger, activeAlarm, user, deviceId, playAlarm, stopAlarm]);
 
   // Stop sound when trigger dismissed
@@ -143,6 +177,7 @@ export function useGlobalAlarm() {
   }, [activeTrigger, stopAlarm]);
 
   const handleDismissed = useCallback(() => {
+    console.log("Global alarm: dismissed by user");
     stopAlarm();
     isPlayingRef.current = false;
     setActiveTrigger(null);

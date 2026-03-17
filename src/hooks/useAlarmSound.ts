@@ -1,12 +1,10 @@
 import { useRef, useCallback, useEffect } from "react";
 
-// Multiple fallback alarm sounds (public domain/free sounds)
+// Multiple fallback alarm sounds
 const ALARM_SOUNDS = [
+  "/alarm_sound.wav", // Local file first (most reliable)
   "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
   "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
-  "https://assets.mixkit.co/active_storage/sfx/2868/2868-preview.mp3",
-  // Additional fallbacks
-  "https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3",
 ];
 
 // Create a beep pattern using Web Audio API as ultimate fallback
@@ -18,10 +16,10 @@ const createBeepSound = (audioContext: AudioContext, frequency: number = 880, du
   gainNode.connect(audioContext.destination);
   
   oscillator.frequency.value = frequency;
-  oscillator.type = "sine";
+  oscillator.type = "square"; // More alarming than sine
   
-  gainNode.gain.value = 0.5;
-  gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+  gainNode.gain.value = 0.6;
+  gainNode.gain.setValueAtTime(0.6, audioContext.currentTime);
   gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
   
   return oscillator;
@@ -35,15 +33,12 @@ export const useAlarmSound = () => {
   const vibrationIntervalRef = useRef<number | null>(null);
   const cleanupCalledRef = useRef(false);
 
-  // Full cleanup function
   const fullCleanup = useCallback(() => {
     if (cleanupCalledRef.current) return;
     cleanupCalledRef.current = true;
     
-    console.log("Alarm: Full cleanup called");
     isPlayingRef.current = false;
 
-    // Stop audio element
     if (audioRef.current) {
       try {
         audioRef.current.pause();
@@ -51,132 +46,80 @@ export const useAlarmSound = () => {
         audioRef.current.src = '';
         audioRef.current = null;
       } catch (e) {
-        console.warn("Error stopping audio element:", e);
+        console.warn("Error stopping audio:", e);
       }
     }
 
-    // Stop beep interval
     if (beepIntervalRef.current) {
       clearInterval(beepIntervalRef.current);
       beepIntervalRef.current = null;
     }
 
-    // Close audio context
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       try {
         audioContextRef.current.close();
         audioContextRef.current = null;
-      } catch (e) {
-        console.warn("Error closing audio context:", e);
-      }
+      } catch (e) { /* ignore */ }
     }
 
-    // Stop vibration
     if (vibrationIntervalRef.current) {
       clearInterval(vibrationIntervalRef.current);
       vibrationIntervalRef.current = null;
     }
     if ('vibrate' in navigator) {
-      try {
-        navigator.vibrate(0);
-      } catch (e) {
-        // Ignore
-      }
+      try { navigator.vibrate(0); } catch (e) { /* ignore */ }
     }
     
-    // Reset cleanup flag after a delay
-    setTimeout(() => {
-      cleanupCalledRef.current = false;
-    }, 100);
+    setTimeout(() => { cleanupCalledRef.current = false; }, 100);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      fullCleanup();
-    };
+    return () => { fullCleanup(); };
   }, [fullCleanup]);
 
   const startVibration = useCallback(() => {
-    // Vibration API for mobile devices
     if ('vibrate' in navigator) {
-      // Create a vibration pattern: vibrate 500ms, pause 200ms, repeat
       const vibratePattern = () => {
-        try {
-          navigator.vibrate([500, 200, 500, 200, 500]);
-        } catch (e) {
-          console.warn("Vibration failed:", e);
-        }
+        try { navigator.vibrate([500, 200, 500, 200, 500]); } catch (e) { /* ignore */ }
       };
-      
       vibratePattern();
       vibrationIntervalRef.current = window.setInterval(vibratePattern, 2000);
     }
   }, []);
 
-  const stopVibration = useCallback(() => {
-    if (vibrationIntervalRef.current) {
-      clearInterval(vibrationIntervalRef.current);
-      vibrationIntervalRef.current = null;
-    }
-    if ('vibrate' in navigator) {
-      try {
-        navigator.vibrate(0); // Stop vibration
-      } catch (e) {
-        // Ignore
-      }
-    }
-  }, []);
-
   const playBeepPattern = useCallback(() => {
     try {
-      // Initialize audio context if needed
-      if (!audioContextRef.current) {
+      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
       }
 
       const ctx = audioContextRef.current;
-      
-      // Resume context if suspended (required for autoplay policies)
       if (ctx.state === 'suspended') {
         ctx.resume();
       }
 
-      // Create a repeating beep pattern with alternating tones
       let isHighTone = true;
       const playBeep = () => {
-        if (!isPlayingRef.current || !audioContextRef.current) return;
+        if (!isPlayingRef.current || !audioContextRef.current || audioContextRef.current.state === 'closed') return;
         
-        const frequency = isHighTone ? 880 : 660;
-        isHighTone = !isHighTone;
-        
-        const oscillator = createBeepSound(audioContextRef.current, frequency, 0.25);
-        oscillator.start();
-        oscillator.stop(audioContextRef.current.currentTime + 0.25);
+        try {
+          const frequency = isHighTone ? 880 : 660;
+          isHighTone = !isHighTone;
+          
+          const oscillator = createBeepSound(audioContextRef.current, frequency, 0.25);
+          oscillator.start();
+          oscillator.stop(audioContextRef.current.currentTime + 0.25);
+        } catch (e) {
+          console.warn("Beep failed:", e);
+        }
       };
 
-      // Play immediately and then every 400ms for urgent alarm feel
       playBeep();
       beepIntervalRef.current = window.setInterval(playBeep, 400);
       
-      console.log("Alarm: Playing fallback beep pattern");
+      console.log("Alarm: Playing beep pattern fallback");
     } catch (error) {
       console.error("Failed to create beep sound:", error);
-    }
-  }, []);
-
-  const stopBeepPattern = useCallback(() => {
-    if (beepIntervalRef.current) {
-      clearInterval(beepIntervalRef.current);
-      beepIntervalRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      try {
-        audioContextRef.current.close();
-        audioContextRef.current = null;
-      } catch (e) {
-        // Ignore close errors
-      }
     }
   }, []);
 
@@ -186,73 +129,67 @@ export const useAlarmSound = () => {
       return;
     }
     isPlayingRef.current = true;
+    console.log("Alarm: Starting playback...");
 
-    console.log("Alarm: Attempting to play sound...");
-
-    // Start vibration on mobile
+    // Start vibration immediately
     startVibration();
 
-    // Try each sound URL in sequence
+    // Also start beep pattern immediately as backup while audio loads
+    playBeepPattern();
+
+    // Try audio files in parallel with beep (beep ensures something plays immediately)
     for (const soundUrl of ALARM_SOUNDS) {
       try {
         const audio = new Audio(soundUrl);
         audio.loop = true;
         audio.volume = 1.0;
-        audio.preload = 'auto';
-        
-        // Set up cross-origin handling
-        audio.crossOrigin = "anonymous";
 
-        // Wait for the audio to be ready with a shorter timeout
         await new Promise<void>((resolve, reject) => {
-          const loadTimeout = setTimeout(() => reject(new Error('Load timeout')), 2000);
-          
-          audio.oncanplaythrough = () => {
-            clearTimeout(loadTimeout);
-            resolve();
-          };
-          
-          audio.onerror = () => {
-            clearTimeout(loadTimeout);
-            reject(new Error('Load failed'));
-          };
-
-          // Start loading
+          const timeout = setTimeout(() => reject(new Error('timeout')), 3000);
+          audio.oncanplaythrough = () => { clearTimeout(timeout); resolve(); };
+          audio.onerror = () => { clearTimeout(timeout); reject(new Error('load error')); };
           audio.load();
         });
 
         await audio.play();
         audioRef.current = audio;
-        console.log("Alarm: Sound playing successfully:", soundUrl);
-        return; // Success!
+        
+        // Audio loaded successfully — stop the beep fallback
+        if (beepIntervalRef.current) {
+          clearInterval(beepIntervalRef.current);
+          beepIntervalRef.current = null;
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+          try { audioContextRef.current.close(); audioContextRef.current = null; } catch (e) { /* ignore */ }
+        }
+        
+        console.log("Alarm: Audio playing:", soundUrl);
+        return;
       } catch (error) {
-        console.warn("Failed to play alarm sound:", soundUrl, error);
-        // Continue to next sound
+        console.warn("Alarm: Failed to load", soundUrl, error);
       }
     }
 
-    // All audio files failed, use Web Audio API beep fallback
-    console.log("Alarm: All audio files failed, using beep fallback");
-    playBeepPattern();
+    // All audio files failed — beep pattern is already running as fallback
+    console.log("Alarm: All audio files failed, beep pattern continues");
   }, [playBeepPattern, startVibration]);
 
   const stopAlarm = useCallback(() => {
-    console.log("Alarm: Stopping sound");
+    console.log("Alarm: Stopping");
     fullCleanup();
   }, [fullCleanup]);
 
   const setVolume = useCallback((volume: number) => {
-    const clampedVolume = Math.max(0, Math.min(1, volume));
-    if (audioRef.current) {
-      audioRef.current.volume = clampedVolume;
-    }
+    const v = Math.max(0, Math.min(1, volume));
+    if (audioRef.current) audioRef.current.volume = v;
   }, []);
 
-  // Preload audio for faster playback
   const preloadAudio = useCallback(() => {
-    const audio = new Audio(ALARM_SOUNDS[0]);
-    audio.preload = 'auto';
-    audio.load();
+    try {
+      const audio = new Audio(ALARM_SOUNDS[0]);
+      audio.preload = 'auto';
+      audio.load();
+    } catch (e) { /* ignore */ }
   }, []);
 
   return {
