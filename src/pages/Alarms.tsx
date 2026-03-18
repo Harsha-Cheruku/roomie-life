@@ -189,9 +189,10 @@ export default function Alarms() {
       <DeleteConfirmDialog
         open={!!deleteAlarmId}
         onOpenChange={(open) => !open && setDeleteAlarmId(null)}
-        onConfirm={() => deleteAlarmId && deleteAlarm(deleteAlarmId)}
+        onConfirm={() => deleteAlarmId ? deleteAlarm(deleteAlarmId) : Promise.resolve()}
         title="Delete Alarm"
         description="Are you sure you want to delete this alarm? This will also dismiss any active triggers."
+        itemName={alarms.find(a => a.id === deleteAlarmId)?.title || "Alarm"}
       />
 
       <CreateAlarmDialog
