@@ -39,8 +39,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const rollingRef = useRef(false);
   const positionsRef = useRef<Record<string, number>>({});
   const winnerRef = useRef<string | null>(null);
+  const moveInProgressRef = useRef(false);
 
-  // Keep stable refs to lobby functions to avoid stale closures in setInterval
   const updateGameStateRef = useRef(gameLobby.updateGameState);
   const playersRef = useRef(players);
   const userRef = useRef(user);
@@ -61,6 +61,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     }
     if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
     if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
+    // Reset move guard when state updates from server
+    moveInProgressRef.current = false;
   }, [lobby?.game_state]);
 
   const handleCreateGame = async () => {
@@ -79,8 +81,9 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   };
 
   const rollDice = useCallback(() => {
-    if (!isMyTurn || rollingRef.current || winnerRef.current) return;
+    if (!isMyTurn || rollingRef.current || winnerRef.current || moveInProgressRef.current) return;
     rollingRef.current = true;
+    moveInProgressRef.current = true;
     setRolling(true);
 
     const dice = Math.floor(Math.random() * 6) + 1;
@@ -93,7 +96,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         setDiceValue(dice);
         setRolling(false);
         rollingRef.current = false;
-        // Use refs to avoid stale closure
         movePlayerWithRefs(dice);
       }
     }, 100);
@@ -103,9 +105,9 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     const currentUser = userRef.current;
     const currentLobby = lobbyRef.current;
     const currentPlayers = playersRef.current;
-    if (!currentUser || !currentLobby) return;
+    if (!currentUser || !currentLobby) { moveInProgressRef.current = false; return; }
 
-    const currentPositions = positionsRef.current;
+    const currentPositions = { ...positionsRef.current };
     const currentPos = currentPositions[currentUser.id] || 0;
     let newPos = currentPos + dice;
     let msg = `Rolled ${dice}`;
@@ -114,10 +116,11 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       msg = `Rolled ${dice} — need exact number to win!`;
       const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
       const nextIdx = (currentIdx + 1) % currentPlayers.length;
-      await updateGameStateRef.current(
+      const success = await updateGameStateRef.current(
         { positions: currentPositions, winner: null, lastDice: dice, message: msg },
         currentPlayers[nextIdx].user_id
       );
+      if (!success) moveInProgressRef.current = false;
       return;
     }
 
@@ -148,10 +151,11 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     const newPositions = { ...currentPositions, [currentUser.id]: newPos };
     const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
     const nextIdx = (currentIdx + 1) % currentPlayers.length;
-    await updateGameStateRef.current(
+    const success = await updateGameStateRef.current(
       { positions: newPositions, winner: null, lastDice: dice, message: msg },
       currentPlayers[nextIdx].user_id
     );
+    if (!success) moveInProgressRef.current = false;
   };
 
   const getCellNumber = (row: number, col: number) => {
@@ -174,13 +178,9 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
           <p className="text-sm text-muted-foreground">2-6 players • Classic board game</p>
         </div>
         <div className="space-y-3">
-          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>
-            Create Game
-          </Button>
+          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>Create Game</Button>
           <JoinInput onJoin={(code) => gameLobby.joinLobby(code)} isLoading={gameLobby.isLoading} />
-          <Button variant="outline" onClick={onBack} className="w-full">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back
-          </Button>
+          <Button variant="outline" onClick={onBack} className="w-full"><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
         </div>
       </div>
     );
@@ -188,18 +188,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
 
   if (lobby.status === "waiting") {
     return (
-      <GameLobbyComponent
-        lobby={lobby}
-        players={players}
-        isHost={isHost}
-        isLoading={gameLobby.isLoading}
-        maxPlayers={6}
-        gameName="🐍 Snakes & Ladders"
-        minPlayers={2}
-        onReady={(r) => gameLobby.setReady(r)}
-        onStart={handleStartGame}
-        onLeave={gameLobby.leaveLobby}
-      />
+      <GameLobbyComponent lobby={lobby} players={players} isHost={isHost} isLoading={gameLobby.isLoading} maxPlayers={6} gameName="🐍 Snakes & Ladders" minPlayers={2} onReady={(r) => gameLobby.setReady(r)} onStart={handleStartGame} onLeave={gameLobby.leaveLobby} />
     );
   }
 
@@ -208,10 +197,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">🐍 Snakes & Ladders</h2>
         {winner ? (
-          <Badge className="bg-yellow-500 text-black">
-            <Trophy className="h-3 w-3 mr-1" />
-            {players.find((p) => p.user_id === winner)?.display_name} wins!
-          </Badge>
+          <Badge className="bg-yellow-500 text-black"><Trophy className="h-3 w-3 mr-1" />{players.find((p) => p.user_id === winner)?.display_name} wins!</Badge>
         ) : (
           <Badge variant={isMyTurn ? "default" : "secondary"} className={cn(isMyTurn && "animate-pulse")}>
             {isMyTurn ? "Your turn!" : `${currentTurnPlayer?.display_name}'s turn`}
@@ -226,18 +212,8 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
             const isSnakeHead = SNAKES[cellNum] !== undefined;
             const isLadderBottom = LADDERS[cellNum] !== undefined;
             const playersHere = getPlayersAtCell(cellNum);
-
             return (
-              <div
-                key={cellNum}
-                className={cn(
-                  "aspect-square flex flex-col items-center justify-center relative",
-                  isSnakeHead && "bg-red-500/15",
-                  isLadderBottom && "bg-green-500/15",
-                  !isSnakeHead && !isLadderBottom && (cellNum % 2 === 0 ? "bg-muted/50" : "bg-card"),
-                  cellNum === 100 && "bg-yellow-500/20"
-                )}
-              >
+              <div key={cellNum} className={cn("aspect-square flex flex-col items-center justify-center relative", isSnakeHead && "bg-red-500/15", isLadderBottom && "bg-green-500/15", !isSnakeHead && !isLadderBottom && (cellNum % 2 === 0 ? "bg-muted/50" : "bg-card"), cellNum === 100 && "bg-yellow-500/20")}>
                 <span className="font-mono opacity-50 leading-none">{cellNum}</span>
                 {isSnakeHead && <span className="text-[8px] leading-none">🐍</span>}
                 {isLadderBottom && <span className="text-[8px] leading-none">🪜</span>}
@@ -260,39 +236,25 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
 
       <div className="flex flex-wrap gap-2">
         {players.map((p, i) => (
-          <Badge
-            key={p.user_id}
-            variant="outline"
-            className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}
-          >
+          <Badge key={p.user_id} variant="outline" className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}>
             <ProfileAvatar avatar={p.avatar} size="xs" /> {p.display_name}: {positions[p.user_id] || 0}
           </Badge>
         ))}
       </div>
 
-      {message && (
-        <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-          {message}
-        </div>
-      )}
+      {message && <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">{message}</div>}
 
       <div className="flex items-center gap-3">
         {diceValue && <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>}
         <div className="flex-1 space-y-2">
           {!winner && (
-            <Button onClick={rollDice} disabled={!isMyTurn || rolling} className="w-full gradient-primary">
+            <Button onClick={rollDice} disabled={!isMyTurn || rolling || moveInProgressRef.current} className="w-full gradient-primary">
               <Dices className="h-4 w-4 mr-2" />
               {rolling ? "Rolling..." : isMyTurn ? "Roll Dice" : "Wait for your turn"}
             </Button>
           )}
-          {winner && (
-            <Button onClick={gameLobby.leaveLobby} className="w-full">
-              <RotateCcw className="h-4 w-4 mr-2" /> Play Again
-            </Button>
-          )}
-          <Button variant="outline" onClick={gameLobby.leaveLobby} size="sm" className="w-full">
-            Leave Game
-          </Button>
+          {winner && <Button onClick={gameLobby.leaveLobby} className="w-full"><RotateCcw className="h-4 w-4 mr-2" /> Play Again</Button>}
+          <Button variant="outline" onClick={gameLobby.leaveLobby} size="sm" className="w-full">Leave Game</Button>
         </div>
       </div>
     </div>
@@ -303,16 +265,8 @@ const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<bo
   const [code, setCode] = useState("");
   return (
     <div className="flex gap-2">
-      <Input
-        placeholder="Enter game code..."
-        value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
-        className="flex-1 font-mono tracking-wider"
-        maxLength={6}
-      />
-      <Button onClick={async () => { if (await onJoin(code)) setCode(""); }} disabled={!code.trim() || isLoading}>
-        Join
-      </Button>
+      <Input placeholder="Enter game code..." value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="flex-1 font-mono tracking-wider" maxLength={6} />
+      <Button onClick={async () => { if (await onJoin(code)) setCode(""); }} disabled={!code.trim() || isLoading}>Join</Button>
     </div>
   );
 };

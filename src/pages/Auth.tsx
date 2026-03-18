@@ -16,16 +16,17 @@ export const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string }>({});
+  const [errors, setErrors] = useState<{ email?: string; password?: string; name?: string; confirmPassword?: string }>({});
   
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const validate = () => {
-    const newErrors: { email?: string; password?: string; name?: string } = {};
+    const newErrors: { email?: string; password?: string; name?: string; confirmPassword?: string } = {};
     
     const emailResult = emailSchema.safeParse(email);
     if (!emailResult.success) {
@@ -41,6 +42,9 @@ export const Auth = () => {
       const nameResult = nameSchema.safeParse(displayName);
       if (!nameResult.success) {
         newErrors.name = nameResult.error.errors[0].message;
+      }
+      if (password !== confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match";
       }
     }
     
@@ -160,6 +164,22 @@ export const Auth = () => {
               {errors.password && <p className="text-xs text-destructive mt-1">{errors.password}</p>}
             </div>
 
+            {!isLogin && (
+              <div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="Confirm password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-12 h-12 rounded-xl bg-muted border-0 focus-visible:ring-primary"
+                  />
+                </div>
+                {errors.confirmPassword && <p className="text-xs text-destructive mt-1">{errors.confirmPassword}</p>}
+              </div>
+            )}
+
             <Button
               type="submit"
               variant="gradient"
@@ -196,6 +216,7 @@ export const Auth = () => {
               onClick={() => {
                 setIsLogin(!isLogin);
                 setErrors({});
+                setConfirmPassword("");
               }}
               className="text-sm text-muted-foreground hover:text-primary transition-colors"
             >

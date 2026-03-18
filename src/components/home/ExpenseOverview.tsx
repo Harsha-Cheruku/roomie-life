@@ -28,24 +28,13 @@ export const ExpenseOverview = () => {
     if (currentRoom) {
       fetchExpenseData();
       
-      // Subscribe to realtime updates for instant KPI refresh
       const channel = supabase
         .channel('expense-overview-changes')
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` },
-          () => fetchExpenseData()
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'expense_splits' },
-          () => fetchExpenseData()
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, () => fetchExpenseData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, () => fetchExpenseData())
         .subscribe();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
+      return () => { supabase.removeChannel(channel); };
     }
   }, [currentRoom]);
 
@@ -53,91 +42,44 @@ export const ExpenseOverview = () => {
     if (!currentRoom || !user) return;
 
     try {
-      // Fetch all expenses for the room
       const { data: expenses, error } = await supabase
         .from('expenses')
-        .select(`
-          id,
-          total_amount,
-          created_by,
-          status,
-          created_at,
-          expense_splits (
-            user_id,
-            amount,
-            is_paid,
-            status
-          )
-        `)
+        .select(`id, total_amount, created_by, status, created_at, expense_splits (user_id, amount, is_paid, status)`)
         .eq('room_id', currentRoom.id);
 
       if (error) throw error;
 
-      // Fetch room members then profiles separately (no FK between room_members and profiles)
-      const { data: roomMembers } = await supabase
-        .from('room_members')
-        .select('user_id')
-        .eq('room_id', currentRoom.id);
-
+      const { data: roomMembers } = await supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id);
       const memberUserIds = roomMembers?.map((m: any) => m.user_id) || [];
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('user_id, display_name, avatar')
-        .in('user_id', memberUserIds);
+      const { data: profilesData } = await supabase.from('profiles').select('user_id, display_name, avatar').in('user_id', memberUserIds);
 
-      const profileMap = new Map(
-        (profilesData || []).map((p: any) => [p.user_id, p])
-      );
-      const members = roomMembers?.map((m: any) => ({
-        user_id: m.user_id,
-        profiles: profileMap.get(m.user_id) || null,
-      })) || [];
+      const profileMap = new Map((profilesData || []).map((p: any) => [p.user_id, p]));
+      const members = roomMembers?.map((m: any) => ({ user_id: m.user_id, profiles: profileMap.get(m.user_id) || null })) || [];
 
-      // Calculate totals with new labels
-      let total = 0;
-      let pending = 0;
-      let settled = 0;
-      let willPay = 0; // Amount current user owes others
-      let willGet = 0; // Amount others owe current user
-      let todaySpending = 0;
+      let total = 0, pending = 0, settled = 0, willPay = 0, willGet = 0, todaySpending = 0;
       const memberAmounts = new Map<string, number>();
       const today = new Date().toDateString();
 
       expenses?.forEach((expense: any) => {
-        // In solo mode, only count expenses created by current user
         if (isSoloMode && expense.created_by !== user?.id) return;
-        
         total += expense.total_amount;
-        
-        // Check if expense is from today
         if (expense.created_at) {
           const expenseDate = new Date(expense.created_at).toDateString();
-          if (expenseDate === today) {
-            todaySpending += expense.total_amount;
-          }
+          if (expenseDate === today) todaySpending += expense.total_amount;
         }
-        
         expense.expense_splits?.forEach((split: any) => {
           if (split.status === 'accepted' && !split.is_paid) {
             pending += split.amount;
-            
-            // Calculate will pay / will get
-            if (split.user_id === user?.id) {
-              willPay += split.amount; // Current user owes this
-            } else if (expense.created_by === user?.id) {
-              willGet += split.amount; // Others owe current user
-            }
+            if (split.user_id === user?.id) willPay += split.amount;
+            else if (expense.created_by === user?.id) willGet += split.amount;
           } else if (split.is_paid) {
             settled += split.amount;
           }
-          
-          // Track per-member contributions
           const current = memberAmounts.get(expense.created_by) || 0;
           memberAmounts.set(expense.created_by, current + expense.total_amount);
         });
       });
 
-      // Format member data
       const memberData = members?.map((member: any, index) => ({
         name: member.user_id === user.id ? 'You' : (member.profiles?.display_name || 'Unknown'),
         avatar: member.profiles?.avatar || '😊',
@@ -145,18 +87,8 @@ export const ExpenseOverview = () => {
         color: memberColors[index % memberColors.length],
       })) || [];
 
-      // Sort by amount
       memberData.sort((a, b) => b.amount - a.amount);
-
-      setData({
-        total,
-        pending,
-        settled,
-        willPay,
-        willGet,
-        todaySpending,
-        members: memberData,
-      });
+      setData({ total, pending, settled, willPay, willGet, todaySpending, members: memberData });
     } catch (error) {
       console.error('Error fetching expense data:', error);
     } finally {
@@ -177,28 +109,19 @@ export const ExpenseOverview = () => {
   return (
     <section className="px-4">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-display text-lg font-semibold text-foreground">
-          Expenses
-        </h2>
-        <button 
-          onClick={() => navigate('/expenses')}
-          className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-        >
-          View All
-        </button>
+        <h2 className="font-display text-lg font-semibold text-foreground">Expenses</h2>
+        <button onClick={() => navigate('/expenses')} className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">View All</button>
       </div>
 
-      {/* Main Card */}
-      <div className="gradient-primary rounded-3xl p-5 shadow-glow mb-4">
+      {/* Main Card - clickable */}
+      <button onClick={() => navigate('/expenses')} className="w-full text-left gradient-primary rounded-3xl p-5 shadow-glow mb-4 hover:opacity-95 transition-opacity press-effect">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center">
             <Wallet className="w-6 h-6 text-primary-foreground" />
           </div>
           <div>
             <p className="text-primary-foreground/70 text-sm">Total This Month</p>
-            <p className="text-2xl font-bold text-primary-foreground font-display">
-              ₹{data.total.toLocaleString()}
-            </p>
+            <p className="text-2xl font-bold text-primary-foreground font-display">₹{data.total.toLocaleString()}</p>
           </div>
         </div>
 
@@ -208,59 +131,44 @@ export const ExpenseOverview = () => {
               <ArrowUpCircle className="w-4 h-4 text-coral" />
               <span className="text-xs text-primary-foreground/70">Will Pay</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">
-              ₹{data.willPay.toLocaleString()}
-            </p>
+            <p className="text-lg font-bold text-primary-foreground">₹{data.willPay.toLocaleString()}</p>
           </div>
           <div className="bg-primary-foreground/10 rounded-2xl p-3">
             <div className="flex items-center gap-1 mb-1">
               <ArrowDownCircle className="w-4 h-4 text-mint" />
               <span className="text-xs text-primary-foreground/70">Will Get</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">
-              ₹{data.willGet.toLocaleString()}
-            </p>
+            <p className="text-lg font-bold text-primary-foreground">₹{data.willGet.toLocaleString()}</p>
           </div>
           <div className="bg-primary-foreground/10 rounded-2xl p-3">
             <div className="flex items-center gap-1 mb-1">
               <Calendar className="w-4 h-4 text-lavender" />
               <span className="text-xs text-primary-foreground/70">Today</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">
-              ₹{data.todaySpending.toLocaleString()}
-            </p>
+            <p className="text-lg font-bold text-primary-foreground">₹{data.todaySpending.toLocaleString()}</p>
           </div>
         </div>
-      </div>
+      </button>
 
-      {/* Per User Breakdown */}
+      {/* Per User Breakdown - clickable */}
       {data.members.length > 0 && (
-        <div className="bg-card rounded-2xl p-4 shadow-card">
+        <button onClick={() => navigate('/expenses')} className="w-full text-left bg-card rounded-2xl p-4 shadow-card press-effect hover:shadow-lg transition-shadow">
           <p className="text-sm font-medium text-muted-foreground mb-3">Per Roommate (Paid)</p>
           <div className="space-y-3">
             {data.members.map((member, index) => (
-              <div
-                key={member.name}
-                className="flex items-center gap-3 animate-slide-up"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
+              <div key={member.name} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
                 <ProfileAvatar avatar={member.avatar} size="md" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
-                    <div
-                      className={cn("h-full rounded-full transition-all duration-500", member.color)}
-                      style={{ width: data.total > 0 ? `${(member.amount / data.total) * 100}%` : '0%' }}
-                    />
+                    <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: data.total > 0 ? `${(member.amount / data.total) * 100}%` : '0%' }} />
                   </div>
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  ₹{member.amount.toLocaleString()}
-                </p>
+                <p className="text-sm font-semibold text-foreground">₹{member.amount.toLocaleString()}</p>
               </div>
             ))}
           </div>
-        </div>
+        </button>
       )}
     </section>
   );
