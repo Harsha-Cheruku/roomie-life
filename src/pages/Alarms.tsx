@@ -13,12 +13,7 @@ import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { AlarmDebugPanel } from "@/components/alarms/AlarmDebugPanel";
 import { useNotifications } from "@/hooks/useNotifications";
-
-/**
- * Alarms page — CRUD + settings only.
- * Ringing/sound is handled globally by useGlobalAlarm in Index.tsx.
- * No client-side trigger logic here.
- */
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
 interface Alarm {
   id: string;
@@ -49,103 +44,48 @@ export default function Alarms() {
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [deleteAlarmId, setDeleteAlarmId] = useState<string | null>(null);
   const { requestPermission, hasPermission } = useNotifications();
 
   useEffect(() => {
-    if (!hasPermission) {
-      requestPermission();
-    }
+    if (!hasPermission) requestPermission();
   }, [hasPermission, requestPermission]);
 
   useEffect(() => {
     if (!roomId) return;
     fetchAlarms();
-
     const channel = supabase
       .channel("alarms-page-changes")
-      .on("postgres_changes", {
-        event: "*",
-        schema: "public",
-        table: "alarms",
-        filter: `room_id=eq.${roomId}`,
-      }, () => fetchAlarms())
+      .on("postgres_changes", { event: "*", schema: "public", table: "alarms", filter: `room_id=eq.${roomId}` }, () => fetchAlarms())
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [roomId]);
 
   const fetchAlarms = async () => {
     if (!roomId) return;
-
-    const { data, error } = await supabase
-      .from("alarms")
-      .select("*")
-      .eq("room_id", roomId)
-      .order("alarm_time");
-
-    if (error) {
-      console.error("Error fetching alarms:", error);
-      return;
-    }
-
+    const { data, error } = await supabase.from("alarms").select("*").eq("room_id", roomId).order("alarm_time");
+    if (error) { console.error("Error fetching alarms:", error); return; }
     setAlarms(data || []);
     setLoading(false);
   };
 
   const toggleAlarm = async (alarm: Alarm) => {
-    const { error } = await supabase
-      .from("alarms")
-      .update({ is_active: !alarm.is_active })
-      .eq("id", alarm.id);
-
-    if (error) {
-      toast.error("Failed to update alarm");
-      return;
-    }
-
-    setAlarms((prev) =>
-      prev.map((a) =>
-        a.id === alarm.id ? { ...a, is_active: !a.is_active } : a
-      )
-    );
+    const { error } = await supabase.from("alarms").update({ is_active: !alarm.is_active }).eq("id", alarm.id);
+    if (error) { toast.error("Failed to update alarm"); return; }
+    setAlarms((prev) => prev.map((a) => a.id === alarm.id ? { ...a, is_active: !a.is_active } : a));
   };
 
   const deleteAlarm = async (alarmId: string) => {
-    // Dismiss any active triggers first
-    await supabase
-      .from("alarm_triggers")
-      .update({
-        status: "dismissed",
-        dismissed_by: user?.id,
-        dismissed_at: new Date().toISOString(),
-      })
-      .eq("alarm_id", alarmId)
-      .eq("status", "ringing");
-
-    const { error } = await supabase
-      .from("alarms")
-      .delete()
-      .eq("id", alarmId);
-
-    if (error) {
-      toast.error("Failed to delete alarm");
-      return;
-    }
-
+    await supabase.from("alarm_triggers").update({ status: "dismissed", dismissed_by: user?.id, dismissed_at: new Date().toISOString() }).eq("alarm_id", alarmId).eq("status", "ringing");
+    const { error } = await supabase.from("alarms").delete().eq("id", alarmId);
+    if (error) { toast.error("Failed to delete alarm"); return; }
     setAlarms((prev) => prev.filter((a) => a.id !== alarmId));
     toast.success("Alarm deleted");
+    setDeleteAlarmId(null);
   };
 
   const handleTabChange = (tab: string) => {
-    const routes: Record<string, string> = {
-      home: "/",
-      tasks: "/tasks",
-      expenses: "/expenses",
-      storage: "/storage",
-      chat: "/chat",
-    };
+    const routes: Record<string, string> = { home: "/", tasks: "/tasks", expenses: "/expenses", storage: "/storage", chat: "/chat" };
     navigate(routes[tab] || "/");
   };
 
@@ -158,13 +98,15 @@ export default function Alarms() {
   };
 
   const getConditionText = (alarm: Alarm) => {
-    if (alarm.condition_type === "after_rings") {
-      return `Others can dismiss after ${alarm.condition_value} rings`;
-    }
-    if (alarm.condition_type === "multiple_ack") {
-      return `Requires ${alarm.condition_value} people to acknowledge`;
-    }
+    if (alarm.condition_type === "after_rings") return `Others can dismiss after ${alarm.condition_value} rings`;
+    if (alarm.condition_type === "multiple_ack") return `Requires ${alarm.condition_value} people to acknowledge`;
     return CONDITION_LABELS[alarm.condition_type] || alarm.condition_type;
+  };
+
+  // Check if an alarm has an active (non-dismissed) trigger today
+  const getAlarmStatus = (alarm: Alarm): 'idle' | 'active' => {
+    // We rely on the is_active flag; the global alarm layer handles ringing state
+    return alarm.is_active ? 'active' : 'idle';
   };
 
   return (
@@ -178,13 +120,11 @@ export default function Alarms() {
           <div className="flex gap-2">
             {!hasPermission && (
               <Button onClick={requestPermission} variant="outline" size="sm">
-                <Bell className="h-4 w-4 mr-1" />
-                Enable
+                <Bell className="h-4 w-4 mr-1" /> Enable
               </Button>
             )}
             <Button onClick={() => setShowCreateDialog(true)} size="sm">
-              <Plus className="h-4 w-4 mr-1" />
-              Add
+              <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
           </div>
         }
@@ -202,42 +142,24 @@ export default function Alarms() {
             <CardContent className="py-8 text-center">
               <AlarmClock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground">No alarms set</p>
-              <p className="text-sm text-muted-foreground">
-                Create a shared alarm for your room
-              </p>
+              <p className="text-sm text-muted-foreground">Create a shared alarm for your room</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
             {alarms.map((alarm) => (
-              <Card
-                key={alarm.id}
-                className={!alarm.is_active ? "opacity-50" : ""}
-              >
+              <Card key={alarm.id} className={!alarm.is_active ? "opacity-50" : ""}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-3xl font-bold">
-                          {formatTime(alarm.alarm_time)}
-                        </span>
-                        <Switch
-                          checked={alarm.is_active}
-                          onCheckedChange={() => toggleAlarm(alarm)}
-                        />
+                        <span className="text-3xl font-bold">{formatTime(alarm.alarm_time)}</span>
+                        <Switch checked={alarm.is_active} onCheckedChange={() => toggleAlarm(alarm)} />
                       </div>
-                      <p className="font-medium text-foreground">
-                        {alarm.title}
-                      </p>
+                      <p className="font-medium text-foreground">{alarm.title}</p>
                       <div className="flex gap-1 mt-2 flex-wrap">
                         {alarm.days_of_week.map((day) => (
-                          <Badge
-                            key={day}
-                            variant="secondary"
-                            className="text-xs"
-                          >
-                            {DAYS[day]}
-                          </Badge>
+                          <Badge key={day} variant="secondary" className="text-xs">{DAYS[day]}</Badge>
                         ))}
                       </div>
                       <div className="flex items-center gap-1 mt-2 text-sm text-muted-foreground">
@@ -249,7 +171,7 @@ export default function Alarms() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => deleteAlarm(alarm.id)}
+                        onClick={() => setDeleteAlarmId(alarm.id)}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -262,6 +184,15 @@ export default function Alarms() {
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      <DeleteConfirmDialog
+        open={!!deleteAlarmId}
+        onOpenChange={(open) => !open && setDeleteAlarmId(null)}
+        onConfirm={() => deleteAlarmId && deleteAlarm(deleteAlarmId)}
+        title="Delete Alarm"
+        description="Are you sure you want to delete this alarm? This will also dismiss any active triggers."
+      />
 
       <CreateAlarmDialog
         open={showCreateDialog}

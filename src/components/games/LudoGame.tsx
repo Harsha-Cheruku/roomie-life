@@ -18,19 +18,9 @@ const BOARD_SIZE = 52;
 const HOME_STRETCH = 6;
 const SAFE_SQUARES = [0, 8, 13, 21, 26, 34, 39, 47];
 
-interface LudoToken {
-  position: number;
-  isFinished: boolean;
-}
-
-interface LudoPlayerState {
-  tokens: LudoToken[];
-  startOffset: number;
-}
-
-interface LudoGameProps {
-  onBack: () => void;
-}
+interface LudoToken { position: number; isFinished: boolean; }
+interface LudoPlayerState { tokens: LudoToken[]; startOffset: number; }
+interface LudoGameProps { onBack: () => void; }
 
 export const LudoGame = ({ onBack }: LudoGameProps) => {
   const { user } = useAuth();
@@ -48,8 +38,8 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const playerStatesRef = useRef<Record<string, LudoPlayerState>>({});
   const winnerRef = useRef<string | null>(null);
   const diceValueRef = useRef<number | null>(null);
+  const moveInProgressRef = useRef(false);
 
-  // Stable refs to avoid stale closures in setInterval
   const updateGameStateRef = useRef(gameLobby.updateGameState);
   const playersRef = useRef(players);
   const userRef = useRef(user);
@@ -75,12 +65,12 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       }
       if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
       setHasRolled(lobby.game_state.hasRolled || false);
+      // Reset move guard on server state sync
+      moveInProgressRef.current = false;
     }
   }, [lobby?.game_state]);
 
-  const handleCreateGame = async () => {
-    await gameLobby.createLobby("ludo", 4);
-  };
+  const handleCreateGame = async () => { await gameLobby.createLobby("ludo", 4); };
 
   const handleStartGame = async () => {
     const startOffsets = [0, 13, 26, 39];
@@ -91,14 +81,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
         startOffset: startOffsets[i],
       };
     });
-
-    await gameLobby.startGame({
-      playerStates: initialStates,
-      winner: null,
-      lastDice: null,
-      message: "",
-      hasRolled: false,
-    });
+    await gameLobby.startGame({ playerStates: initialStates, winner: null, lastDice: null, message: "", hasRolled: false });
   };
 
   const canMoveToken = (token: LudoToken, dice: number): boolean => {
@@ -122,8 +105,9 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   }, []);
 
   const rollDice = useCallback(() => {
-    if (!isMyTurn || rollingRef.current || winnerRef.current || hasRolled) return;
+    if (!isMyTurn || rollingRef.current || winnerRef.current || hasRolled || moveInProgressRef.current) return;
     rollingRef.current = true;
+    moveInProgressRef.current = true;
     setRolling(true);
 
     const dice = Math.floor(Math.random() * 6) + 1;
@@ -145,42 +129,27 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   const handleDiceResultWithRefs = async (dice: number) => {
     const currentUser = userRef.current;
     const currentLobby = lobbyRef.current;
-    if (!currentUser || !currentLobby) return;
+    if (!currentUser || !currentLobby) { moveInProgressRef.current = false; return; }
     
     const myState = playerStatesRef.current[currentUser.id];
-    if (!myState) return;
+    if (!myState) { moveInProgressRef.current = false; return; }
 
     const canMove = myState.tokens.some((t) => canMoveToken(t, dice));
 
     if (!canMove) {
-      if (dice === 6 && myState.tokens.some((t) => t.position === 0 && !t.isFinished)) {
-        setMessage(`Rolled 6! Click a token at home to bring it out.`);
-        await updateGameStateRef.current({
-          playerStates: playerStatesRef.current,
-          winner: winnerRef.current,
-          lastDice: dice,
-          hasRolled: true,
-          message: `Rolled 6! Choose a token.`,
-        });
-        return;
-      }
-
       // No valid moves — pass turn
       const nextPlayer = getNextPlayer();
       await updateGameStateRef.current(
-        {
-          playerStates: playerStatesRef.current,
-          winner: winnerRef.current,
-          lastDice: dice,
-          hasRolled: false,
-          message: `No valid moves. Turn passed.`,
-        },
+        { playerStates: playerStatesRef.current, winner: winnerRef.current, lastDice: dice, hasRolled: false, message: `No valid moves. Turn passed.` },
         nextPlayer
       );
       return;
     }
 
+    // Has valid moves — set hasRolled so player can pick a token
+    setHasRolled(true);
     setMessage(`Rolled ${dice}! Click a token to move.`);
+    moveInProgressRef.current = false; // Allow token click
     await updateGameStateRef.current({
       playerStates: playerStatesRef.current,
       winner: winnerRef.current,
@@ -191,15 +160,17 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
   };
 
   const handleTokenClick = async (tokenIndex: number) => {
-    if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue) return;
+    if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue || moveInProgressRef.current) return;
+    moveInProgressRef.current = true;
 
     const currentStates = playerStatesRef.current;
     const myState = currentStates[user.id];
-    if (!myState) return;
+    if (!myState) { moveInProgressRef.current = false; return; }
 
     const token = myState.tokens[tokenIndex];
     if (!canMoveToken(token, diceValue)) {
       toast.error("Can't move this token!");
+      moveInProgressRef.current = false;
       return;
     }
 
@@ -219,7 +190,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       }
     }
 
-    // Check for captures
+    // Check captures
     const myAbsPos = getAbsolutePosition(newTokens[tokenIndex].position, myState.startOffset);
     if (myAbsPos > 0 && myAbsPos <= BOARD_SIZE && !SAFE_SQUARES.includes(myAbsPos) && !newTokens[tokenIndex].isFinished) {
       Object.entries(newStates).forEach(([uid, state]) => {
@@ -227,10 +198,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
         state.tokens.forEach((t) => {
           if (!t.isFinished && t.position > 0 && t.position <= BOARD_SIZE) {
             const otherAbsPos = getAbsolutePosition(t.position, state.startOffset);
-            if (otherAbsPos === myAbsPos) {
-              t.position = 0;
-              toast.success("Captured! 💥");
-            }
+            if (otherAbsPos === myAbsPos) { t.position = 0; toast.success("Captured! 💥"); }
           }
         });
       });
@@ -244,12 +212,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       setWinner(user.id);
       winnerRef.current = user.id;
       msg = `🎉 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
-      saveGameResult({
-        gameType: "ludo",
-        winnerId: user.id,
-        playerIds: players.map((p) => p.user_id),
-        result: "completed",
-      });
+      saveGameResult({ gameType: "ludo", winnerId: user.id, playerIds: players.map((p) => p.user_id), result: "completed" });
       toast.success("You won! 🎉");
     } else if (diceValue === 6) {
       nextPlayer = user.id;
@@ -260,13 +223,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     }
 
     await gameLobby.updateGameState(
-      {
-        playerStates: newStates,
-        winner: allFinished ? user.id : null,
-        lastDice: diceValue,
-        hasRolled: false,
-        message: msg,
-      },
+      { playerStates: newStates, winner: allFinished ? user.id : null, lastDice: diceValue, hasRolled: false, message: msg },
       nextPlayer
     );
   };
@@ -282,33 +239,16 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
           <p className="text-sm text-muted-foreground">2-4 players • Classic Indian board game</p>
         </div>
         <div className="space-y-3">
-          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>
-            Create Game
-          </Button>
+          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>Create Game</Button>
           <JoinInput onJoin={(code) => gameLobby.joinLobby(code)} isLoading={gameLobby.isLoading} />
-          <Button variant="outline" onClick={onBack} className="w-full">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back
-          </Button>
+          <Button variant="outline" onClick={onBack} className="w-full"><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
         </div>
       </div>
     );
   }
 
   if (lobby.status === "waiting") {
-    return (
-      <GameLobbyComponent
-        lobby={lobby}
-        players={players}
-        isHost={isHost}
-        isLoading={gameLobby.isLoading}
-        maxPlayers={4}
-        gameName="🎲 Ludo"
-        minPlayers={2}
-        onReady={(r) => gameLobby.setReady(r)}
-        onStart={handleStartGame}
-        onLeave={gameLobby.leaveLobby}
-      />
-    );
+    return <GameLobbyComponent lobby={lobby} players={players} isHost={isHost} isLoading={gameLobby.isLoading} maxPlayers={4} gameName="🎲 Ludo" minPlayers={2} onReady={(r) => gameLobby.setReady(r)} onStart={handleStartGame} onLeave={gameLobby.leaveLobby} />;
   }
 
   return (
@@ -316,10 +256,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">🎲 Ludo</h2>
         {winner ? (
-          <Badge className="bg-yellow-500 text-black">
-            <Trophy className="h-3 w-3 mr-1" />
-            {players.find((p) => p.user_id === winner)?.display_name} wins!
-          </Badge>
+          <Badge className="bg-yellow-500 text-black"><Trophy className="h-3 w-3 mr-1" />{players.find((p) => p.user_id === winner)?.display_name} wins!</Badge>
         ) : (
           <Badge variant={isMyTurn ? "default" : "secondary"} className={cn(isMyTurn && "animate-pulse")}>
             {isMyTurn ? "Your turn!" : `${currentTurnPlayer?.display_name}'s turn`}
@@ -342,16 +279,13 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
                   <button
                     key={ti}
                     onClick={() => handleTokenClick(ti)}
-                    disabled={!isMyTurn || !hasRolled || p.user_id !== user?.id || !diceValue || !canMoveToken(token, diceValue)}
+                    disabled={!isMyTurn || !hasRolled || p.user_id !== user?.id || !diceValue || !canMoveToken(token, diceValue) || moveInProgressRef.current}
                     className={cn(
                       "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all",
-                      token.isFinished
-                        ? "bg-yellow-500/30 border-yellow-500 text-yellow-700"
-                        : token.position === 0
-                        ? "bg-muted border-muted-foreground/30 text-muted-foreground"
+                      token.isFinished ? "bg-yellow-500/30 border-yellow-500 text-yellow-700"
+                        : token.position === 0 ? "bg-muted border-muted-foreground/30 text-muted-foreground"
                         : cn(LUDO_BG[idx], "border-current", LUDO_TEXT[idx]),
-                      isMyTurn && hasRolled && p.user_id === user?.id && diceValue && canMoveToken(token, diceValue) &&
-                        "animate-pulse cursor-pointer ring-2 ring-primary",
+                      isMyTurn && hasRolled && p.user_id === user?.id && diceValue && canMoveToken(token, diceValue) && !moveInProgressRef.current && "animate-pulse cursor-pointer ring-2 ring-primary",
                       (!isMyTurn || !hasRolled || p.user_id !== user?.id) && "cursor-default"
                     )}
                   >
@@ -364,29 +298,19 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
         })}
       </div>
 
-      {message && (
-        <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-          {message}
-        </div>
-      )}
+      {message && <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">{message}</div>}
 
       <div className="flex items-center gap-3">
         {diceValue && <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>}
         <div className="flex-1 space-y-2">
           {!winner && (
-            <Button onClick={rollDice} disabled={!isMyTurn || rolling || hasRolled} className="w-full gradient-primary">
+            <Button onClick={rollDice} disabled={!isMyTurn || rolling || hasRolled || moveInProgressRef.current} className="w-full gradient-primary">
               <Dices className="h-4 w-4 mr-2" />
               {rolling ? "Rolling..." : hasRolled ? "Choose a token..." : isMyTurn ? "Roll Dice" : "Wait your turn"}
             </Button>
           )}
-          {winner && (
-            <Button onClick={gameLobby.leaveLobby} className="w-full">
-              <RotateCcw className="h-4 w-4 mr-2" /> Back to Menu
-            </Button>
-          )}
-          <Button variant="outline" onClick={gameLobby.leaveLobby} size="sm" className="w-full">
-            Leave Game
-          </Button>
+          {winner && <Button onClick={gameLobby.leaveLobby} className="w-full"><RotateCcw className="h-4 w-4 mr-2" /> Back to Menu</Button>}
+          <Button variant="outline" onClick={gameLobby.leaveLobby} size="sm" className="w-full">Leave Game</Button>
         </div>
       </div>
     </div>
@@ -397,16 +321,8 @@ const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<bo
   const [code, setCode] = useState("");
   return (
     <div className="flex gap-2">
-      <Input
-        placeholder="Enter game code..."
-        value={code}
-        onChange={(e) => setCode(e.target.value.toUpperCase())}
-        className="flex-1 font-mono tracking-wider"
-        maxLength={6}
-      />
-      <Button onClick={async () => { if (await onJoin(code)) setCode(""); }} disabled={!code.trim() || isLoading}>
-        Join
-      </Button>
+      <Input placeholder="Enter game code..." value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} className="flex-1 font-mono tracking-wider" maxLength={6} />
+      <Button onClick={async () => { if (await onJoin(code)) setCode(""); }} disabled={!code.trim() || isLoading}>Join</Button>
     </div>
   );
 };

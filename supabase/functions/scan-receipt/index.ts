@@ -38,41 +38,40 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-pro',
+        model: 'google/gemini-2.5-flash',
         messages: [
           {
             role: 'system',
-            content: `You are a highly accurate receipt OCR assistant. Your job is to extract EVERY item from receipt images with precise prices.
+            content: `You are a highly accurate receipt/bill OCR assistant. You MUST extract items from receipt images regardless of image quality — blurry, tilted, low-resolution, or high-resolution.
 
 Return ONLY a valid JSON object with this exact structure:
 {
   "title": "Store name or receipt title",
   "items": [
-    { "name": "Item name", "price": 12.99, "quantity": 1 },
-    { "name": "Another item", "price": 5.50, "quantity": 2 }
+    { "name": "Item name", "price": 12.99, "quantity": 1 }
   ],
   "total": 24.49
 }
 
-CRITICAL RULES FOR ACCURACY:
-- Extract ALL line items visible on the receipt — do not skip any
-- Use EXACT item names as printed on the receipt
-- Prices MUST be decimal numbers (e.g., 12.99 not "12.99" or "₹12.99" or "$12.99")
-- Remove currency symbols, commas from prices — "1,299.00" becomes 1299.00
-- If quantity is shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit price)
-- If a discount/offer line exists, include it as a negative price item
-- The "total" field should match the receipt's total. If not visible, SUM all (price × quantity) values
-- Verify: sum of (item.price × item.quantity) should approximately equal total
-- For Indian receipts: handle ₹ symbol, GST/CGST/SGST lines, MRP, and common formats
-- If you can't read the receipt clearly, return { "error": "Could not read receipt" }
-- Return ONLY the JSON object, no markdown, no explanation, no extra text`
+CRITICAL RULES:
+- Extract ALL line items visible, even if partially readable — use best guess for unclear text
+- Use EXACT item names as printed. If unreadable, use descriptive placeholder like "Item 1"
+- Prices MUST be decimal numbers: 12.99 not "12.99" or "₹12.99"
+- Remove currency symbols and commas: "1,299.00" → 1299.00
+- If quantity shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit)
+- Include discount/offer lines as negative price items
+- "total" should match receipt total. If not visible, SUM all (price × quantity)
+- Handle Indian receipts: ₹ symbol, GST/CGST/SGST lines, MRP formats
+- For blurry/low-quality images: extract what you CAN read, estimate prices from visible digits
+- If completely unreadable, return { "error": "Could not read receipt" }
+- Return ONLY JSON, no markdown, no explanation`
           },
           {
             role: 'user',
             content: [
               {
                 type: 'text',
-                text: 'Extract all items from this receipt with accurate prices and quantities. Double-check each price matches what is printed.'
+                text: 'Extract all items from this receipt with accurate prices and quantities. The image may be blurry or low quality — extract everything you can read.'
               },
               {
                 type: 'image_url',
@@ -92,22 +91,13 @@ CRITICAL RULES FOR ACCURACY:
       console.error('AI API error:', response.status, errorText);
       
       if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }), { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        return new Response(JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }), { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
       
-      return new Response(
-        JSON.stringify({ error: 'Failed to process receipt' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Failed to process receipt' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const data = await response.json();
@@ -116,45 +106,28 @@ CRITICAL RULES FOR ACCURACY:
     console.log('AI response:', content);
 
     if (!content) {
-      return new Response(
-        JSON.stringify({ error: 'No response from AI' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'No response from AI' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Parse the JSON from the response
     let parsedResult;
     try {
-      // Remove any markdown code blocks if present
       const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       parsedResult = JSON.parse(cleanContent);
     } catch (parseError) {
       console.error('Failed to parse AI response:', parseError, 'Content:', content);
-      return new Response(
-        JSON.stringify({ error: 'Failed to parse receipt data' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Failed to parse receipt data' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     if (parsedResult.error) {
-      return new Response(
-        JSON.stringify({ error: parsedResult.error }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: parsedResult.error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     console.log('Extracted receipt data:', parsedResult);
 
-    return new Response(
-      JSON.stringify(parsedResult),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify(parsedResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error('Error processing receipt:', error);
-    return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });
