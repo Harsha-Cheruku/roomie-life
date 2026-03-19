@@ -123,9 +123,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerRef.current = null;
       }
 
+      const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 };
+      if (activePlaylistId) {
+        playerVars.listType = 'playlist';
+        playerVars.list = activePlaylistId;
+      }
       playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
         videoId: activeVideoId,
-        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+        playerVars,
         events: {
           onStateChange: (event: any) => {
             if (!isMountedRef.current || ignoreBroadcastRef.current) return;
