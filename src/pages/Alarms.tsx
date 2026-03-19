@@ -8,10 +8,9 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
-import { AlarmClock, Plus, Trash2, Users, Bell } from "lucide-react";
+import { AlarmClock, Plus, Trash2, Users, Bell, Volume2 } from "lucide-react";
 import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
-import { AlarmDebugPanel } from "@/components/alarms/AlarmDebugPanel";
 import { useNotifications } from "@/hooks/useNotifications";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 
@@ -37,6 +36,13 @@ const CONDITION_LABELS: Record<string, string> = {
   multiple_ack: "Requires X people to acknowledge",
 };
 
+const RINGTONE_LABELS: Record<string, string> = {
+  default: "Classic Bell",
+  gentle: "Gentle Chime",
+  loud: "Loud Siren",
+  beep: "Beep Pattern",
+};
+
 export default function Alarms() {
   const navigate = useNavigate();
   const { user, currentRoom } = useAuth();
@@ -46,6 +52,9 @@ export default function Alarms() {
   const [loading, setLoading] = useState(true);
   const [deleteAlarmId, setDeleteAlarmId] = useState<string | null>(null);
   const { requestPermission, hasPermission } = useNotifications();
+  const [currentRingtone] = useState(() => {
+    try { return localStorage.getItem('alarm_ringtone') || 'default'; } catch { return 'default'; }
+  });
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -103,12 +112,6 @@ export default function Alarms() {
     return CONDITION_LABELS[alarm.condition_type] || alarm.condition_type;
   };
 
-  // Check if an alarm has an active (non-dismissed) trigger today
-  const getAlarmStatus = (alarm: Alarm): 'idle' | 'active' => {
-    // We rely on the is_active flag; the global alarm layer handles ringing state
-    return alarm.is_active ? 'active' : 'idle';
-  };
-
   return (
     <div className="min-h-screen bg-background pb-20">
       <TopBar
@@ -131,7 +134,13 @@ export default function Alarms() {
       />
 
       <div className="p-4 space-y-4">
-        <AlarmDebugPanel roomId={roomId} />
+        {/* Current ringtone indicator */}
+        <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-2">
+          <Volume2 className="h-4 w-4 text-primary" />
+          <span className="text-sm text-muted-foreground">Ringtone:</span>
+          <span className="text-sm font-medium text-foreground">{RINGTONE_LABELS[currentRingtone] || 'Classic Bell'}</span>
+          <span className="text-xs text-muted-foreground ml-auto">(set when creating alarm)</span>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-8">

@@ -124,12 +124,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       }
 
       const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 };
+      // For playlist-only URLs, load playlist directly without a specific video ID
+      const isPlaylistOnly = activeVideoId.startsWith('playlist-');
       if (activePlaylistId) {
         playerVars.listType = 'playlist';
         playerVars.list = activePlaylistId;
       }
       playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
-        videoId: activeVideoId,
+        ...(isPlaylistOnly ? {} : { videoId: activeVideoId }),
         playerVars,
         events: {
           onStateChange: (event: any) => {
@@ -380,9 +382,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     if (playlist) setLastPlaylistUrl(playlist);
     if (playlistId) setActivePlaylistId(playlistId);
 
-    // For playlist-only URLs, use a placeholder video ID (YouTube API will load first video)
-    const effectiveVideoId = videoId || "PLplaceholder";
-    setActiveVideoId(effectiveVideoId);
+    // For playlist-only URLs without a video ID, use a blank ID (YT API loads first playlist item)
+    const effectiveVideoId = videoId || "";
+    setActiveVideoId(effectiveVideoId || `playlist-${playlistId}`);
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
 

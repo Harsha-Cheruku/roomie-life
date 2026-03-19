@@ -517,14 +517,14 @@ export const Expenses = () => {
         onBack={() => navigate('/')}
         hint="Split bills fairly with your roommates 💰"
         rightContent={
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
             <ReminderBellIcon filterType="expense" />
-            <Button variant="outline" size="sm" className="gap-2 press-effect" onClick={() => setShowCreateDialog(true)}>
-              <Plus className="w-4 h-4" />
+            <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="w-3.5 h-3.5" />
               Add
             </Button>
-            <Button variant="gradient" size="sm" className="gap-2 press-effect" onClick={() => setShowScanner(true)}>
-              <Camera className="w-4 h-4" />
+            <Button size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs bg-primary" onClick={() => setShowScanner(true)}>
+              <Camera className="w-3.5 h-3.5" />
               Scan
             </Button>
           </div>
