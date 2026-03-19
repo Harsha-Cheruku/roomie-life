@@ -130,15 +130,11 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
       const taskDate = getTaskScheduledDate(task);
       if (!taskDate) return hour === 9;
 
-      const taskHour = taskDate.getHours();
-      const taskMinutes = taskDate.getMinutes();
-      const taskSeconds = taskDate.getSeconds();
+      // Check if this is a "date-only" value (midnight UTC) — show at 9 AM
+      const isDateOnly = taskDate.getUTCHours() === 0 && taskDate.getUTCMinutes() === 0 && taskDate.getUTCSeconds() === 0;
+      if (isDateOnly) return hour === 9;
 
-      if (taskHour === 0 && taskMinutes === 0 && taskSeconds === 0) {
-        return hour === 9;
-      }
-
-      return taskHour === hour;
+      return taskDate.getHours() === hour;
     });
   };
 

@@ -513,7 +513,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       {/* Share Input */}
       <div className="flex gap-2">
         <Input
-          placeholder="Paste YouTube link here..."
+          placeholder="Paste YouTube video or playlist link..."
           value={youtubeUrl}
           onChange={(e) => setYoutubeUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && shareVideo()}

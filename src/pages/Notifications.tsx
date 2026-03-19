@@ -59,11 +59,11 @@ export const Notifications = () => {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      // Cast the type to match our interface
+      // Cast the type and filter out dismissed (read) alarm notifications
       const typedData = (data || []).map(n => ({
         ...n,
         type: n.type as NotificationType
-      }));
+      })).filter(n => !(n.type === 'alarm' && n.is_read));
       setNotifications(typedData);
     } catch (error) {
       console.error('Error fetching notifications:', error);

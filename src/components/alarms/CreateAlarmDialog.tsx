@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
+import { Volume2 } from "lucide-react";
 
 interface CreateAlarmDialogProps {
   open: boolean;
@@ -35,13 +36,22 @@ const CONDITIONS = [
   { value: 'multiple_ack', label: 'Requires X people to acknowledge', hasValue: true },
 ];
 
+const RINGTONES = [
+  { value: 'default', label: '🔔 Classic Alarm' },
+  { value: 'gentle', label: '🌅 Gentle Wake' },
+  { value: 'loud', label: '📢 Loud Siren' },
+  { value: 'beep', label: '🎵 Digital Beep' },
+];
+
 export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreated }: CreateAlarmDialogProps) {
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('07:00');
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [conditionType, setConditionType] = useState('anyone_can_dismiss');
   const [conditionValue, setConditionValue] = useState(3);
+  const [ringtone, setRingtone] = useState(() => localStorage.getItem('alarm_ringtone') || 'default');
   const [creating, setCreating] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const deviceId = useDeviceId();
   const { isNative, scheduleAlarm, createAlarmChannel, requestPermissions } = useNativeAlarm();
 
