@@ -84,6 +84,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [copied, setCopied] = useState(false);
   const [playlistCopied, setPlaylistCopied] = useState(false);
   const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
