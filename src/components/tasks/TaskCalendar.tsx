@@ -45,6 +45,17 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
   const [showCreatedTasks, setShowCreatedTasks] = useState(false);
   const [view, setView] = useState<"calendar" | "planner">("calendar");
 
+  // Auto-scroll to current hour when switching to planner view
+  useEffect(() => {
+    if (view === "planner") {
+      setTimeout(() => {
+        const currentHour = new Date().getHours();
+        const el = document.getElementById(`hour-${Math.max(0, currentHour - 1)}`);
+        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    }
+  }, [view, selectedDate]);
+
   useEffect(() => {
     if (currentRoom) {
       fetchTasks();
@@ -119,15 +130,11 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
       const taskDate = getTaskScheduledDate(task);
       if (!taskDate) return hour === 9;
 
-      const taskHour = taskDate.getHours();
-      const taskMinutes = taskDate.getMinutes();
-      const taskSeconds = taskDate.getSeconds();
+      // Check if this is a "date-only" value (midnight UTC) — show at 9 AM
+      const isDateOnly = taskDate.getUTCHours() === 0 && taskDate.getUTCMinutes() === 0 && taskDate.getUTCSeconds() === 0;
+      if (isDateOnly) return hour === 9;
 
-      if (taskHour === 0 && taskMinutes === 0 && taskSeconds === 0) {
-        return hour === 9;
-      }
-
-      return taskHour === hour;
+      return taskDate.getHours() === hour;
     });
   };
 

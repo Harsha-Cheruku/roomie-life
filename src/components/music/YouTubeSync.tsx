@@ -34,6 +34,11 @@ const extractYouTubeId = (url: string): string | null => {
   return null;
 };
 
+const extractPlaylistId = (url: string): string | null => {
+  const match = url.match(/[?&]list=([^&\s]+)/);
+  return match ? match[1] : null;
+};
+
 const extractPlaylistUrl = (url: string): string | null => {
   const match = url.match(/[?&]list=([^&\s]+)/);
   if (match) {
@@ -65,9 +70,9 @@ const loadYouTubeApi = (): Promise<void> => {
   return ytApiLoadPromise;
 };
 
-// Ultra-tight sync: 0.5s drift threshold, 2s heartbeat
-const DRIFT_THRESHOLD = 0.5;
-const HEARTBEAT_INTERVAL = 2000;
+// Tighter sync for casting-quality experience
+const DRIFT_THRESHOLD = 0.3;
+const HEARTBEAT_INTERVAL = 1000;
 
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
@@ -79,6 +84,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const [copied, setCopied] = useState(false);
   const [playlistCopied, setPlaylistCopied] = useState(false);
   const [lastPlaylistUrl, setLastPlaylistUrl] = useState<string | null>(null);
+  const [activePlaylistId, setActivePlaylistId] = useState<string | null>(null);
   const [joinCode, setJoinCode] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -117,9 +123,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerRef.current = null;
       }
 
+      const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 };
+      if (activePlaylistId) {
+        playerVars.listType = 'playlist';
+        playerVars.list = activePlaylistId;
+      }
       playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
         videoId: activeVideoId,
-        playerVars: { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 },
+        playerVars,
         events: {
           onStateChange: (event: any) => {
             if (!isMountedRef.current || ignoreBroadcastRef.current) return;
@@ -248,11 +259,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           if (!isMountedRef.current) return;
           const data = payload.payload;
           if (data.sender_id !== user.id) {
+            if (data.playlist_id) setActivePlaylistId(data.playlist_id);
             setActiveVideoId(data.video_id);
             setSharedBy(data.sender_name);
             setIsHost(false);
             if (data.playlist_url) setLastPlaylistUrl(data.playlist_url);
-            toast(`🎵 ${data.sender_name} shared a video!`);
+            toast(`🎵 ${data.sender_name} shared ${data.playlist_id ? 'a playlist' : 'a video'}!`);
           }
         })
         .on("broadcast", { event: "youtube_stop" }, (payload) => {
@@ -356,15 +368,21 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
 
   const shareVideo = useCallback(async () => {
     const videoId = extractYouTubeId(youtubeUrl);
-    if (!videoId) {
-      toast.error("Paste a valid YouTube link (e.g. youtube.com/watch?v=...)");
+    const playlistId = extractPlaylistId(youtubeUrl);
+    const playlist = extractPlaylistUrl(youtubeUrl);
+
+    // Accept either a video link or a playlist-only link
+    if (!videoId && !playlistId) {
+      toast.error("Paste a valid YouTube video or playlist link");
       return;
     }
 
-    const playlist = extractPlaylistUrl(youtubeUrl);
     if (playlist) setLastPlaylistUrl(playlist);
+    if (playlistId) setActivePlaylistId(playlistId);
 
-    setActiveVideoId(videoId);
+    // For playlist-only URLs, use a placeholder video ID (YouTube API will load first video)
+    const effectiveVideoId = videoId || "PLplaceholder";
+    setActiveVideoId(effectiveVideoId);
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
 
@@ -374,13 +392,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           type: "broadcast",
           event: "youtube_play",
           payload: {
-            video_id: videoId,
+            video_id: effectiveVideoId,
             sender_id: user?.id,
             sender_name: profile?.display_name || "Someone",
             playlist_url: playlist,
+            playlist_id: playlistId,
           },
         });
-        toast.success("Video shared with your room! 🎶");
+        toast.success(playlistId ? "Playlist shared with your room! 🎶" : "Video shared with your room! 🎶");
       } catch (err) {
         console.error("Failed to broadcast video:", err);
         toast.error("Failed to share. Please try again.");
@@ -396,6 +415,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       playerRef.current = null;
     }
     setActiveVideoId(null);
+    setActivePlaylistId(null);
     setSharedBy("");
     setIsHost(false);
     setIsPaused(false);
@@ -493,7 +513,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       {/* Share Input */}
       <div className="flex gap-2">
         <Input
-          placeholder="Paste YouTube link here..."
+          placeholder="Paste YouTube video or playlist link..."
           value={youtubeUrl}
           onChange={(e) => setYoutubeUrl(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && shareVideo()}

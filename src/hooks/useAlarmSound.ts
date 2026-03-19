@@ -1,11 +1,22 @@
 import { useRef, useCallback, useEffect } from "react";
 
-// Multiple fallback alarm sounds
-const ALARM_SOUNDS = [
-  "/alarm_sound.wav", // Local file first (most reliable)
-  "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
-  "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
-];
+// Ringtone options mapped to sound files
+const RINGTONE_MAP: Record<string, string> = {
+  default: "/alarm_sound.wav",
+  gentle: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
+  loud: "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
+  beep: "beep", // Use Web Audio API beep pattern
+};
+
+const getAlarmSounds = (): string[] => {
+  const preference = typeof localStorage !== 'undefined' ? localStorage.getItem('alarm_ringtone') : null;
+  if (preference === 'beep') return []; // Will use beep pattern only
+  const primary = RINGTONE_MAP[preference || 'default'] || "/alarm_sound.wav";
+  // Put preferred sound first, then fallbacks
+  return [primary, "/alarm_sound.wav", "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"].filter(
+    (v, i, a) => a.indexOf(v) === i // deduplicate
+  );
+};
 
 // Create a beep pattern using Web Audio API as ultimate fallback
 const createBeepSound = (audioContext: AudioContext, frequency: number = 880, duration: number = 0.3): OscillatorNode => {
@@ -138,7 +149,7 @@ export const useAlarmSound = () => {
     playBeepPattern();
 
     // Try audio files in parallel with beep (beep ensures something plays immediately)
-    for (const soundUrl of ALARM_SOUNDS) {
+    for (const soundUrl of getAlarmSounds()) {
       try {
         const audio = new Audio(soundUrl);
         audio.loop = true;
@@ -186,9 +197,12 @@ export const useAlarmSound = () => {
 
   const preloadAudio = useCallback(() => {
     try {
-      const audio = new Audio(ALARM_SOUNDS[0]);
-      audio.preload = 'auto';
-      audio.load();
+      const sounds = getAlarmSounds();
+      if (sounds.length > 0) {
+        const audio = new Audio(sounds[0]);
+        audio.preload = 'auto';
+        audio.load();
+      }
     } catch (e) { /* ignore */ }
   }, []);
 

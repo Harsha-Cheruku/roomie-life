@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
+import { Volume2 } from "lucide-react";
 
 interface CreateAlarmDialogProps {
   open: boolean;
@@ -35,13 +36,22 @@ const CONDITIONS = [
   { value: 'multiple_ack', label: 'Requires X people to acknowledge', hasValue: true },
 ];
 
+const RINGTONES = [
+  { value: 'default', label: '🔔 Classic Alarm' },
+  { value: 'gentle', label: '🌅 Gentle Wake' },
+  { value: 'loud', label: '📢 Loud Siren' },
+  { value: 'beep', label: '🎵 Digital Beep' },
+];
+
 export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreated }: CreateAlarmDialogProps) {
   const [title, setTitle] = useState('');
   const [time, setTime] = useState('07:00');
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [conditionType, setConditionType] = useState('anyone_can_dismiss');
   const [conditionValue, setConditionValue] = useState(3);
+  const [ringtone, setRingtone] = useState(() => localStorage.getItem('alarm_ringtone') || 'default');
   const [creating, setCreating] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const deviceId = useDeviceId();
   const { isNative, scheduleAlarm, createAlarmChannel, requestPermissions } = useNativeAlarm();
 
@@ -89,7 +99,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     }
 
     toast.success('Alarm created!');
-
+    localStorage.setItem('alarm_ringtone', ringtone);
     // Schedule native alarm if running as a native app
     if (isNative) {
       try {
@@ -178,6 +188,38 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
                   {day.label}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <Label>Ringtone</Label>
+            <div className="flex gap-2 mt-2">
+              <Select value={ringtone} onValueChange={(v) => {
+                setRingtone(v);
+                // Preview sound
+                if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+                if (v !== 'beep') {
+                  const sounds: Record<string, string> = {
+                    default: '/alarm_sound.wav',
+                    gentle: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+                    loud: 'https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3',
+                  };
+                  const audio = new Audio(sounds[v] || '/alarm_sound.wav');
+                  audio.volume = 0.5;
+                  audio.play().catch(() => {});
+                  setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
+                  previewAudioRef.current = audio;
+                }
+              }}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RINGTONES.map(r => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
