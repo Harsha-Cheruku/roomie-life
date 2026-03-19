@@ -291,14 +291,15 @@ const LudoBoard = ({
 
 // Dice component with 3D look
 const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
-  const dots: [number, number][] = {
+  const dots: { [key: number]: [number, number][] } = {
     1: [[50,50]],
     2: [[25,25],[75,75]],
     3: [[25,25],[50,50],[75,75]],
     4: [[25,25],[75,25],[25,75],[75,75]],
     5: [[25,25],[75,25],[50,50],[25,75],[75,75]],
     6: [[25,25],[75,25],[25,50],[75,50],[25,75],[75,75]],
-  }[value] || [];
+  };
+  const positions = dots[value] || [];
 
   return (
     <div className={cn(
