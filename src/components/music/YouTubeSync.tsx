@@ -415,6 +415,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       playerRef.current = null;
     }
     setActiveVideoId(null);
+    setActivePlaylistId(null);
     setSharedBy("");
     setIsHost(false);
     setIsPaused(false);
