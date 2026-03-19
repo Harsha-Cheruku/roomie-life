@@ -367,15 +367,21 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
 
   const shareVideo = useCallback(async () => {
     const videoId = extractYouTubeId(youtubeUrl);
-    if (!videoId) {
-      toast.error("Paste a valid YouTube link (e.g. youtube.com/watch?v=...)");
+    const playlistId = extractPlaylistId(youtubeUrl);
+    const playlist = extractPlaylistUrl(youtubeUrl);
+
+    // Accept either a video link or a playlist-only link
+    if (!videoId && !playlistId) {
+      toast.error("Paste a valid YouTube video or playlist link");
       return;
     }
 
-    const playlist = extractPlaylistUrl(youtubeUrl);
     if (playlist) setLastPlaylistUrl(playlist);
+    if (playlistId) setActivePlaylistId(playlistId);
 
-    setActiveVideoId(videoId);
+    // For playlist-only URLs, use a placeholder video ID (YouTube API will load first video)
+    const effectiveVideoId = videoId || "PLplaceholder";
+    setActiveVideoId(effectiveVideoId);
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
 
@@ -385,13 +391,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           type: "broadcast",
           event: "youtube_play",
           payload: {
-            video_id: videoId,
+            video_id: effectiveVideoId,
             sender_id: user?.id,
             sender_name: profile?.display_name || "Someone",
             playlist_url: playlist,
+            playlist_id: playlistId,
           },
         });
-        toast.success("Video shared with your room! 🎶");
+        toast.success(playlistId ? "Playlist shared with your room! 🎶" : "Video shared with your room! 🎶");
       } catch (err) {
         console.error("Failed to broadcast video:", err);
         toast.error("Failed to share. Please try again.");
