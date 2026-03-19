@@ -307,7 +307,7 @@ const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
       rolling && "animate-spin"
     )} style={{ background: 'linear-gradient(145deg, #fff, #f0f0f0)' }}>
       <svg viewBox="0 0 100 100" className="w-12 h-12">
-        {dots.map(([cx, cy], i) => (
+        {positions.map(([cx, cy], i) => (
           <circle key={i} cx={cx} cy={cy} r={10} fill="#333" />
         ))}
       </svg>
