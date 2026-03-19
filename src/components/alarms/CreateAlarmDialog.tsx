@@ -192,6 +192,38 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           </div>
 
           <div>
+            <Label>Ringtone</Label>
+            <div className="flex gap-2 mt-2">
+              <Select value={ringtone} onValueChange={(v) => {
+                setRingtone(v);
+                // Preview sound
+                if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+                if (v !== 'beep') {
+                  const sounds: Record<string, string> = {
+                    default: '/alarm_sound.wav',
+                    gentle: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
+                    loud: 'https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3',
+                  };
+                  const audio = new Audio(sounds[v] || '/alarm_sound.wav');
+                  audio.volume = 0.5;
+                  audio.play().catch(() => {});
+                  setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
+                  previewAudioRef.current = audio;
+                }
+              }}>
+                <SelectTrigger className="flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RINGTONES.map(r => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
             <Label>Dismiss Condition</Label>
             <Select value={conditionType} onValueChange={setConditionType}>
               <SelectTrigger className="mt-2">

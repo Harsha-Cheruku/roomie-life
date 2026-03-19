@@ -197,9 +197,12 @@ export const useAlarmSound = () => {
 
   const preloadAudio = useCallback(() => {
     try {
-      const audio = new Audio(ALARM_SOUNDS[0]);
-      audio.preload = 'auto';
-      audio.load();
+      const sounds = getAlarmSounds();
+      if (sounds.length > 0) {
+        const audio = new Audio(sounds[0]);
+        audio.preload = 'auto';
+        audio.load();
+      }
     } catch (e) { /* ignore */ }
   }, []);
 
