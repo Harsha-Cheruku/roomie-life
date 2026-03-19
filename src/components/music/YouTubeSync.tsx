@@ -259,11 +259,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           if (!isMountedRef.current) return;
           const data = payload.payload;
           if (data.sender_id !== user.id) {
+            if (data.playlist_id) setActivePlaylistId(data.playlist_id);
             setActiveVideoId(data.video_id);
             setSharedBy(data.sender_name);
             setIsHost(false);
             if (data.playlist_url) setLastPlaylistUrl(data.playlist_url);
-            toast(`🎵 ${data.sender_name} shared a video!`);
+            toast(`🎵 ${data.sender_name} shared ${data.playlist_id ? 'a playlist' : 'a video'}!`);
           }
         })
         .on("broadcast", { event: "youtube_stop" }, (payload) => {
