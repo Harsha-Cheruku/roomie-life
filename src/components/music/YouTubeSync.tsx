@@ -34,6 +34,11 @@ const extractYouTubeId = (url: string): string | null => {
   return null;
 };
 
+const extractPlaylistId = (url: string): string | null => {
+  const match = url.match(/[?&]list=([^&\s]+)/);
+  return match ? match[1] : null;
+};
+
 const extractPlaylistUrl = (url: string): string | null => {
   const match = url.match(/[?&]list=([^&\s]+)/);
   if (match) {
