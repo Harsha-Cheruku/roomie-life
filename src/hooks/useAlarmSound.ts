@@ -149,7 +149,7 @@ export const useAlarmSound = () => {
     playBeepPattern();
 
     // Try audio files in parallel with beep (beep ensures something plays immediately)
-    for (const soundUrl of ALARM_SOUNDS) {
+    for (const soundUrl of getAlarmSounds()) {
       try {
         const audio = new Audio(soundUrl);
         audio.loop = true;
