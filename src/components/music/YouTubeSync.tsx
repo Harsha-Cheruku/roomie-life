@@ -124,12 +124,14 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       }
 
       const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 };
+      // For playlist-only URLs, load playlist directly without a specific video ID
+      const isPlaylistOnly = activeVideoId.startsWith('playlist-');
       if (activePlaylistId) {
         playerVars.listType = 'playlist';
         playerVars.list = activePlaylistId;
       }
       playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
-        videoId: activeVideoId,
+        ...(isPlaylistOnly ? {} : { videoId: activeVideoId }),
         playerVars,
         events: {
           onStateChange: (event: any) => {
