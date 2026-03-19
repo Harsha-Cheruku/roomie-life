@@ -99,7 +99,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     }
 
     toast.success('Alarm created!');
-
+    localStorage.setItem('alarm_ringtone', ringtone);
     // Schedule native alarm if running as a native app
     if (isNative) {
       try {
