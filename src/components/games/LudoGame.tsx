@@ -10,133 +10,94 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Traditional Indian Ludo: Red (top-left), Green (top-right), Yellow (bottom-right), Blue (bottom-left)
+// Ludo King style: Red (top-left), Green (top-right), Yellow (bottom-right), Blue (bottom-left)
+const PLAYER_COLORS = {
+  bg: ["#E53935", "#43A047", "#FDD835", "#1E88E5"],
+  light: ["#FFCDD2", "#C8E6C9", "#FFF9C4", "#BBDEFB"],
+  mid: ["#EF9A9A", "#A5D6A7", "#FFF176", "#90CAF9"],
+  dark: ["#C62828", "#2E7D32", "#F9A825", "#1565C0"],
+  token: ["#D32F2F", "#388E3C", "#F9A825", "#1976D2"],
+  tokenLight: ["#FF8A80", "#69F0AE", "#FFD740", "#82B1FF"],
+};
 const PLAYER_EMOJIS = ["🔴", "🟢", "🟡", "🔵"];
 const PLAYER_NAMES = ["Red", "Green", "Yellow", "Blue"];
-const PLAYER_BG = [
-  "bg-red-500", "bg-green-500", "bg-yellow-500", "bg-blue-500"
-];
-const PLAYER_BG_LIGHT = [
-  "bg-red-100", "bg-green-100", "bg-yellow-100", "bg-blue-100"
-];
-const PLAYER_BG_MED = [
-  "bg-red-300", "bg-green-300", "bg-yellow-300", "bg-blue-300"
-];
-const PLAYER_RING = [
-  "ring-red-500", "ring-green-500", "ring-yellow-500", "ring-blue-500"
-];
-const PLAYER_TEXT = [
-  "text-red-600", "text-green-600", "text-yellow-600", "text-blue-600"
-];
 
 const BOARD_SIZE = 52;
 const HOME_STRETCH = 6;
 const SAFE_SQUARES = [0, 8, 13, 21, 26, 34, 39, 47];
 
-// 52 path positions mapped to [row, col] on a 15x15 grid (clockwise from Red's entry)
+// 52 path positions mapped to [row, col] on a 15x15 grid
 const PATH_GRID: [number, number][] = [
-  [6,1],[6,2],[6,3],[6,4],[6,5],               // 1-5
-  [5,6],[4,6],[3,6],[2,6],[1,6],[0,6],          // 6-11
-  [0,7],[0,8],                                   // 12-13
-  [1,8],[2,8],[3,8],[4,8],[5,8],                // 14-18
-  [6,9],[6,10],[6,11],[6,12],[6,13],[6,14],     // 19-24
-  [7,14],[8,14],                                 // 25-26
-  [8,13],[8,12],[8,11],[8,10],[8,9],            // 27-31
-  [9,8],[10,8],[11,8],[12,8],[13,8],[14,8],     // 32-37
-  [14,7],[14,6],                                 // 38-39
-  [13,6],[12,6],[11,6],[10,6],[9,6],            // 40-44
-  [8,5],[8,4],[8,3],[8,2],[8,1],[8,0],          // 45-50
-  [7,0],[6,0],                                   // 51-52
+  [6,1],[6,2],[6,3],[6,4],[6,5],
+  [5,6],[4,6],[3,6],[2,6],[1,6],[0,6],
+  [0,7],[0,8],
+  [1,8],[2,8],[3,8],[4,8],[5,8],
+  [6,9],[6,10],[6,11],[6,12],[6,13],[6,14],
+  [7,14],[8,14],
+  [8,13],[8,12],[8,11],[8,10],[8,9],
+  [9,8],[10,8],[11,8],[12,8],[13,8],[14,8],
+  [14,7],[14,6],
+  [13,6],[12,6],[11,6],[10,6],[9,6],
+  [8,5],[8,4],[8,3],[8,2],[8,1],[8,0],
+  [7,0],[6,0],
 ];
 
-// Home stretch positions (game positions 53-58)
 const HOME_STRETCH_GRID: [number, number][][] = [
-  [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],       // Red
-  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],       // Green
-  [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],   // Yellow
-  [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],   // Blue
+  [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],
+  [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],
+  [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],
+  [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],
 ];
 
-// Token positions within home bases (4 tokens each)
 const HOME_TOKEN_POS: [number, number][][] = [
-  [[2,2],[2,3],[3,2],[3,3]],                    // Red (top-left)
-  [[2,11],[2,12],[3,11],[3,12]],                // Green (top-right)
-  [[11,11],[11,12],[12,11],[12,12]],            // Yellow (bottom-right)
-  [[11,2],[11,3],[12,2],[12,3]],                // Blue (bottom-left)
+  [[1.5,1.5],[1.5,3.5],[3.5,1.5],[3.5,3.5]],
+  [[1.5,10.5],[1.5,12.5],[3.5,10.5],[3.5,12.5]],
+  [[10.5,10.5],[10.5,12.5],[12.5,10.5],[12.5,12.5]],
+  [[10.5,1.5],[10.5,3.5],[12.5,1.5],[12.5,3.5]],
 ];
 
-// Star/safe positions and start positions for visual markers
 const STAR_POSITIONS = new Set(SAFE_SQUARES.filter(s => s > 0));
-const START_ABS = [1, 14, 27, 40]; // Where each player enters the board
+const START_ABS = [1, 14, 27, 40];
 
 interface LudoToken { position: number; isFinished: boolean; }
 interface LudoPlayerState { tokens: LudoToken[]; startOffset: number; }
 interface LudoGameProps { onBack: () => void; }
 
-// Precompute a lookup: [row][col] → { pathIdx, isPath, isSafe, isStart, playerStart, stretchPlayer, stretchIdx }
-interface CellInfo {
-  type: 'empty' | 'path' | 'home' | 'stretch' | 'center';
-  absPos?: number;       // For path cells: 1-52
-  playerIdx?: number;    // For home/stretch: 0-3
-  stretchIdx?: number;   // For stretch: 0-5
-  homeTokenIdx?: number; // For home token slots
-  isSafe?: boolean;
-  isStart?: number;      // Player index whose start this is
-}
-
-const buildCellLookup = (): CellInfo[][] => {
-  const grid: CellInfo[][] = Array.from({ length: 15 }, () =>
-    Array.from({ length: 15 }, () => ({ type: 'empty' as const }))
-  );
-
-  // Home bases
-  for (let r = 0; r < 6; r++) for (let c = 0; c < 6; c++)
-    grid[r][c] = { type: 'home', playerIdx: 0 };
-  for (let r = 0; r < 6; r++) for (let c = 9; c < 15; c++)
-    grid[r][c] = { type: 'home', playerIdx: 1 };
-  for (let r = 9; r < 15; r++) for (let c = 9; c < 15; c++)
-    grid[r][c] = { type: 'home', playerIdx: 2 };
-  for (let r = 9; r < 15; r++) for (let c = 0; c < 6; c++)
-    grid[r][c] = { type: 'home', playerIdx: 3 };
-
-  // Home token slots
-  HOME_TOKEN_POS.forEach((positions, pIdx) => {
-    positions.forEach(([r, c], tIdx) => {
-      grid[r][c] = { type: 'home', playerIdx: pIdx, homeTokenIdx: tIdx };
-    });
-  });
-
-  // Path cells
-  PATH_GRID.forEach(([r, c], i) => {
-    const absPos = i + 1;
-    const startPlayerIdx = START_ABS.indexOf(absPos);
-    grid[r][c] = {
-      type: 'path',
-      absPos,
-      isSafe: STAR_POSITIONS.has(absPos),
-      isStart: startPlayerIdx >= 0 ? startPlayerIdx : undefined,
-    };
-  });
-
-  // Home stretches
-  HOME_STRETCH_GRID.forEach((positions, pIdx) => {
-    positions.forEach(([r, c], sIdx) => {
-      grid[r][c] = { type: 'stretch', playerIdx: pIdx, stretchIdx: sIdx };
-    });
-  });
-
-  // Center 3x3
-  for (let r = 6; r <= 8; r++) for (let c = 6; c <= 8; c++)
-    grid[r][c] = { type: 'center' };
-
-  return grid;
-};
-
-const CELL_LOOKUP = buildCellLookup();
-
 const getAbsolutePosition = (relPos: number, startOffset: number): number => {
   if (relPos === 0 || relPos > BOARD_SIZE) return -1;
   return ((relPos - 1 + startOffset) % BOARD_SIZE) + 1;
+};
+
+// Get pixel position for a token on the board
+const getTokenPosition = (
+  token: LudoToken, playerIdx: number, tokenIdx: number, startOffset: number, boardSize: number
+): { x: number; y: number } | null => {
+  const cellSize = boardSize / 15;
+  
+  if (token.isFinished) {
+    // Center area
+    return { x: 7 * cellSize + cellSize / 2, y: 7 * cellSize + cellSize / 2 };
+  }
+  
+  if (token.position === 0) {
+    // Home base
+    const [r, c] = HOME_TOKEN_POS[playerIdx][tokenIdx];
+    return { x: c * cellSize + cellSize / 2, y: r * cellSize + cellSize / 2 };
+  }
+  
+  if (token.position > BOARD_SIZE) {
+    const stretchIdx = token.position - BOARD_SIZE - 1;
+    const pos = HOME_STRETCH_GRID[playerIdx][stretchIdx];
+    if (!pos) return null;
+    return { x: pos[1] * cellSize + cellSize / 2, y: pos[0] * cellSize + cellSize / 2 };
+  }
+  
+  const abs = getAbsolutePosition(token.position, startOffset);
+  if (abs >= 1 && abs <= 52) {
+    const [r, c] = PATH_GRID[abs - 1];
+    return { x: c * cellSize + cellSize / 2, y: r * cellSize + cellSize / 2 };
+  }
+  return null;
 };
 
 // ─── Board Component ───────────────────────────────────
@@ -156,178 +117,200 @@ const LudoBoard = ({
   players, playerStates, currentUserId, isMyTurn, hasRolled, diceValue,
   canMoveToken, onTokenClick, moveInProgress,
 }: BoardProps) => {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [boardSize, setBoardSize] = useState(340);
 
-  // Build token position map: key = "row-col", value = array of { playerIdx, tokenIdx }
-  const tokenMap = useMemo(() => {
-    const map = new Map<string, { playerIdx: number; tokenIdx: number }[]>();
-    const addToken = (r: number, c: number, pIdx: number, tIdx: number) => {
-      const key = `${r}-${c}`;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push({ playerIdx: pIdx, tokenIdx: tIdx });
-    };
+  useEffect(() => {
+    const el = boardRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width;
+      if (w) setBoardSize(w);
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
+  const cellSize = boardSize / 15;
+  const myPlayerIdx = players.findIndex(p => p.user_id === currentUserId);
+  const myState = currentUserId ? playerStates[currentUserId] : undefined;
+
+  // Collect all tokens with positions
+  const allTokens = useMemo(() => {
+    const tokens: { playerIdx: number; tokenIdx: number; x: number; y: number; isClickable: boolean }[] = [];
     players.forEach((p, pIdx) => {
       const state = playerStates[p.user_id];
       if (!state) return;
       state.tokens.forEach((token, tIdx) => {
-        if (token.isFinished) {
-          addToken(7, 7, pIdx, tIdx); // Center
-        } else if (token.position === 0) {
-          const [r, c] = HOME_TOKEN_POS[pIdx][tIdx];
-          addToken(r, c, pIdx, tIdx);
-        } else if (token.position > BOARD_SIZE) {
-          const stretchIdx = token.position - BOARD_SIZE - 1;
-          const pos = HOME_STRETCH_GRID[pIdx][stretchIdx];
-          if (pos) addToken(pos[0], pos[1], pIdx, tIdx);
-        } else {
-          const abs = getAbsolutePosition(token.position, state.startOffset);
-          if (abs >= 1 && abs <= 52) {
-            const [r, c] = PATH_GRID[abs - 1];
-            addToken(r, c, pIdx, tIdx);
-          }
-        }
+        const pos = getTokenPosition(token, pIdx, tIdx, state.startOffset, boardSize);
+        if (!pos) return;
+        const clickable = isMyTurn && hasRolled && !moveInProgress &&
+          pIdx === myPlayerIdx && !!diceValue && !!myState &&
+          canMoveToken(myState.tokens[tIdx], diceValue);
+        tokens.push({ playerIdx: pIdx, tokenIdx: tIdx, x: pos.x, y: pos.y, isClickable: clickable });
       });
     });
-    return map;
-  }, [players, playerStates]);
-
-  const myPlayerIdx = players.findIndex(p => p.user_id === currentUserId);
-  const myState = currentUserId ? playerStates[currentUserId] : undefined;
-
-  const renderCell = (row: number, col: number) => {
-    const info = CELL_LOOKUP[row][col];
-    const tokens = tokenMap.get(`${row}-${col}`) || [];
-    const key = `${row}-${col}`;
-
-    // Background color
-    let bg = "bg-card";
-    let border = "border-border/30";
-    let extra = "";
-
-    if (info.type === 'home') {
-      bg = PLAYER_BG_LIGHT[info.playerIdx!];
-      if (info.homeTokenIdx !== undefined) {
-        bg = "bg-white";
-        border = "border-border";
-      }
-    } else if (info.type === 'path') {
-      bg = "bg-white";
-      if (info.isStart !== undefined) {
-        bg = PLAYER_BG_MED[info.isStart];
-      }
-      if (info.isSafe) extra = "★";
-    } else if (info.type === 'stretch') {
-      bg = PLAYER_BG_LIGHT[info.playerIdx!];
-    } else if (info.type === 'center') {
-      // Triangular center - use gradient per position
-      if (row === 7 && col === 7) bg = "bg-gradient-to-br from-red-400 via-green-400 to-yellow-400";
-      else if (row === 6 && col === 7) bg = "bg-green-300";
-      else if (row === 8 && col === 7) bg = "bg-blue-300";
-      else if (row === 7 && col === 6) bg = "bg-red-300";
-      else if (row === 7 && col === 8) bg = "bg-yellow-300";
-      else if (row === 6 && col === 6) bg = "bg-red-200";
-      else if (row === 6 && col === 8) bg = "bg-green-200";
-      else if (row === 8 && col === 6) bg = "bg-blue-200";
-      else if (row === 8 && col === 8) bg = "bg-yellow-200";
-    } else {
-      bg = "bg-muted/20";
-    }
-
-    return (
-      <div
-        key={key}
-        className={cn(
-          "relative flex items-center justify-center border",
-          bg, border,
-          info.type === 'empty' && "border-transparent"
-        )}
-        style={{ aspectRatio: '1' }}
-      >
-        {/* Star marker */}
-        {extra === "★" && tokens.length === 0 && (
-          <span className="text-[7px] text-yellow-500 font-bold">★</span>
-        )}
-
-        {/* Tokens */}
-        {tokens.length > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            {tokens.length === 1 ? (
-              <TokenCircle
-                playerIdx={tokens[0].playerIdx}
-                tokenIdx={tokens[0].tokenIdx}
-                isClickable={
-                  isMyTurn && hasRolled && !moveInProgress &&
-                  tokens[0].playerIdx === myPlayerIdx &&
-                  !!diceValue && !!myState &&
-                  canMoveToken(myState.tokens[tokens[0].tokenIdx], diceValue)
-                }
-                onClick={() => {
-                  if (tokens[0].playerIdx === myPlayerIdx) onTokenClick(tokens[0].tokenIdx);
-                }}
-                size="full"
-              />
-            ) : (
-              <div className="grid grid-cols-2 gap-px w-full h-full p-px">
-                {tokens.map((t, i) => (
-                  <TokenCircle
-                    key={i}
-                    playerIdx={t.playerIdx}
-                    tokenIdx={t.tokenIdx}
-                    isClickable={
-                      isMyTurn && hasRolled && !moveInProgress &&
-                      t.playerIdx === myPlayerIdx &&
-                      !!diceValue && !!myState &&
-                      canMoveToken(myState.tokens[t.tokenIdx], diceValue)
-                    }
-                    onClick={() => {
-                      if (t.playerIdx === myPlayerIdx) onTokenClick(t.tokenIdx);
-                    }}
-                    size="half"
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
+    return tokens;
+  }, [players, playerStates, boardSize, isMyTurn, hasRolled, moveInProgress, myPlayerIdx, diceValue, myState, canMoveToken]);
 
   return (
-    <div className="w-full max-w-[340px] mx-auto rounded-xl overflow-hidden border-2 border-border shadow-lg bg-card">
-      <div
-        className="w-full"
-        style={{ display: 'grid', gridTemplateColumns: 'repeat(15, 1fr)' }}
-      >
-        {Array.from({ length: 225 }, (_, i) => renderCell(Math.floor(i / 15), i % 15))}
-      </div>
+    <div ref={boardRef} className="w-full max-w-[360px] mx-auto">
+      <svg viewBox={`0 0 ${boardSize} ${boardSize}`} className="w-full rounded-2xl shadow-xl overflow-hidden" style={{ border: '3px solid hsl(var(--border))' }}>
+        {/* Board background */}
+        <rect width={boardSize} height={boardSize} fill="white" />
+        
+        {/* Home bases - large colored squares */}
+        <rect x={0} y={0} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[0]} rx={cellSize * 0.3} />
+        <rect x={cellSize * 9} y={0} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[1]} rx={cellSize * 0.3} />
+        <rect x={cellSize * 9} y={cellSize * 9} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[2]} rx={cellSize * 0.3} />
+        <rect x={0} y={cellSize * 9} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[3]} rx={cellSize * 0.3} />
+
+        {/* Inner white areas for token homes */}
+        {[
+          [cellSize * 0.8, cellSize * 0.8],
+          [cellSize * 9.8, cellSize * 0.8],
+          [cellSize * 9.8, cellSize * 9.8],
+          [cellSize * 0.8, cellSize * 9.8],
+        ].map(([x, y], i) => (
+          <rect key={`home-inner-${i}`} x={x} y={y} width={cellSize * 4.4} height={cellSize * 4.4} fill="white" rx={cellSize * 0.2} />
+        ))}
+
+        {/* Home token circles (outlines for empty slots) */}
+        {HOME_TOKEN_POS.map((positions, pIdx) =>
+          positions.map(([r, c], tIdx) => (
+            <circle
+              key={`home-slot-${pIdx}-${tIdx}`}
+              cx={c * cellSize + cellSize / 2}
+              cy={r * cellSize + cellSize / 2}
+              r={cellSize * 0.45}
+              fill={PLAYER_COLORS.light[pIdx]}
+              stroke={PLAYER_COLORS.bg[pIdx]}
+              strokeWidth={1.5}
+            />
+          ))
+        )}
+
+        {/* Path cells */}
+        {PATH_GRID.map(([r, c], i) => {
+          const absPos = i + 1;
+          const startPlayer = START_ABS.indexOf(absPos);
+          const isSafe = STAR_POSITIONS.has(absPos);
+          const x = c * cellSize;
+          const y = r * cellSize;
+          
+          return (
+            <g key={`path-${i}`}>
+              <rect
+                x={x + 0.5} y={y + 0.5}
+                width={cellSize - 1} height={cellSize - 1}
+                fill={startPlayer >= 0 ? PLAYER_COLORS.mid[startPlayer] : "white"}
+                stroke="#e0e0e0"
+                strokeWidth={0.5}
+                rx={1}
+              />
+              {isSafe && (
+                <text
+                  x={x + cellSize / 2} y={y + cellSize / 2 + 1}
+                  textAnchor="middle" dominantBaseline="central"
+                  fontSize={cellSize * 0.5} fill="#FFB300"
+                >★</text>
+              )}
+              {startPlayer >= 0 && (
+                <text
+                  x={x + cellSize / 2} y={y + cellSize / 2 + 1}
+                  textAnchor="middle" dominantBaseline="central"
+                  fontSize={cellSize * 0.35} fill={PLAYER_COLORS.dark[startPlayer]}
+                  fontWeight="bold"
+                >▶</text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Home stretch cells */}
+        {HOME_STRETCH_GRID.map((positions, pIdx) =>
+          positions.map(([r, c], sIdx) => (
+            <rect
+              key={`stretch-${pIdx}-${sIdx}`}
+              x={c * cellSize + 0.5} y={r * cellSize + 0.5}
+              width={cellSize - 1} height={cellSize - 1}
+              fill={PLAYER_COLORS.light[pIdx]}
+              stroke={PLAYER_COLORS.mid[pIdx]}
+              strokeWidth={0.5}
+              rx={1}
+            />
+          ))
+        )}
+
+        {/* Center triangle area */}
+        <polygon
+          points={`${7.5 * cellSize},${6 * cellSize} ${9 * cellSize},${7.5 * cellSize} ${7.5 * cellSize},${9 * cellSize} ${6 * cellSize},${7.5 * cellSize}`}
+          fill="white" stroke="#e0e0e0" strokeWidth={0.5}
+        />
+        {/* Four colored triangles pointing to center */}
+        <polygon points={`${6 * cellSize},${6 * cellSize} ${9 * cellSize},${6 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[1]} opacity={0.8} />
+        <polygon points={`${9 * cellSize},${6 * cellSize} ${9 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[2]} opacity={0.8} />
+        <polygon points={`${6 * cellSize},${9 * cellSize} ${9 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[3]} opacity={0.8} />
+        <polygon points={`${6 * cellSize},${6 * cellSize} ${6 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[0]} opacity={0.8} />
+
+        {/* Tokens */}
+        {allTokens.map((t, i) => {
+          const r = cellSize * 0.38;
+          return (
+            <g
+              key={`token-${t.playerIdx}-${t.tokenIdx}`}
+              onClick={t.isClickable ? () => onTokenClick(t.tokenIdx) : undefined}
+              style={{ cursor: t.isClickable ? 'pointer' : 'default' }}
+            >
+              {/* Shadow */}
+              <circle cx={t.x + 1} cy={t.y + 2} r={r} fill="rgba(0,0,0,0.15)" />
+              {/* Token body */}
+              <circle cx={t.x} cy={t.y} r={r} fill={PLAYER_COLORS.token[t.playerIdx]} stroke="white" strokeWidth={2} />
+              {/* Glossy highlight */}
+              <circle cx={t.x - r * 0.2} cy={t.y - r * 0.25} r={r * 0.35} fill={PLAYER_COLORS.tokenLight[t.playerIdx]} opacity={0.5} />
+              {/* Token number */}
+              <text
+                x={t.x} y={t.y + 1}
+                textAnchor="middle" dominantBaseline="central"
+                fontSize={r * 0.9} fontWeight="bold" fill="white"
+              >{t.tokenIdx + 1}</text>
+              {/* Clickable pulse ring */}
+              {t.isClickable && (
+                <circle cx={t.x} cy={t.y} r={r + 3} fill="none" stroke={PLAYER_COLORS.bg[t.playerIdx]} strokeWidth={2} opacity={0.7}>
+                  <animate attributeName="r" values={`${r + 2};${r + 6};${r + 2}`} dur="1s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1s" repeatCount="indefinite" />
+                </circle>
+              )}
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 };
 
-// Token circle component
-const TokenCircle = ({
-  playerIdx, tokenIdx, isClickable, onClick, size,
-}: {
-  playerIdx: number; tokenIdx: number; isClickable: boolean;
-  onClick: () => void; size: 'full' | 'half';
-}) => {
-  const sizeClass = size === 'full' ? 'w-[80%] h-[80%]' : 'w-full h-full';
+// Dice component with 3D look
+const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
+  const dots: [number, number][] = {
+    1: [[50,50]],
+    2: [[25,25],[75,75]],
+    3: [[25,25],[50,50],[75,75]],
+    4: [[25,25],[75,25],[25,75],[75,75]],
+    5: [[25,25],[75,25],[50,50],[25,75],[75,75]],
+    6: [[25,25],[75,25],[25,50],[75,50],[25,75],[75,75]],
+  }[value] || [];
+
   return (
-    <button
-      onClick={isClickable ? onClick : undefined}
-      disabled={!isClickable}
-      className={cn(
-        "rounded-full flex items-center justify-center font-bold shadow-sm transition-all",
-        sizeClass,
-        PLAYER_BG[playerIdx],
-        "text-white text-[8px] border border-white/50",
-        isClickable && "animate-pulse ring-2 ring-primary cursor-pointer scale-110",
-        !isClickable && "cursor-default"
-      )}
-    >
-      {tokenIdx + 1}
-    </button>
+    <div className={cn(
+      "w-16 h-16 rounded-xl bg-white shadow-lg border-2 border-border flex items-center justify-center relative",
+      rolling && "animate-spin"
+    )} style={{ background: 'linear-gradient(145deg, #fff, #f0f0f0)' }}>
+      <svg viewBox="0 0 100 100" className="w-12 h-12">
+        {dots.map(([cx, cy], i) => (
+          <circle key={i} cx={cx} cy={cy} r={10} fill="#333" />
+        ))}
+      </svg>
+    </div>
   );
 };
 
@@ -393,13 +376,13 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     await gameLobby.startGame({ playerStates: initialStates, winner: null, lastDice: null, message: "", hasRolled: false });
   };
 
-  const canMoveToken = (token: LudoToken, dice: number): boolean => {
+  const canMoveToken = useCallback((token: LudoToken, dice: number): boolean => {
     if (token.isFinished) return false;
     if (token.position === 0) return dice === 6;
     const newPos = token.position + dice;
     if (newPos > BOARD_SIZE + HOME_STRETCH) return false;
     return true;
-  };
+  }, []);
 
   const getNextPlayer = useCallback((): string => {
     const currentUser = userRef.current;
@@ -530,7 +513,6 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
     );
   };
 
-  const getDiceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
   const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);
 
   // Pre-lobby screens
@@ -571,18 +553,22 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       </div>
 
       {/* Player indicators */}
-      <div className="flex gap-2 justify-center">
+      <div className="flex gap-2 justify-center flex-wrap">
         {players.map((p, idx) => (
           <div
             key={p.user_id}
             className={cn(
               "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all",
-              PLAYER_BG_LIGHT[idx],
-              lobby.current_turn_user_id === p.user_id && "ring-2 " + PLAYER_RING[idx],
+              lobby.current_turn_user_id === p.user_id && "ring-2 ring-offset-1 scale-105"
             )}
+            style={{
+              backgroundColor: PLAYER_COLORS.light[idx],
+              color: PLAYER_COLORS.dark[idx],
+              ...(lobby.current_turn_user_id === p.user_id ? { ringColor: PLAYER_COLORS.bg[idx] } : {}),
+            }}
           >
             <span>{PLAYER_EMOJIS[idx]}</span>
-            <span className={PLAYER_TEXT[idx]}>{p.display_name.slice(0, 8)}</span>
+            <span>{p.display_name.slice(0, 8)}</span>
           </div>
         ))}
       </div>
@@ -607,11 +593,11 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
 
       {/* Controls */}
       <div className="flex items-center gap-3">
-        {diceValue && <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>}
+        {diceValue && <DiceFace value={diceValue} rolling={rolling} />}
         <div className="flex-1 space-y-2">
           {!winner && (
-            <Button onClick={rollDice} disabled={!isMyTurn || rolling || hasRolled || moveInProgressRef.current} className="w-full gradient-primary">
-              <Dices className="h-4 w-4 mr-2" />
+            <Button onClick={rollDice} disabled={!isMyTurn || rolling || hasRolled || moveInProgressRef.current} className="w-full gradient-primary h-12 text-base">
+              <Dices className="h-5 w-5 mr-2" />
               {rolling ? "Rolling..." : hasRolled ? "Tap a token..." : isMyTurn ? "Roll Dice" : "Wait your turn"}
             </Button>
           )}

@@ -380,9 +380,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     if (playlist) setLastPlaylistUrl(playlist);
     if (playlistId) setActivePlaylistId(playlistId);
 
-    // For playlist-only URLs, use a placeholder video ID (YouTube API will load first video)
-    const effectiveVideoId = videoId || "PLplaceholder";
-    setActiveVideoId(effectiveVideoId);
+    // For playlist-only URLs without a video ID, use a blank ID (YT API loads first playlist item)
+    const effectiveVideoId = videoId || "";
+    setActiveVideoId(effectiveVideoId || `playlist-${playlistId}`);
     setSharedBy(profile?.display_name || "You");
     setIsHost(true);
 
