@@ -498,6 +498,7 @@ export const LudoGame = ({ onBack }: LudoGameProps) => {
       setWinner(user.id);
       winnerRef.current = user.id;
       msg = `🎉 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
+      await gameLobby.endGame(user.id);
       saveGameResult({ gameType: "ludo", winnerId: user.id, playerIds: players.map((p) => p.user_id), result: "completed" });
       toast.success("You won! 🎉");
     } else if (diceValue === 6) {

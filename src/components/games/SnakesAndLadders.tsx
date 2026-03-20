@@ -129,6 +129,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
       await updateGameStateRef.current(
         { positions: newPositions, winner: currentUser.id, lastDice: dice, message: `🎉 Winner!` }
       );
+      await gameLobby.endGame(currentUser.id);
       saveGameResult({
         gameType: "snakes_and_ladders",
         winnerId: currentUser.id,

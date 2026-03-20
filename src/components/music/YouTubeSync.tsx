@@ -559,7 +559,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             </div>
             {!isHost && (
               <p className="text-[10px] text-muted-foreground">
-                Playback is synced with the host. Pause, play & speed changes sync automatically.
+                🔒 Host controls playback. You're synced automatically — sit back and enjoy!
               </p>
             )}
             {lastPlaylistUrl && (
