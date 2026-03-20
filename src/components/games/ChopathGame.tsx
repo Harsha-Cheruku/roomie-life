@@ -192,6 +192,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
       setWinner(user.id);
       winnerRef.current = user.id;
       msg = `🏆 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
+      await gameLobby.endGame(user.id);
       saveGameResult({
         gameType: "chopat",
         winnerId: user.id,
