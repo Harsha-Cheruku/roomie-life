@@ -123,7 +123,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerRef.current = null;
       }
 
-      const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1 };
+      const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, disablekb: isHostRef.current ? 0 : 1, controls: isHostRef.current ? 1 : 0 };
       // For playlist-only URLs, load playlist directly without a specific video ID
       const isPlaylistOnly = activeVideoId.startsWith('playlist-');
       if (activePlaylistId) {
