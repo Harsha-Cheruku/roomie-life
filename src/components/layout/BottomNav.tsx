@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
 import { Home, ListTodo, Receipt, Cloud, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface NavItem {
   icon: React.ElementType;
@@ -22,29 +25,83 @@ interface BottomNavProps {
 }
 
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
+  const { user, currentRoom } = useAuth();
+  const [unreadChat, setUnreadChat] = useState(0);
+
+  // Track unread chat messages (messages since last visit)
+  useEffect(() => {
+    if (!currentRoom?.id || !user?.id || activeTab === "chat") {
+      setUnreadChat(0);
+      return;
+    }
+
+    // Store last seen timestamp
+    const lastSeenKey = `chat_last_seen_${currentRoom.id}`;
+    const lastSeen = localStorage.getItem(lastSeenKey) || new Date(0).toISOString();
+
+    const fetchUnread = async () => {
+      const { count } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .eq("room_id", currentRoom.id)
+        .neq("sender_id", user.id)
+        .gt("created_at", lastSeen);
+      setUnreadChat(count || 0);
+    };
+
+    fetchUnread();
+
+    const channel = supabase
+      .channel("chat-badge")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` }, (payload) => {
+        if (payload.new && (payload.new as any).sender_id !== user.id && activeTab !== "chat") {
+          setUnreadChat((prev) => prev + 1);
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [currentRoom?.id, user?.id, activeTab]);
+
+  // When user switches to chat, mark as seen
+  useEffect(() => {
+    if (activeTab === "chat" && currentRoom?.id) {
+      localStorage.setItem(`chat_last_seen_${currentRoom.id}`, new Date().toISOString());
+      setUnreadChat(0);
+    }
+  }, [activeTab, currentRoom?.id]);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
       <div className="max-w-lg mx-auto flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
+          const showBadge = item.id === "chat" && unreadChat > 0;
           return (
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
               className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 press-effect",
+                "relative flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 press-effect",
                 isActive
                   ? "bg-primary/10 scale-105"
                   : "hover:bg-muted/50"
               )}
             >
-              <item.icon
-                className={cn(
-                  "w-6 h-6 transition-all duration-300",
-                  isActive ? item.color : "text-muted-foreground"
+              <div className="relative">
+                <item.icon
+                  className={cn(
+                    "w-6 h-6 transition-all duration-300",
+                    isActive ? item.color : "text-muted-foreground"
+                  )}
+                  strokeWidth={isActive ? 2.5 : 2}
+                />
+                {showBadge && (
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-coral text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1 animate-scale-in">
+                    {unreadChat > 9 ? "9+" : unreadChat}
+                  </span>
                 )}
-                strokeWidth={isActive ? 2.5 : 2}
-              />
+              </div>
               <span
                 className={cn(
                   "text-xs font-medium transition-colors",
