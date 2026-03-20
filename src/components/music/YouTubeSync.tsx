@@ -532,14 +532,16 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         <Card className="overflow-hidden shadow-lg">
           <div className="relative">
             <div ref={playerContainerRef} className="w-full aspect-video" />
-            <div className="absolute top-2 right-2 flex gap-1">
-              <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
-                {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-              </Button>
-              <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            {isHost && (
+              <div className="absolute top-2 right-2 flex gap-1">
+                <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
+                  {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                </Button>
+                <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={stopVideo}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between">
