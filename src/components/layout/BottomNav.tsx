@@ -52,9 +52,10 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     fetchUnread();
 
     const channel = supabase
-      .channel("chat-badge")
+      .channel(`chat-badge-${user.id}-${currentRoom.id}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` }, (payload) => {
-        if (payload.new && (payload.new as any).sender_id !== user.id && activeTab !== "chat") {
+        const msg = payload.new as any;
+        if (msg && msg.sender_id !== user.id && activeTab !== "chat") {
           setUnreadChat((prev) => prev + 1);
         }
       })
