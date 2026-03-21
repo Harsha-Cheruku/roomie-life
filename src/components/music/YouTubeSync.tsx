@@ -365,10 +365,9 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
           } catch (err) {
             console.error("Failed to sync playback:", err);
           } finally {
-            // Release guard after a short delay to let YT state change events pass
             setTimeout(() => {
               ignoreBroadcastRef.current = false;
-            }, 200);
+            }, 500);
           }
         })
         .subscribe(async (status) => {
