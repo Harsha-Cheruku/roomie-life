@@ -51,35 +51,40 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [currentRoom?.id, user?.id]);
 
+  // When chat tab is open, immediately mark as seen and clear badge
   useEffect(() => {
-    if (!currentRoom?.id || !user?.id) {
+    if (isChatTabOpen && currentRoom?.id && user?.id) {
+      const key = `chat_last_seen_${user.id}_${currentRoom.id}`;
+      localStorage.setItem(key, new Date().toISOString());
       setUnreadChat(0);
+    }
+  }, [isChatTabOpen, currentRoom?.id, user?.id]);
+
+  // Only fetch unread & subscribe when NOT on chat tab
+  useEffect(() => {
+    if (!currentRoom?.id || !user?.id || isChatTabOpen) {
+      if (isChatTabOpen) setUnreadChat(0);
       return;
     }
 
     fetchUnread();
 
-    if (isChatTabOpen) {
-      return;
-    }
-
+    const channelName = `chat-badge-${user.id}-${currentRoom.id}-${Date.now()}`;
     const channel = supabase
-      .channel(`chat-badge-${user.id}-${currentRoom.id}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` },
         (payload) => {
           const msg = payload.new as { sender_id?: string };
           if (msg?.sender_id && msg.sender_id !== user.id) {
-            fetchUnread();
+            setUnreadChat(prev => prev + 1);
           }
         }
       )
       .subscribe();
 
-    const pollTimer = window.setInterval(() => {
-      fetchUnread();
-    }, 15000);
+    const pollTimer = window.setInterval(fetchUnread, 30000);
 
     return () => {
       window.clearInterval(pollTimer);
