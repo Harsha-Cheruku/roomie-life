@@ -51,35 +51,40 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [currentRoom?.id, user?.id]);
 
+  // When chat tab is open, immediately mark as seen and clear badge
   useEffect(() => {
-    if (!currentRoom?.id || !user?.id) {
+    if (isChatTabOpen && currentRoom?.id && user?.id) {
+      const key = `chat_last_seen_${user.id}_${currentRoom.id}`;
+      localStorage.setItem(key, new Date().toISOString());
       setUnreadChat(0);
+    }
+  }, [isChatTabOpen, currentRoom?.id, user?.id]);
+
+  // Only fetch unread & subscribe when NOT on chat tab
+  useEffect(() => {
+    if (!currentRoom?.id || !user?.id || isChatTabOpen) {
+      if (isChatTabOpen) setUnreadChat(0);
       return;
     }
 
     fetchUnread();
 
-    if (isChatTabOpen) {
-      return;
-    }
-
+    const channelName = `chat-badge-${user.id}-${currentRoom.id}-${Date.now()}`;
     const channel = supabase
-      .channel(`chat-badge-${user.id}-${currentRoom.id}`)
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` },
         (payload) => {
           const msg = payload.new as { sender_id?: string };
           if (msg?.sender_id && msg.sender_id !== user.id) {
-            fetchUnread();
+            setUnreadChat(prev => prev + 1);
           }
         }
       )
       .subscribe();
 
-    const pollTimer = window.setInterval(() => {
-      fetchUnread();
-    }, 15000);
+    const pollTimer = window.setInterval(fetchUnread, 30000);
 
     return () => {
       window.clearInterval(pollTimer);
@@ -87,13 +92,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     };
   }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
 
-  // When user switches to chat, mark as seen
-  useEffect(() => {
-    if (activeTab === "chat" && currentRoom?.id && user?.id) {
-      localStorage.setItem(`chat_last_seen_${user.id}_${currentRoom.id}`, new Date().toISOString());
-      setUnreadChat(0);
-    }
-  }, [activeTab, currentRoom?.id, user?.id]);
+  // No separate effect needed — handled by isChatTabOpen effect above
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
