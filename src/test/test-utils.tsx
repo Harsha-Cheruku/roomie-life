@@ -65,6 +65,8 @@ export const mockSupabase = {
   update: vi.fn().mockReturnThis(),
   delete: vi.fn().mockReturnThis(),
   eq: vi.fn().mockReturnThis(),
+  neq: vi.fn().mockReturnThis(),
+  gt: vi.fn().mockReturnThis(),
   in: vi.fn().mockReturnThis(),
   single: vi.fn().mockReturnThis(),
   maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
