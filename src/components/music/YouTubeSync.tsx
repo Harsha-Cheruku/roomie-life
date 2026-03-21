@@ -331,23 +331,36 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
                 lastHostSyncRef.current.rate = data.rate || 1;
               }
             } else if (data.action === "heartbeat") {
-              // Update authoritative sync point for continuous correction
               const expectedTime = data.currentTime + networkDelay;
               lastHostSyncRef.current = { time: Date.now(), hostTime: expectedTime, rate: data.rate || 1 };
               
-              // Immediate correction if drift is too large
               const YT = (window as any).YT?.PlayerState;
-              if (YT && player.getPlayerState() === YT.PLAYING) {
+              if (!YT) return;
+              
+              // If listener is paused but host is playing, resume
+              if (player.getPlayerState() !== YT.PLAYING) {
+                player.seekTo(expectedTime, true);
+                player.playVideo();
+                setIsPaused(false);
+              } else {
                 const actualTime = player.getCurrentTime();
                 const drift = Math.abs(expectedTime - actualTime);
                 if (drift > DRIFT_THRESHOLD) {
                   player.seekTo(expectedTime, true);
                 }
-                // Also sync playback rate
                 if (data.rate && player.getPlaybackRate() !== data.rate) {
                   player.setPlaybackRate(data.rate);
                 }
               }
+            } else if (data.action === "heartbeat_paused") {
+              // Host is paused — ensure listener is also paused
+              const YT = (window as any).YT?.PlayerState;
+              if (YT && player.getPlayerState() === YT.PLAYING) {
+                player.seekTo(data.currentTime, true);
+                player.pauseVideo();
+                setIsPaused(true);
+              }
+              lastHostSyncRef.current = null;
             }
           } catch (err) {
             console.error("Failed to sync playback:", err);
