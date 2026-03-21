@@ -42,7 +42,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are a highly accurate receipt/bill OCR assistant. You MUST extract items from receipt images regardless of image quality — blurry, tilted, low-resolution, or high-resolution.
+            content: `You are a highly accurate receipt/bill OCR assistant. Images are pre-processed (grayscale, contrast-stretched, sharpened) for optimal reading. You MUST extract items regardless of image quality.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -62,7 +62,8 @@ CRITICAL RULES:
 - Include discount/offer lines as negative price items
 - "total" should match receipt total. If not visible, SUM all (price × quantity)
 - Handle Indian receipts: ₹ symbol, GST/CGST/SGST lines, MRP formats
-- For blurry/low-quality images: extract what you CAN read, estimate prices from visible digits
+- For faded/old bills: look for number patterns, column alignment, and price formats
+- The image is already grayscale and contrast-enhanced — focus on text extraction
 - If completely unreadable, return { "error": "Could not read receipt" }
 - Return ONLY JSON, no markdown, no explanation`
           },
