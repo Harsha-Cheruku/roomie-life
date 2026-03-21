@@ -196,8 +196,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       const YT = (window as any).YT?.PlayerState;
       if (!YT) return;
       const state = player.getPlayerState();
+      // Broadcast both playing and paused states so listeners can recover
       if (state === YT.PLAYING) {
         broadcastPlaybackState("heartbeat", player.getCurrentTime(), player.getPlaybackRate());
+      } else if (state === YT.PAUSED) {
+        broadcastPlaybackState("heartbeat_paused", player.getCurrentTime(), player.getPlaybackRate());
       }
     }, HEARTBEAT_INTERVAL);
 
