@@ -123,19 +123,30 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerRef.current = null;
       }
 
-      const playerVars: Record<string, any> = { autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1, disablekb: isHostRef.current ? 0 : 1, controls: isHostRef.current ? 1 : 0 };
-      // For playlist-only URLs, load playlist directly without a specific video ID
       const isPlaylistOnly = activeVideoId.startsWith('playlist-');
+      const playerVars: Record<string, any> = {
+        autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1,
+        disablekb: isHostRef.current ? 0 : 1,
+        controls: isHostRef.current ? 1 : 0,
+      };
       if (activePlaylistId) {
         playerVars.listType = 'playlist';
         playerVars.list = activePlaylistId;
       }
-      playerRef.current = new (window as any).YT.Player(playerContainerRef.current, {
-        ...(isPlaylistOnly ? {} : { videoId: activeVideoId }),
+
+      const playerConfig: Record<string, any> = {
         playerVars,
         events: {
+          onReady: (event: any) => {
+            // Ensure listeners start playing immediately
+            if (!isHostRef.current) {
+              event.target.playVideo();
+            }
+          },
           onStateChange: (event: any) => {
             if (!isMountedRef.current || ignoreBroadcastRef.current) return;
+            // Only host broadcasts state changes
+            if (!isHostRef.current) return;
             const state = event.data;
             const YT = (window as any).YT.PlayerState;
 
@@ -148,11 +159,16 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             }
           },
           onPlaybackRateChange: (event: any) => {
-            if (!isMountedRef.current || ignoreBroadcastRef.current) return;
+            if (!isMountedRef.current || ignoreBroadcastRef.current || !isHostRef.current) return;
             broadcastPlaybackState("speed", event.target.getCurrentTime(), event.data);
           },
         },
-      });
+      };
+      if (!isPlaylistOnly) {
+        playerConfig.videoId = activeVideoId;
+      }
+
+      playerRef.current = new (window as any).YT.Player(playerContainerRef.current, playerConfig);
     };
 
     initPlayer();
