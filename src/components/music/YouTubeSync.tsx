@@ -70,9 +70,9 @@ const loadYouTubeApi = (): Promise<void> => {
   return ytApiLoadPromise;
 };
 
-// Tighter sync for casting-quality experience
-const DRIFT_THRESHOLD = 0.3;
-const HEARTBEAT_INTERVAL = 1000;
+// Casting-quality sync constants
+const DRIFT_THRESHOLD = 0.2;
+const HEARTBEAT_INTERVAL = 800;
 
 export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const { user, currentRoom, profile, joinRoom, refreshRooms } = useAuth();
