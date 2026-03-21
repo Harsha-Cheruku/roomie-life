@@ -23,26 +23,29 @@ interface BillScannerProps {
 }
 
 /**
- * Compresses an image to a target max dimension and quality for reliable OCR.
- * This helps with both low-quality (small) and high-quality (huge) captures.
+ * Advanced image preprocessing for OCR:
+ * 1. Scale to optimal range (800–1600px)
+ * 2. Convert to grayscale
+ * 3. Apply contrast stretching (adaptive)
+ * 4. Sharpen via unsharp-mask convolution
  */
-const compressImage = (dataUrl: string, maxDim: number = 1600, quality: number = 0.85): Promise<string> => {
+const preprocessForOCR = (dataUrl: string): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const canvas = document.createElement('canvas');
       let { width, height } = img;
 
-      // Scale down large images
+      // Scale to optimal OCR range
+      const maxDim = 1800;
+      const minDim = 900;
       if (width > maxDim || height > maxDim) {
         const ratio = Math.min(maxDim / width, maxDim / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
       }
-
-      // Scale up very small images for better OCR
-      if (width < 800 && height < 800) {
-        const upscale = Math.min(2, 800 / Math.max(width, height));
+      if (width < minDim && height < minDim) {
+        const upscale = Math.min(2.5, minDim / Math.max(width, height));
         width = Math.round(width * upscale);
         height = Math.round(height * upscale);
       }
@@ -50,31 +53,79 @@ const compressImage = (dataUrl: string, maxDim: number = 1600, quality: number =
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d')!;
-
-      // Apply sharpening for low-quality images
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Increase contrast slightly for better OCR
       try {
         const imageData = ctx.getImageData(0, 0, width, height);
         const data = imageData.data;
-        const contrast = 1.15; // slight contrast boost
-        const intercept = 128 * (1 - contrast);
+
+        // Step 1: Convert to grayscale (luminance-preserving)
         for (let i = 0; i < data.length; i += 4) {
-          data[i] = Math.min(255, Math.max(0, data[i] * contrast + intercept));
-          data[i + 1] = Math.min(255, Math.max(0, data[i + 1] * contrast + intercept));
-          data[i + 2] = Math.min(255, Math.max(0, data[i + 2] * contrast + intercept));
+          const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+          data[i] = gray;
+          data[i + 1] = gray;
+          data[i + 2] = gray;
         }
+
+        // Step 2: Histogram-based adaptive contrast stretching
+        const histogram = new Uint32Array(256);
+        for (let i = 0; i < data.length; i += 4) {
+          histogram[data[i]]++;
+        }
+        const totalPixels = width * height;
+        const clipLow = totalPixels * 0.01;
+        const clipHigh = totalPixels * 0.99;
+        let cumulative = 0;
+        let minVal = 0;
+        let maxVal = 255;
+        for (let i = 0; i < 256; i++) {
+          cumulative += histogram[i];
+          if (cumulative >= clipLow && minVal === 0) minVal = i;
+          if (cumulative >= clipHigh) { maxVal = i; break; }
+        }
+        const range = Math.max(maxVal - minVal, 1);
+        for (let i = 0; i < data.length; i += 4) {
+          const stretched = Math.round(((data[i] - minVal) / range) * 255);
+          const clamped = Math.min(255, Math.max(0, stretched));
+          data[i] = clamped;
+          data[i + 1] = clamped;
+          data[i + 2] = clamped;
+        }
+
+        // Step 3: Unsharp mask sharpening
+        // Create a blurred copy first
         ctx.putImageData(imageData, 0, 0);
-      } catch (e) {
-        // CORS or canvas tainted — skip contrast boost
+        const sharpCanvas = document.createElement('canvas');
+        sharpCanvas.width = width;
+        sharpCanvas.height = height;
+        const sharpCtx = sharpCanvas.getContext('2d')!;
+        // Draw blurred version
+        sharpCtx.filter = 'blur(1px)';
+        sharpCtx.drawImage(canvas, 0, 0);
+        const blurredData = sharpCtx.getImageData(0, 0, width, height).data;
+
+        // Unsharp: original + strength * (original - blurred)
+        const strength = 0.6;
+        const finalData = ctx.getImageData(0, 0, width, height);
+        const fd = finalData.data;
+        for (let i = 0; i < fd.length; i += 4) {
+          const diff = fd[i] - blurredData[i];
+          const sharpened = Math.round(fd[i] + strength * diff);
+          const v = Math.min(255, Math.max(0, sharpened));
+          fd[i] = v;
+          fd[i + 1] = v;
+          fd[i + 2] = v;
+        }
+        ctx.putImageData(finalData, 0, 0);
+      } catch {
+        // Canvas tainted — send as-is
       }
 
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      resolve(canvas.toDataURL('image/jpeg', 0.92));
     };
-    img.onerror = () => resolve(dataUrl); // fallback to original
+    img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
 };
@@ -98,8 +149,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     const reader = new FileReader();
     reader.onload = async (event) => {
       const raw = event.target?.result as string;
-      // Compress/optimize for OCR
-      const optimized = await compressImage(raw);
+      const optimized = await preprocessForOCR(raw);
       setImagePreview(optimized);
     };
     reader.readAsDataURL(file);
@@ -123,7 +173,6 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
       );
 
       const data = await response.json();
-
       if (!response.ok) throw new Error(data.error || 'Failed to scan receipt');
 
       toast({ title: 'Receipt scanned!', description: `Found ${data.items?.length || 0} items` });
@@ -163,7 +212,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
                 <div className="text-center">
                   <p className="font-semibold text-foreground">Upload Receipt Image</p>
                   <p className="text-sm text-muted-foreground mt-1">PNG, JPG up to 10MB</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Works with both clear and blurry photos</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Works with blurry, faded & old bills</p>
                 </div>
               </div>
 
@@ -177,7 +226,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
                 <Camera className="w-5 h-5" /> Take Photo
               </Button>
 
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={handleFileSelect} />
               <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />
             </div>
           ) : (

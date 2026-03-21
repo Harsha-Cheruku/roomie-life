@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Home, ListTodo, Receipt, Cloud, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,8 +28,9 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const { user, currentRoom } = useAuth();
   const [unreadChat, setUnreadChat] = useState(0);
   const isChatTabOpen = activeTab === "chat";
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const pollRef = useRef<number | null>(null);
 
-  // Track unread chat messages (messages since last visit)
   const fetchUnread = useCallback(async () => {
     if (!currentRoom?.id || !user?.id) {
       setUnreadChat(0);
@@ -51,7 +52,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [currentRoom?.id, user?.id]);
 
-  // When chat tab is open, immediately mark as seen and clear badge
+  // When chat tab is open → mark seen + clear badge
   useEffect(() => {
     if (isChatTabOpen && currentRoom?.id && user?.id) {
       const key = `chat_last_seen_${user.id}_${currentRoom.id}`;
@@ -60,39 +61,65 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [isChatTabOpen, currentRoom?.id, user?.id]);
 
-  // Only fetch unread & subscribe when NOT on chat tab
+  // Subscribe to new messages — STABLE channel name (no Date.now())
   useEffect(() => {
-    if (!currentRoom?.id || !user?.id || isChatTabOpen) {
-      if (isChatTabOpen) setUnreadChat(0);
+    // Cleanup previous
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+
+    if (!currentRoom?.id || !user?.id) return;
+
+    // If chat is open, no need to track
+    if (isChatTabOpen) {
+      setUnreadChat(0);
       return;
     }
 
+    // Initial fetch
     fetchUnread();
 
-    const channelName = `chat-badge-${user.id}-${currentRoom.id}-${Date.now()}`;
+    // Stable channel name — one per user+room combo
     const channel = supabase
-      .channel(channelName)
+      .channel(`chat-unread-${user.id}-${currentRoom.id}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `room_id=eq.${currentRoom.id}`,
+        },
         (payload) => {
           const msg = payload.new as { sender_id?: string };
           if (msg?.sender_id && msg.sender_id !== user.id) {
-            setUnreadChat(prev => prev + 1);
+            setUnreadChat((prev) => prev + 1);
           }
         }
       )
       .subscribe();
 
-    const pollTimer = window.setInterval(fetchUnread, 30000);
+    channelRef.current = channel;
+
+    // Fallback poll every 30s
+    pollRef.current = window.setInterval(fetchUnread, 30000);
 
     return () => {
-      window.clearInterval(pollTimer);
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+      if (pollRef.current) {
+        window.clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     };
   }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
-
-  // No separate effect needed — handled by isChatTabOpen effect above
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
@@ -110,7 +137,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                 isActive
                   ? "bg-primary/10 scale-105"
                   : "hover:bg-muted/50",
-                isUnreadChat && "ring-1 ring-accent/40"
+                isUnreadChat && "ring-2 ring-accent/60 bg-accent/10"
               )}
             >
               <div className="relative">
@@ -119,10 +146,10 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                     "w-6 h-6 transition-all duration-300",
                     isActive || isUnreadChat ? item.color : "text-muted-foreground"
                   )}
-                  strokeWidth={isActive ? 2.5 : 2}
+                  strokeWidth={isActive ? 2.5 : isUnreadChat ? 2.5 : 2}
                 />
                 {showBadge && (
-                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-coral text-primary-foreground text-[10px] font-bold flex items-center justify-center px-1 animate-scale-in">
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1 animate-scale-in">
                     {unreadChat > 9 ? "9+" : unreadChat}
                   </span>
                 )}
