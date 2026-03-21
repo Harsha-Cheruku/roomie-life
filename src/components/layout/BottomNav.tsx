@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Home, ListTodo, Receipt, Cloud, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,50 +27,73 @@ interface BottomNavProps {
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const { user, currentRoom } = useAuth();
   const [unreadChat, setUnreadChat] = useState(0);
+  const isChatTabOpen = activeTab === "chat";
 
   // Track unread chat messages (messages since last visit)
-  useEffect(() => {
-    if (!currentRoom?.id || !user?.id || activeTab === "chat") {
+  const fetchUnread = useCallback(async () => {
+    if (!currentRoom?.id || !user?.id) {
       setUnreadChat(0);
       return;
     }
 
-    // Store last seen timestamp
-    const lastSeenKey = `chat_last_seen_${currentRoom.id}`;
+    const lastSeenKey = `chat_last_seen_${user.id}_${currentRoom.id}`;
     const lastSeen = localStorage.getItem(lastSeenKey) || new Date(0).toISOString();
 
-    const fetchUnread = async () => {
-      const { count } = await supabase
-        .from("messages")
-        .select("id", { count: "exact", head: true })
-        .eq("room_id", currentRoom.id)
-        .neq("sender_id", user.id)
-        .gt("created_at", lastSeen);
+    const { count, error } = await supabase
+      .from("messages")
+      .select("id", { count: "exact", head: true })
+      .eq("room_id", currentRoom.id)
+      .neq("sender_id", user.id)
+      .gt("created_at", lastSeen);
+
+    if (!error) {
       setUnreadChat(count || 0);
-    };
+    }
+  }, [currentRoom?.id, user?.id]);
+
+  useEffect(() => {
+    if (!currentRoom?.id || !user?.id) {
+      setUnreadChat(0);
+      return;
+    }
 
     fetchUnread();
 
+    if (isChatTabOpen) {
+      return;
+    }
+
     const channel = supabase
       .channel(`chat-badge-${user.id}-${currentRoom.id}`)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` }, (payload) => {
-        const msg = payload.new as any;
-        if (msg && msg.sender_id !== user.id && activeTab !== "chat") {
-          setUnreadChat((prev) => prev + 1);
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${currentRoom.id}` },
+        (payload) => {
+          const msg = payload.new as { sender_id?: string };
+          if (msg?.sender_id && msg.sender_id !== user.id) {
+            fetchUnread();
+          }
         }
-      })
+      )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [currentRoom?.id, user?.id, activeTab]);
+    const pollTimer = window.setInterval(() => {
+      fetchUnread();
+    }, 15000);
+
+    return () => {
+      window.clearInterval(pollTimer);
+      supabase.removeChannel(channel);
+    };
+  }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
 
   // When user switches to chat, mark as seen
   useEffect(() => {
-    if (activeTab === "chat" && currentRoom?.id) {
-      localStorage.setItem(`chat_last_seen_${currentRoom.id}`, new Date().toISOString());
+    if (activeTab === "chat" && currentRoom?.id && user?.id) {
+      localStorage.setItem(`chat_last_seen_${user.id}_${currentRoom.id}`, new Date().toISOString());
       setUnreadChat(0);
     }
-  }, [activeTab, currentRoom?.id]);
+  }, [activeTab, currentRoom?.id, user?.id]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
@@ -78,6 +101,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           const showBadge = item.id === "chat" && unreadChat > 0;
+          const isUnreadChat = item.id === "chat" && unreadChat > 0 && !isActive;
           return (
             <button
               key={item.id}
@@ -86,14 +110,15 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                 "relative flex flex-col items-center gap-1 px-4 py-2 rounded-2xl transition-all duration-300 press-effect",
                 isActive
                   ? "bg-primary/10 scale-105"
-                  : "hover:bg-muted/50"
+                  : "hover:bg-muted/50",
+                isUnreadChat && "ring-1 ring-accent/40"
               )}
             >
               <div className="relative">
                 <item.icon
                   className={cn(
                     "w-6 h-6 transition-all duration-300",
-                    isActive ? item.color : "text-muted-foreground"
+                    isActive || isUnreadChat ? item.color : "text-muted-foreground"
                   )}
                   strokeWidth={isActive ? 2.5 : 2}
                 />
@@ -106,7 +131,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
               <span
                 className={cn(
                   "text-xs font-medium transition-colors",
-                  isActive ? "text-foreground" : "text-muted-foreground"
+                  isActive || isUnreadChat ? "text-foreground" : "text-muted-foreground"
                 )}
               >
                 {item.label}
