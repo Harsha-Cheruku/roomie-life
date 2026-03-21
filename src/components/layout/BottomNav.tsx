@@ -92,13 +92,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     };
   }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
 
-  // When user switches to chat, mark as seen
-  useEffect(() => {
-    if (activeTab === "chat" && currentRoom?.id && user?.id) {
-      localStorage.setItem(`chat_last_seen_${user.id}_${currentRoom.id}`, new Date().toISOString());
-      setUnreadChat(0);
-    }
-  }, [activeTab, currentRoom?.id, user?.id]);
+  // No separate effect needed — handled by isChatTabOpen effect above
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
