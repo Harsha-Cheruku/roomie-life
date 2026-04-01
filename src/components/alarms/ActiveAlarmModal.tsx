@@ -7,6 +7,7 @@ import { Bell, BellOff, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAlarmSound } from "@/hooks/useAlarmSound";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 interface AlarmTrigger {
@@ -34,16 +35,12 @@ interface ActiveAlarmModalProps {
   onDismissed: () => void;
 }
 
-/**
- * Alarm modal — shows globally (mounted from App.tsx).
- * Sound is controlled by useGlobalAlarm hook, NOT here.
- * This modal provides a "Tap to enable sound" fallback for autoplay-blocked scenarios.
- */
 export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmModalProps) {
   const RING_LENGTH_MS = 5000;
   const { user } = useAuth();
   const userId = user?.id;
   const deviceId = useDeviceId();
+  const { stopAlarm } = useAlarmSound();
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
 
   const [ringCount, setRingCount] = useState<number>(() => {
@@ -83,7 +80,6 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
     return `${hour12}:${minutes} ${ampm}`;
   }, []);
 
-  // Ring count UI ticker
   useEffect(() => {
     const interval = window.setInterval(() => {
       const newRingCount = Math.max(1, Math.floor((Date.now() - triggeredAtMs) / RING_LENGTH_MS) + 1);
@@ -92,7 +88,6 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
     return () => clearInterval(interval);
   }, [triggeredAtMs]);
 
-  // Listen for cross-device dismiss
   useEffect(() => {
     const channel = supabase
       .channel(`trigger-status-${trigger.id}`)
@@ -104,17 +99,15 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       }, (payload) => {
         if (payload.new.status === "dismissed" && !hasClosedRef.current) {
           hasClosedRef.current = true;
+          stopAlarm();
           onDismissed();
         }
       })
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [trigger.id, onDismissed]);
+    return () => { supabase.removeChannel(channel); };
+  }, [trigger.id, onDismissed, stopAlarm]);
 
-  // Unlock audio on any interaction with the modal
   const handleUnlockSound = useCallback(() => {
     if (soundUnlocked) return;
     try {
@@ -125,12 +118,8 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       source.connect(ctx.destination);
       source.start(0);
       setSoundUnlocked(true);
-      // Dispatch a synthetic click to trigger the GlobalAlarmLayer's audio unlock
       document.dispatchEvent(new Event("click"));
-      console.log("Alarm modal: Audio unlocked via user tap");
-    } catch (e) {
-      console.warn("Alarm modal: Audio unlock failed:", e);
-    }
+    } catch (e) { /* ignore */ }
   }, [soundUnlocked]);
 
   const handleDismiss = async () => {
@@ -142,25 +131,17 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       return;
     }
 
+    // INSTANT STOP: Kill sound synchronously before async network call
+    stopAlarm();
     setDismissing(true);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      
-      if (!accessToken) {
-        toast.error("Not authenticated");
-        setDismissing(false);
-        return;
-      }
-
       const res = await supabase.functions.invoke("dismiss-alarm", {
         body: { trigger_id: trigger.id },
       });
 
       if (res.error) {
-        const errorData = res.data;
-        toast.error(errorData?.error || "Failed to dismiss alarm");
+        toast.error(res.data?.error || "Failed to dismiss alarm");
         setDismissing(false);
         return;
       }
@@ -178,7 +159,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
   return (
     <Dialog open={true}>
       <DialogContent
-        className="sm:max-w-md bg-destructive/10 border-destructive"
+        className="sm:max-w-md border-destructive bg-background"
         hideCloseButton
         onClick={handleUnlockSound}
         onTouchStart={handleUnlockSound}
@@ -191,7 +172,8 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
           Alarm {alarm.title} is ringing at {alarm.alarm_time}
         </DialogDescription>
 
-        <div className="text-center space-y-6 py-4">
+        <div className="text-center space-y-5 py-2">
+          {/* Pulsing icon */}
           <div className={isOwnerDevice ? "animate-pulse" : ""}>
             {isOwnerDevice ? (
               <Bell className="h-16 w-16 mx-auto text-destructive" />
@@ -211,7 +193,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
 
           {!isOwnerDevice && (
             <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-              Silent mode - A roommate's alarm is ringing on their device
+              Silent mode — A roommate's alarm is ringing on their device
             </p>
           )}
 
@@ -220,26 +202,25 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
             <p className="text-lg mt-2">{alarm.title}</p>
           </div>
 
-          <div className="flex items-center justify-center gap-4">
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Volume2 className="h-3 w-3" />
-              Ring #{ringCount}
-            </Badge>
-          </div>
+          <Badge variant="outline" className="flex items-center gap-1 mx-auto w-fit">
+            <Volume2 className="h-3 w-3" />
+            Ring #{ringCount}
+          </Badge>
 
+          {/* Large STOP button for instant response */}
           <Button
             onClick={handleDismiss}
             disabled={dismissing || !canUserDismiss}
-            className="w-full"
+            className="w-full h-16 text-lg font-bold rounded-2xl"
             size="lg"
-            variant={canUserDismiss ? "default" : "outline"}
+            variant={canUserDismiss ? "destructive" : "outline"}
           >
-            <BellOff className="h-5 w-5 mr-2" />
+            <BellOff className="h-6 w-6 mr-2" />
             {dismissing
-              ? "Dismissing..."
+              ? "Stopping..."
               : !canUserDismiss
-                ? `Wait ${(alarm.condition_value || 3) - ringCount} more ring${(alarm.condition_value || 3) - ringCount !== 1 ? "s" : ""}`
-                : "Dismiss Alarm"}
+                ? `Wait ${Math.max(0, (alarm.condition_value || 3) - ringCount)} more ring${(alarm.condition_value || 3) - ringCount !== 1 ? "s" : ""}`
+                : "STOP ALARM"}
           </Button>
         </div>
       </DialogContent>

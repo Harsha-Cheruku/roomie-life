@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
-import { Volume2 } from "lucide-react";
 
 interface CreateAlarmDialogProps {
   open: boolean;
@@ -20,70 +19,59 @@ interface CreateAlarmDialogProps {
 }
 
 const DAYS = [
-  { value: 0, label: 'Sun' },
-  { value: 1, label: 'Mon' },
-  { value: 2, label: 'Tue' },
-  { value: 3, label: 'Wed' },
-  { value: 4, label: 'Thu' },
-  { value: 5, label: 'Fri' },
-  { value: 6, label: 'Sat' },
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
 ];
 
 const CONDITIONS = [
-  { value: 'anyone_can_dismiss', label: 'Anyone can dismiss', hasValue: false },
-  { value: 'owner_only', label: 'Only I can dismiss', hasValue: false },
-  { value: 'after_rings', label: 'Others can dismiss after X rings', hasValue: true },
-  { value: 'multiple_ack', label: 'Requires X people to acknowledge', hasValue: true },
+  { value: "anyone_can_dismiss", label: "Anyone can dismiss", hasValue: false },
+  { value: "owner_only", label: "Only I can dismiss", hasValue: false },
+  { value: "after_rings", label: "Others after X rings", hasValue: true },
+  { value: "multiple_ack", label: "Requires X acks", hasValue: true },
 ];
 
 const RINGTONES = [
-  { value: 'default', label: '🔔 Classic Alarm' },
-  { value: 'gentle', label: '🌅 Gentle Wake' },
-  { value: 'loud', label: '📢 Loud Siren' },
-  { value: 'beep', label: '🎵 Digital Beep' },
+  { value: "default", label: "🔔 Classic Alarm" },
+  { value: "gentle", label: "🌅 Gentle Wake" },
+  { value: "loud", label: "📢 Loud Siren" },
+  { value: "beep", label: "🎵 Digital Beep" },
 ];
 
 export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreated }: CreateAlarmDialogProps) {
-  const [title, setTitle] = useState('');
-  const [time, setTime] = useState('07:00');
+  const [title, setTitle] = useState("");
+  const [time, setTime] = useState("07:00");
+  const [isRepeating, setIsRepeating] = useState(true);
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
-  const [conditionType, setConditionType] = useState('anyone_can_dismiss');
+  const [conditionType, setConditionType] = useState("anyone_can_dismiss");
   const [conditionValue, setConditionValue] = useState(3);
-  const [ringtone, setRingtone] = useState(() => localStorage.getItem('alarm_ringtone') || 'default');
+  const [ringtone, setRingtone] = useState(() => localStorage.getItem("alarm_ringtone") || "default");
   const [creating, setCreating] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const deviceId = useDeviceId();
   const { isNative, scheduleAlarm, createAlarmChannel, requestPermissions } = useNativeAlarm();
 
   const handleCreate = async () => {
-    if (!roomId || !userId) {
-      toast.error('Please join a room first');
-      return;
-    }
+    if (!roomId || !userId) { toast.error("Please join a room first"); return; }
+    if (!title.trim()) { toast.error("Please enter an alarm title"); return; }
 
-    if (!title.trim()) {
-      toast.error('Please enter an alarm title');
-      return;
-    }
-
-    if (selectedDays.length === 0) {
-      toast.error('Please select at least one day');
-      return;
-    }
+    // For one-time alarm, use today's day
+    const daysToUse = isRepeating ? selectedDays : [new Date().getDay()];
+    if (isRepeating && selectedDays.length === 0) { toast.error("Please select at least one day"); return; }
 
     setCreating(true);
-
-    // Store the user's timezone offset so the backend can compare alarm time
-    // in the correct local timezone. JS getTimezoneOffset() returns minutes
-    // to add to local time to get UTC (e.g., IST = -330).
     const timezoneOffset = new Date().getTimezoneOffset();
 
-    const { error } = await supabase.from('alarms').insert({
+    const { error } = await supabase.from("alarms").insert({
       room_id: roomId,
       created_by: userId,
       title: title.trim(),
       alarm_time: time,
-      days_of_week: selectedDays,
+      days_of_week: daysToUse,
       condition_type: conditionType,
       condition_value: conditionValue,
       owner_device_id: deviceId,
@@ -91,28 +79,19 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     } as any);
 
     setCreating(false);
+    if (error) { console.error("Error creating alarm:", error); toast.error("Failed to create alarm"); return; }
 
-    if (error) {
-      console.error('Error creating alarm:', error);
-      toast.error('Failed to create alarm');
-      return;
-    }
+    toast.success("Alarm created!");
+    localStorage.setItem("alarm_ringtone", ringtone);
 
-    toast.success('Alarm created!');
-    localStorage.setItem('alarm_ringtone', ringtone);
-    // Schedule native alarm if running as a native app
     if (isNative) {
       try {
         await createAlarmChannel();
         await requestPermissions();
-        // Calculate next occurrence
-        const [hours, minutes] = time.split(':').map(Number);
-        const now = new Date();
+        const [hours, minutes] = time.split(":").map(Number);
         const scheduleDate = new Date();
         scheduleDate.setHours(hours, minutes, 0, 0);
-        if (scheduleDate <= now) {
-          scheduleDate.setDate(scheduleDate.getDate() + 1);
-        }
+        if (scheduleDate <= new Date()) scheduleDate.setDate(scheduleDate.getDate() + 1);
         await scheduleAlarm({
           id: Date.now() % 100000,
           title: `🔔 Alarm: ${title.trim()}`,
@@ -120,24 +99,23 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           scheduleAt: scheduleDate,
         });
       } catch (e) {
-        console.warn('Native alarm scheduling failed (web fallback active):', e);
+        console.warn("Native alarm scheduling failed:", e);
       }
     }
 
-    setTitle('');
-    setTime('07:00');
+    setTitle("");
+    setTime("07:00");
+    setIsRepeating(true);
     setSelectedDays([1, 2, 3, 4, 5]);
-    setConditionType('anyone_can_dismiss');
+    setConditionType("anyone_can_dismiss");
     setConditionValue(3);
     onOpenChange(false);
     onCreated();
   };
 
   const toggleDay = (day: number) => {
-    setSelectedDays(prev => 
-      prev.includes(day) 
-        ? prev.filter(d => d !== day)
-        : [...prev, day].sort()
+    setSelectedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort()
     );
   };
 
@@ -145,7 +123,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Shared Alarm</DialogTitle>
         </DialogHeader>
@@ -153,74 +131,71 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
         <div className="space-y-4">
           <div>
             <Label htmlFor="title">Alarm Title</Label>
-            <Input
-              id="title"
-              placeholder="Wake up call, Morning routine..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
+            <Input id="title" placeholder="Wake up call..." value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
 
           <div>
             <Label htmlFor="time">Time</Label>
-            <Input
-              id="time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="text-2xl h-14"
-            />
+            <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="text-2xl h-14" />
           </div>
 
-          <div>
-            <Label>Repeat Days</Label>
-            <div className="flex gap-2 mt-2">
-              {DAYS.map(day => (
-                <button
-                  key={day.value}
-                  onClick={() => toggleDay(day.value)}
-                  className={`w-10 h-10 rounded-full text-sm font-medium transition-colors ${
-                    selectedDays.includes(day.value)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  {day.label}
-                </button>
-              ))}
+          {/* Repeat toggle */}
+          <div className="flex items-center justify-between">
+            <Label>Repeat</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">{isRepeating ? "Weekly" : "One-time"}</span>
+              <Switch checked={isRepeating} onCheckedChange={setIsRepeating} />
             </div>
           </div>
+
+          {isRepeating && (
+            <div>
+              <Label>Repeat Days</Label>
+              <div className="flex gap-2 mt-2">
+                {DAYS.map(day => (
+                  <button
+                    key={day.value}
+                    onClick={() => toggleDay(day.value)}
+                    className={`w-10 h-10 rounded-full text-sm font-medium transition-colors ${
+                      selectedDays.includes(day.value)
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <Label>Ringtone</Label>
-            <div className="flex gap-2 mt-2">
-              <Select value={ringtone} onValueChange={(v) => {
-                setRingtone(v);
-                // Preview sound
-                if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
-                if (v !== 'beep') {
-                  const sounds: Record<string, string> = {
-                    default: '/alarm_sound.wav',
-                    gentle: 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3',
-                    loud: 'https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3',
-                  };
-                  const audio = new Audio(sounds[v] || '/alarm_sound.wav');
-                  audio.volume = 0.5;
-                  audio.play().catch(() => {});
-                  setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
-                  previewAudioRef.current = audio;
-                }
-              }}>
-                <SelectTrigger className="flex-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {RINGTONES.map(r => (
-                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Select value={ringtone} onValueChange={(v) => {
+              setRingtone(v);
+              if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+              if (v !== "beep") {
+                const sounds: Record<string, string> = {
+                  default: "/alarm_sound.wav",
+                  gentle: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
+                  loud: "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
+                };
+                const audio = new Audio(sounds[v] || "/alarm_sound.wav");
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+                setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
+                previewAudioRef.current = audio;
+              }
+            }}>
+              <SelectTrigger className="mt-2">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {RINGTONES.map(r => (
+                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -230,10 +205,8 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CONDITIONS.map(condition => (
-                  <SelectItem key={condition.value} value={condition.value}>
-                    {condition.label}
-                  </SelectItem>
+                {CONDITIONS.map(c => (
+                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -242,7 +215,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           {selectedCondition?.hasValue && (
             <div>
               <Label htmlFor="conditionValue">
-                {conditionType === 'after_rings' ? 'Number of rings' : 'Number of people'}
+                {conditionType === "after_rings" ? "Number of rings" : "Number of people"}
               </Label>
               <Input
                 id="conditionValue"
@@ -256,7 +229,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           )}
 
           <Button onClick={handleCreate} disabled={creating} className="w-full">
-            {creating ? 'Creating...' : 'Create Alarm'}
+            {creating ? "Creating..." : "Create Alarm"}
           </Button>
         </div>
       </DialogContent>

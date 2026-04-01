@@ -22,10 +22,10 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const now = new Date();
-
     const staleBefore = new Date(now.getTime() - 30 * 60 * 1000);
     let staleDismissed = 0;
     let alarmsTriggered = 0;
+    let oneTimeDeactivated = 0;
 
     console.log(`[check-alarms] Running at UTC: ${now.toISOString()}`);
 
@@ -36,71 +36,48 @@ Deno.serve(async (req) => {
       .eq("status", "ringing")
       .lt("triggered_at", staleBefore.toISOString());
 
-    if (staleErr) {
-      console.error("Error fetching stale triggers:", staleErr);
-    }
+    if (staleErr) console.error("Error fetching stale triggers:", staleErr);
 
     if (staleTriggers && staleTriggers.length > 0) {
       const staleIds = staleTriggers.map((t: any) => t.id);
       const { error: staleDismissErr } = await supabase
         .from("alarm_triggers")
-        .update({
-          status: "dismissed",
-          dismissed_at: now.toISOString(),
-          dismissed_by: null,
-        })
+        .update({ status: "dismissed", dismissed_at: now.toISOString(), dismissed_by: null })
         .in("id", staleIds)
         .eq("status", "ringing");
 
-      if (staleDismissErr) {
-        console.error("Error dismissing stale triggers:", staleDismissErr);
-      } else {
-        staleDismissed = staleIds.length;
-        console.log(`[check-alarms] Dismissed ${staleDismissed} stale triggers`);
-      }
+      if (staleDismissErr) console.error("Error dismissing stale triggers:", staleDismissErr);
+      else { staleDismissed = staleIds.length; console.log(`[check-alarms] Dismissed ${staleDismissed} stale triggers`); }
     }
 
-    // Fetch all active alarms (we'll check day/time per-alarm using their timezone)
+    // Fetch all active alarms
     const { data: alarms, error: alarmErr } = await supabase
       .from("alarms")
       .select("*")
       .eq("is_active", true);
 
-    if (alarmErr) {
-      console.error("Error fetching alarms:", alarmErr);
-    }
-
+    if (alarmErr) console.error("Error fetching alarms:", alarmErr);
     console.log(`[check-alarms] Found ${alarms?.length || 0} active alarms`);
 
     if (alarms) {
       for (const alarm of alarms) {
-        // timezone_offset is from JS getTimezoneOffset():
-        // For IST (UTC+5:30) it's -330.
-        // Local time = UTC - offset  →  localMs = utcMs - (offset * 60000)
         const tzOffset = alarm.timezone_offset || 0;
         const localNowMs = now.getTime() - tzOffset * 60 * 1000;
         const localNow = new Date(localNowMs);
-        // Use getUTC* methods since we manually shifted the date
         const localDay = localNow.getUTCDay();
         const localMinutes = localNow.getUTCHours() * 60 + localNow.getUTCMinutes();
 
-        // Check if today is a scheduled day (in alarm's local timezone)
-        if (!alarm.days_of_week || !alarm.days_of_week.includes(localDay)) {
-          continue;
-        }
+        if (!alarm.days_of_week || !alarm.days_of_week.includes(localDay)) continue;
 
         const alarmMinutes = timeToMinutes(alarm.alarm_time);
         const diffMinutes = localMinutes - alarmMinutes;
-
-        // Trigger within 0..2 minutes window
         if (diffMinutes < 0 || diffMinutes > 2) continue;
 
-        console.log(`[check-alarms] Alarm "${alarm.title}" (${alarm.id}) is due! localTime=${localNow.getUTCHours()}:${localNow.getUTCMinutes()}, alarmTime=${alarm.alarm_time}, tzOffset=${tzOffset}`);
+        console.log(`[check-alarms] Alarm "${alarm.title}" (${alarm.id}) is due!`);
 
-        // Idempotent: skip if already triggered today (in alarm's local timezone)
+        // Idempotent: skip if already triggered today
         const localStartOfDay = new Date(localNowMs);
         localStartOfDay.setUTCHours(0, 0, 0, 0);
-        // Convert local start-of-day back to UTC for DB query
         const utcStartOfDay = new Date(localStartOfDay.getTime() + tzOffset * 60 * 1000);
 
         const { data: existingToday } = await supabase
@@ -119,21 +96,25 @@ Deno.serve(async (req) => {
         // Create new trigger
         const { data: insertedTrigger, error: triggerErr } = await supabase
           .from("alarm_triggers")
-          .insert({
-            alarm_id: alarm.id,
-            status: "ringing",
-            ring_count: 0,
-          })
+          .insert({ alarm_id: alarm.id, status: "ringing", ring_count: 0 })
           .select("id")
           .single();
 
-        if (triggerErr || !insertedTrigger) {
-          console.error("Error creating alarm trigger:", triggerErr);
-          continue;
-        }
+        if (triggerErr || !insertedTrigger) { console.error("Error creating alarm trigger:", triggerErr); continue; }
 
         alarmsTriggered++;
         console.log(`[check-alarms] ✅ Trigger created for "${alarm.title}", trigger_id=${insertedTrigger.id}`);
+
+        // Auto-deactivate one-time alarms (days_of_week has only 1 day = today)
+        if (alarm.days_of_week.length === 1) {
+          const { error: deactivateErr } = await supabase
+            .from("alarms")
+            .update({ is_active: false })
+            .eq("id", alarm.id);
+
+          if (deactivateErr) console.error("Error deactivating one-time alarm:", deactivateErr);
+          else { oneTimeDeactivated++; console.log(`[check-alarms] Deactivated one-time alarm "${alarm.title}"`); }
+        }
 
         // Notify room members
         const { data: members } = await supabase
@@ -153,36 +134,22 @@ Deno.serve(async (req) => {
             is_read: false,
           }));
 
-          const { error: notificationErr } = await supabase
-            .from("notifications")
-            .insert(notifications);
-
-          if (notificationErr) {
-            console.error("Error creating alarm notifications:", notificationErr);
-          }
+          const { error: notificationErr } = await supabase.from("notifications").insert(notifications);
+          if (notificationErr) console.error("Error creating alarm notifications:", notificationErr);
         }
       }
     }
 
-    console.log(`[check-alarms] Done. Triggered=${alarmsTriggered}, StaleDismissed=${staleDismissed}`);
+    console.log(`[check-alarms] Done. Triggered=${alarmsTriggered}, StaleDismissed=${staleDismissed}, OneTimeDeactivated=${oneTimeDeactivated}`);
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        alarmsTriggered,
-        staleDismissed,
-        checkedAt: now.toISOString(),
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
+      JSON.stringify({ success: true, alarmsTriggered, staleDismissed, oneTimeDeactivated, checkedAt: now.toISOString() }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
   } catch (error) {
     console.error("Error in check-alarms-reminders:", error);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500,
     });
   }
 });
