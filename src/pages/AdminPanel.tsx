@@ -157,6 +157,19 @@ export default function AdminPanel() {
       
       activity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setRecentActivity(activity.slice(0, 10));
+
+      // Alarm stats
+      const { data: alarmsData } = await supabase.from('alarms').select('id').eq('room_id', currentRoom.id).eq('is_active', true);
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const { data: triggersToday } = await supabase.from('alarm_triggers').select('id, triggered_at, dismissed_at, status, alarm_id, alarms!inner(room_id)').eq('alarms.room_id', currentRoom.id).gte('triggered_at', todayStart.toISOString());
+
+      let avgTime = 0;
+      const dismissed = (triggersToday || []).filter((t: any) => t.status === 'dismissed' && t.dismissed_at);
+      if (dismissed.length > 0) {
+        const totalMs = dismissed.reduce((sum: number, t: any) => sum + (new Date(t.dismissed_at).getTime() - new Date(t.triggered_at).getTime()), 0);
+        avgTime = Math.round(totalMs / dismissed.length / 1000);
+      }
+      setAlarmStats({ total: alarmsData?.length || 0, triggeredToday: triggersToday?.length || 0, avgDismissTime: avgTime });
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
