@@ -1,11 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { AlarmClock, Plus, Trash2, Users, Bell, Volume2 } from "lucide-react";
@@ -32,29 +34,37 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const CONDITION_LABELS: Record<string, string> = {
   anyone_can_dismiss: "Anyone can dismiss",
   owner_only: "Owner only",
-  after_rings: "Others can dismiss after X rings",
-  multiple_ack: "Requires X people to acknowledge",
+  after_rings: "Others after X rings",
+  multiple_ack: "Requires X acks",
 };
 
-const RINGTONE_LABELS: Record<string, string> = {
-  default: "Classic Bell",
-  gentle: "Gentle Chime",
-  loud: "Loud Siren",
-  beep: "Beep Pattern",
+const RINGTONE_OPTIONS = [
+  { value: "default", label: "🔔 Classic Bell" },
+  { value: "gentle", label: "🌅 Gentle Chime" },
+  { value: "loud", label: "📢 Loud Siren" },
+  { value: "beep", label: "🎵 Digital Beep" },
+];
+
+const RINGTONE_SOUNDS: Record<string, string> = {
+  default: "/alarm_sound.wav",
+  gentle: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
+  loud: "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
 };
 
 export default function Alarms() {
   const navigate = useNavigate();
   const { user, currentRoom } = useAuth();
+  const { isAdmin } = useAdminCheck();
   const roomId = currentRoom?.id || null;
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteAlarmId, setDeleteAlarmId] = useState<string | null>(null);
   const { requestPermission, hasPermission } = useNotifications();
-  const [currentRingtone] = useState(() => {
-    try { return localStorage.getItem('alarm_ringtone') || 'default'; } catch { return 'default'; }
+  const [currentRingtone, setCurrentRingtone] = useState(() => {
+    try { return localStorage.getItem("alarm_ringtone") || "default"; } catch { return "default"; }
   });
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -72,7 +82,8 @@ export default function Alarms() {
 
   const fetchAlarms = async () => {
     if (!roomId) return;
-    const { data, error } = await supabase.from("alarms").select("*").eq("room_id", roomId).order("alarm_time");
+    // Only show active alarms (filter out deactivated one-time alarms)
+    const { data, error } = await supabase.from("alarms").select("*").eq("room_id", roomId).eq("is_active", true).order("alarm_time");
     if (error) { console.error("Error fetching alarms:", error); return; }
     setAlarms(data || []);
     setLoading(false);
@@ -93,6 +104,24 @@ export default function Alarms() {
     setDeleteAlarmId(null);
   };
 
+  const handleRingtoneChange = (value: string) => {
+    // Stop any playing preview
+    if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
+
+    setCurrentRingtone(value);
+    localStorage.setItem("alarm_ringtone", value);
+    toast.success(`Ringtone set to ${RINGTONE_OPTIONS.find(r => r.value === value)?.label || value}`);
+
+    // Preview the sound
+    if (value !== "beep" && RINGTONE_SOUNDS[value]) {
+      const audio = new Audio(RINGTONE_SOUNDS[value]);
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+      setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2500);
+      previewAudioRef.current = audio;
+    }
+  };
+
   const handleTabChange = (tab: string) => {
     const routes: Record<string, string> = { home: "/", tasks: "/tasks", expenses: "/expenses", storage: "/storage", chat: "/chat" };
     navigate(routes[tab] || "/");
@@ -107,10 +136,13 @@ export default function Alarms() {
   };
 
   const getConditionText = (alarm: Alarm) => {
-    if (alarm.condition_type === "after_rings") return `Others can dismiss after ${alarm.condition_value} rings`;
-    if (alarm.condition_type === "multiple_ack") return `Requires ${alarm.condition_value} people to acknowledge`;
+    if (alarm.condition_type === "after_rings") return `After ${alarm.condition_value} rings`;
+    if (alarm.condition_type === "multiple_ack") return `${alarm.condition_value} acks needed`;
     return CONDITION_LABELS[alarm.condition_type] || alarm.condition_type;
   };
+
+  // Admin or owner can delete
+  const canDelete = (alarm: Alarm) => alarm.created_by === user?.id || isAdmin;
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -134,13 +166,27 @@ export default function Alarms() {
       />
 
       <div className="p-4 space-y-4">
-        {/* Current ringtone indicator */}
-        <div className="flex items-center gap-2 bg-muted rounded-xl px-4 py-2">
-          <Volume2 className="h-4 w-4 text-primary" />
-          <span className="text-sm text-muted-foreground">Ringtone:</span>
-          <span className="text-sm font-medium text-foreground">{RINGTONE_LABELS[currentRingtone] || 'Classic Bell'}</span>
-          <span className="text-xs text-muted-foreground ml-auto">(set when creating alarm)</span>
-        </div>
+        {/* Ringtone selector */}
+        <Card>
+          <CardContent className="p-3">
+            <div className="flex items-center gap-3">
+              <Volume2 className="h-5 w-5 text-primary flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Alarm Ringtone</p>
+              </div>
+              <Select value={currentRingtone} onValueChange={handleRingtoneChange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RINGTONE_OPTIONS.map(r => (
+                    <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {loading ? (
           <div className="flex justify-center py-8">
@@ -150,14 +196,14 @@ export default function Alarms() {
           <Card>
             <CardContent className="py-8 text-center">
               <AlarmClock className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No alarms set</p>
+              <p className="text-muted-foreground">No active alarms</p>
               <p className="text-sm text-muted-foreground">Create a shared alarm for your room</p>
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-3">
             {alarms.map((alarm) => (
-              <Card key={alarm.id} className={!alarm.is_active ? "opacity-50" : ""}>
+              <Card key={alarm.id}>
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
@@ -176,7 +222,7 @@ export default function Alarms() {
                         <span>{getConditionText(alarm)}</span>
                       </div>
                     </div>
-                    {alarm.created_by === user?.id && (
+                    {canDelete(alarm) && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -194,7 +240,6 @@ export default function Alarms() {
         )}
       </div>
 
-      {/* Delete confirmation */}
       <DeleteConfirmDialog
         open={!!deleteAlarmId}
         onOpenChange={(open) => !open && setDeleteAlarmId(null)}

@@ -20,7 +20,8 @@ import {
   Shield,
   Users,
   ChevronRight,
-  Trash2
+  Trash2,
+  AlarmClock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
@@ -64,6 +65,7 @@ export default function AdminPanel() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recentActivity, setRecentActivity] = useState<RoomActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [alarmStats, setAlarmStats] = useState({ total: 0, triggeredToday: 0, avgDismissTime: 0 });
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
@@ -155,6 +157,19 @@ export default function AdminPanel() {
       
       activity.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setRecentActivity(activity.slice(0, 10));
+
+      // Alarm stats
+      const { data: alarmsData } = await supabase.from('alarms').select('id').eq('room_id', currentRoom.id).eq('is_active', true);
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const { data: triggersToday } = await supabase.from('alarm_triggers').select('id, triggered_at, dismissed_at, status, alarm_id, alarms!inner(room_id)').eq('alarms.room_id', currentRoom.id).gte('triggered_at', todayStart.toISOString());
+
+      let avgTime = 0;
+      const dismissed = (triggersToday || []).filter((t: any) => t.status === 'dismissed' && t.dismissed_at);
+      if (dismissed.length > 0) {
+        const totalMs = dismissed.reduce((sum: number, t: any) => sum + (new Date(t.dismissed_at).getTime() - new Date(t.triggered_at).getTime()), 0);
+        avgTime = Math.round(totalMs / dismissed.length / 1000);
+      }
+      setAlarmStats({ total: alarmsData?.length || 0, triggeredToday: triggersToday?.length || 0, avgDismissTime: avgTime });
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
@@ -223,7 +238,8 @@ export default function AdminPanel() {
           <Card className="bg-primary/5 cursor-pointer hover:ring-2 ring-primary/30 transition-all press-effect" onClick={() => navigate('/room-settings')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><Users className="h-4 w-4 text-primary" /><span className="text-sm font-medium">Members</span></div><p className="text-2xl font-bold">{members.length}</p></CardContent></Card>
           <Card className="bg-mint/5 cursor-pointer hover:ring-2 ring-mint/30 transition-all press-effect" onClick={() => navigate('/tasks')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><ListTodo className="h-4 w-4 text-mint" /><span className="text-sm font-medium">Active Tasks</span></div><p className="text-2xl font-bold">{taskStats.pending + taskStats.inProgress}</p></CardContent></Card>
           <Card className="bg-coral/5 cursor-pointer hover:ring-2 ring-coral/30 transition-all press-effect" onClick={() => navigate('/expenses')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><Receipt className="h-4 w-4 text-coral" /><span className="text-sm font-medium">Pending Bills</span></div><p className="text-2xl font-bold">{expenseStats.pending}</p></CardContent></Card>
-          <Card className="bg-lavender/5 cursor-pointer hover:ring-2 ring-lavender/30 transition-all press-effect" onClick={() => navigate('/expenses')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><Activity className="h-4 w-4 text-lavender" /><span className="text-sm font-medium">Total Spent</span></div><p className="text-2xl font-bold">₹{expenseStats.totalAmount.toFixed(0)}</p></CardContent></Card>
+           <Card className="bg-lavender/5 cursor-pointer hover:ring-2 ring-lavender/30 transition-all press-effect" onClick={() => navigate('/expenses')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><Activity className="h-4 w-4 text-lavender" /><span className="text-sm font-medium">Total Spent</span></div><p className="text-2xl font-bold">₹{expenseStats.totalAmount.toFixed(0)}</p></CardContent></Card>
+          <Card className="bg-amber-500/5 cursor-pointer hover:ring-2 ring-amber-500/30 transition-all press-effect col-span-2" onClick={() => navigate('/alarms')}><CardContent className="p-4"><div className="flex items-center gap-2 mb-2"><AlarmClock className="h-4 w-4 text-amber-500" /><span className="text-sm font-medium">Alarms</span></div><div className="flex gap-4"><div><p className="text-2xl font-bold">{alarmStats.total}</p><p className="text-xs text-muted-foreground">Active</p></div><div><p className="text-2xl font-bold">{alarmStats.triggeredToday}</p><p className="text-xs text-muted-foreground">Today</p></div><div><p className="text-2xl font-bold">{alarmStats.avgDismissTime}s</p><p className="text-xs text-muted-foreground">Avg stop</p></div></div></CardContent></Card>
         </div>
 
         <Tabs defaultValue="members" className="w-full">
