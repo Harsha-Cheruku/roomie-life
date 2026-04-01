@@ -20,7 +20,8 @@ import {
   Shield,
   Users,
   ChevronRight,
-  Trash2
+  Trash2,
+  AlarmClock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
