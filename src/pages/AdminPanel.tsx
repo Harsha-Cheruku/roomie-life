@@ -65,6 +65,7 @@ export default function AdminPanel() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [recentActivity, setRecentActivity] = useState<RoomActivity[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [alarmStats, setAlarmStats] = useState({ total: 0, triggeredToday: 0, avgDismissTime: 0 });
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
