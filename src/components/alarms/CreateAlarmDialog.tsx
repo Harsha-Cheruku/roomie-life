@@ -53,20 +53,21 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
   const [creating, setCreating] = useState(false);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const deviceId = useDeviceId();
-  const { isNative, scheduleAlarm, createAlarmChannel, requestPermissions } = useNativeAlarm();
+  const { isNative, createAlarm } = useNativeAlarm();
 
   const handleCreate = async () => {
     if (!roomId || !userId) { toast.error("Please join a room first"); return; }
     if (!title.trim()) { toast.error("Please enter an alarm title"); return; }
 
-    // For one-time alarm, use today's day
     const daysToUse = isRepeating ? selectedDays : [new Date().getDay()];
     if (isRepeating && selectedDays.length === 0) { toast.error("Please select at least one day"); return; }
 
     setCreating(true);
     const timezoneOffset = new Date().getTimezoneOffset();
+    const [hours, minutes] = time.split(":").map(Number);
 
-    const { error } = await supabase.from("alarms").insert({
+    // Save to Supabase for shared room state
+    const { data: insertedAlarm, error } = await supabase.from("alarms").insert({
       room_id: roomId,
       created_by: userId,
       title: title.trim(),
@@ -76,33 +77,33 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
       condition_value: conditionValue,
       owner_device_id: deviceId,
       timezone_offset: timezoneOffset,
-    } as any);
+    } as any).select().single();
 
-    setCreating(false);
-    if (error) { console.error("Error creating alarm:", error); toast.error("Failed to create alarm"); return; }
+    if (error) {
+      console.error("Error creating alarm:", error);
+      toast.error("Failed to create alarm");
+      setCreating(false);
+      return;
+    }
+
+    // Schedule native alarm (Android AlarmManager) for reliable triggering
+    if (isNative) {
+      const nativeCondition = conditionType === "owner_only" ? "owner_only" : "anyone";
+      await createAlarm({
+        id: insertedAlarm?.id || `alarm_${Date.now()}`,
+        title: title.trim(),
+        hour: hours,
+        minute: minutes,
+        repeatDaily: isRepeating,
+        stopCondition: nativeCondition,
+        createdBy: userId,
+      });
+    }
 
     toast.success("Alarm created!");
     localStorage.setItem("alarm_ringtone", ringtone);
 
-    if (isNative) {
-      try {
-        await createAlarmChannel();
-        await requestPermissions();
-        const [hours, minutes] = time.split(":").map(Number);
-        const scheduleDate = new Date();
-        scheduleDate.setHours(hours, minutes, 0, 0);
-        if (scheduleDate <= new Date()) scheduleDate.setDate(scheduleDate.getDate() + 1);
-        await scheduleAlarm({
-          id: Date.now() % 100000,
-          title: `🔔 Alarm: ${title.trim()}`,
-          body: `It's ${time}! Alarm is ringing.`,
-          scheduleAt: scheduleDate,
-        });
-      } catch (e) {
-        console.warn("Native alarm scheduling failed:", e);
-      }
-    }
-
+    setCreating(false);
     setTitle("");
     setTime("07:00");
     setIsRepeating(true);
@@ -143,7 +144,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           <div className="flex items-center justify-between">
             <Label>Repeat</Label>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{isRepeating ? "Weekly" : "One-time"}</span>
+              <span className="text-sm text-muted-foreground">{isRepeating ? "Daily" : "One-time"}</span>
               <Switch checked={isRepeating} onCheckedChange={setIsRepeating} />
             </div>
           </div>
