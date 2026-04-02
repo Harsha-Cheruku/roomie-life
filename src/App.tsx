@@ -33,15 +33,17 @@ import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
-/** Initialize native alarm channel on app startup */
+/** Initialize native alarm permissions + battery optimization check on startup */
 function NativeAlarmInit() {
-  const { isNative, createAlarmChannel, requestPermissions } = useNativeAlarm();
+  const { isNative, checkBatteryOptimization, requestDisableBatteryOptimization, requestExactAlarmPermission } = useNativeAlarm();
   useEffect(() => {
     if (isNative) {
-      createAlarmChannel();
-      requestPermissions();
+      requestExactAlarmPermission();
+      checkBatteryOptimization().then(isOptimized => {
+        if (isOptimized) requestDisableBatteryOptimization();
+      });
     }
-  }, [isNative, createAlarmChannel, requestPermissions]);
+  }, [isNative, checkBatteryOptimization, requestDisableBatteryOptimization, requestExactAlarmPermission]);
   return null;
 }
 

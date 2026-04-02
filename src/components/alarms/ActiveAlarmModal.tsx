@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAlarmSound } from "@/hooks/useAlarmSound";
+import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 interface AlarmTrigger {
@@ -40,7 +41,8 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
   const { user } = useAuth();
   const userId = user?.id;
   const deviceId = useDeviceId();
-  const { stopAlarm } = useAlarmSound();
+  const { stopAlarm: stopWebAlarm } = useAlarmSound();
+  const { isNative, stopAlarm: stopNativeAlarm } = useNativeAlarm();
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
 
   const [ringCount, setRingCount] = useState<number>(() => {
@@ -99,14 +101,15 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       }, (payload) => {
         if (payload.new.status === "dismissed" && !hasClosedRef.current) {
           hasClosedRef.current = true;
-          stopAlarm();
+          stopWebAlarm();
+          if (isNative) stopNativeAlarm();
           onDismissed();
         }
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [trigger.id, onDismissed, stopAlarm]);
+  }, [trigger.id, onDismissed, stopWebAlarm, isNative, stopNativeAlarm]);
 
   const handleUnlockSound = useCallback(() => {
     if (soundUnlocked) return;
@@ -118,7 +121,6 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       source.connect(ctx.destination);
       source.start(0);
       setSoundUnlocked(true);
-      document.dispatchEvent(new Event("click"));
     } catch (e) { /* ignore */ }
   }, [soundUnlocked]);
 
@@ -131,8 +133,9 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
       return;
     }
 
-    // INSTANT STOP: Kill sound synchronously before async network call
-    stopAlarm();
+    // INSTANT STOP: Kill sound synchronously — both native and web
+    stopWebAlarm();
+    if (isNative) stopNativeAlarm();
     setDismissing(true);
 
     try {
@@ -173,7 +176,6 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
         </DialogDescription>
 
         <div className="text-center space-y-5 py-2">
-          {/* Pulsing icon */}
           <div className={isOwnerDevice ? "animate-pulse" : ""}>
             {isOwnerDevice ? (
               <Bell className="h-16 w-16 mx-auto text-destructive" />
@@ -182,7 +184,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
             )}
           </div>
 
-          {isOwnerDevice && !soundUnlocked && (
+          {isOwnerDevice && !soundUnlocked && !isNative && (
             <button
               onClick={handleUnlockSound}
               className="w-full py-3 rounded-lg bg-destructive text-destructive-foreground font-semibold animate-pulse text-sm"
@@ -207,7 +209,6 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
             Ring #{ringCount}
           </Badge>
 
-          {/* Large STOP button for instant response */}
           <Button
             onClick={handleDismiss}
             disabled={dismissing || !canUserDismiss}

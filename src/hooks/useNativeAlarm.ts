@@ -1,155 +1,103 @@
 import { useCallback } from 'react';
 import { Capacitor } from '@capacitor/core';
-import { LocalNotifications, ScheduleOptions } from '@capacitor/local-notifications';
+import NativeAlarm from '@/plugins/NativeAlarmPlugin';
 
 /**
- * Native alarm scheduling using Capacitor Local Notifications.
- * On Android this uses AlarmManager.setExactAndAllowWhileIdle() under the hood.
- * On iOS this uses UNCalendarNotificationTrigger.
+ * Hook for native alarm operations via the custom Capacitor AlarmPlugin.
+ * Uses AlarmManager + ForegroundService on Android for 100% reliability.
+ * Falls back gracefully on web (no-op).
  */
 export function useNativeAlarm() {
   const isNative = Capacitor.isNativePlatform();
 
-  const requestPermissions = useCallback(async () => {
-    if (!isNative) return false;
-    try {
-      const result = await LocalNotifications.requestPermissions();
-      return result.display === 'granted';
-    } catch (e) {
-      console.error('Native alarm permission error:', e);
-      return false;
-    }
-  }, [isNative]);
-
-  const checkPermissions = useCallback(async () => {
-    if (!isNative) return false;
-    try {
-      const result = await LocalNotifications.checkPermissions();
-      return result.display === 'granted';
-    } catch (e) {
-      return false;
-    }
-  }, [isNative]);
-
-  /**
-   * Schedule a native alarm notification at a specific time.
-   * Uses exact alarm scheduling on Android (AlarmManager).
-   */
-  const scheduleAlarm = useCallback(async (opts: {
-    id: number;
+  const createAlarm = useCallback(async (opts: {
+    id?: string;
     title: string;
-    body: string;
-    scheduleAt: Date;
-    sound?: string;
-    extra?: Record<string, string>;
+    hour: number;
+    minute: number;
+    repeatDaily?: boolean;
+    ringtoneUri?: string;
+    stopCondition?: string;
+    createdBy?: string;
   }) => {
-    if (!isNative) return false;
-
+    if (!isNative) return null;
     try {
-      const hasPermission = await checkPermissions();
-      if (!hasPermission) {
-        const granted = await requestPermissions();
-        if (!granted) return false;
-      }
-
-      const scheduleOptions: ScheduleOptions = {
-        notifications: [
-          {
-            id: opts.id,
-            title: opts.title,
-            body: opts.body,
-            schedule: {
-              at: opts.scheduleAt,
-              allowWhileIdle: true, // Android: uses setExactAndAllowWhileIdle
-            },
-            sound: opts.sound || 'alarm_sound.wav',
-            channelId: 'alarm-channel',
-            extra: opts.extra || {},
-            ongoing: true,
-            autoCancel: false,
-          },
-        ],
-      };
-
-      await LocalNotifications.schedule(scheduleOptions);
-      console.log(`Native alarm scheduled: ${opts.title} at ${opts.scheduleAt.toISOString()}`);
-      return true;
+      const result = await NativeAlarm.createAlarm(opts);
+      console.log(`Native alarm created: ${opts.title} at ${opts.hour}:${opts.minute}`);
+      return result.alarmId;
     } catch (e) {
-      console.error('Failed to schedule native alarm:', e);
+      console.error('Failed to create native alarm:', e);
+      return null;
+    }
+  }, [isNative]);
+
+  const stopAlarm = useCallback(async (alarmId?: string) => {
+    if (!isNative) return;
+    try {
+      await NativeAlarm.stopAlarm({ alarmId });
+      console.log('Native alarm stopped');
+    } catch (e) {
+      console.error('Failed to stop native alarm:', e);
+    }
+  }, [isNative]);
+
+  const deleteAlarm = useCallback(async (alarmId: string) => {
+    if (!isNative) return;
+    try {
+      await NativeAlarm.deleteAlarm({ alarmId });
+      console.log('Native alarm deleted:', alarmId);
+    } catch (e) {
+      console.error('Failed to delete native alarm:', e);
+    }
+  }, [isNative]);
+
+  const getAllAlarms = useCallback(async () => {
+    if (!isNative) return [];
+    try {
+      const result = await NativeAlarm.getAllAlarms();
+      return result.alarms;
+    } catch (e) {
+      console.error('Failed to get native alarms:', e);
+      return [];
+    }
+  }, [isNative]);
+
+  const checkBatteryOptimization = useCallback(async () => {
+    if (!isNative) return false;
+    try {
+      const result = await NativeAlarm.checkBatteryOptimization();
+      return result.isOptimized;
+    } catch (e) {
       return false;
     }
-  }, [isNative, checkPermissions, requestPermissions]);
+  }, [isNative]);
 
-  /**
-   * Cancel a scheduled native alarm by ID.
-   */
-  const cancelAlarm = useCallback(async (id: number) => {
+  const requestDisableBatteryOptimization = useCallback(async () => {
     if (!isNative) return;
     try {
-      await LocalNotifications.cancel({ notifications: [{ id }] });
+      await NativeAlarm.requestDisableBatteryOptimization();
     } catch (e) {
-      console.error('Failed to cancel native alarm:', e);
+      console.error('Failed to request battery optimization disable:', e);
     }
   }, [isNative]);
 
-  /**
-   * Cancel all scheduled native alarms.
-   */
-  const cancelAllAlarms = useCallback(async () => {
+  const requestExactAlarmPermission = useCallback(async () => {
     if (!isNative) return;
     try {
-      const pending = await LocalNotifications.getPending();
-      if (pending.notifications.length > 0) {
-        await LocalNotifications.cancel(pending);
-      }
+      await NativeAlarm.requestExactAlarmPermission();
     } catch (e) {
-      console.error('Failed to cancel all native alarms:', e);
+      console.error('Failed to request exact alarm permission:', e);
     }
-  }, [isNative]);
-
-  /**
-   * Create the high-importance alarm notification channel (Android only).
-   * Must be called once on app startup.
-   */
-  const createAlarmChannel = useCallback(async () => {
-    if (!isNative || Capacitor.getPlatform() !== 'android') return;
-    try {
-      await LocalNotifications.createChannel({
-        id: 'alarm-channel',
-        name: 'Alarms',
-        description: 'Alarm notifications with sound and vibration',
-        importance: 5, // IMPORTANCE_HIGH — heads-up, sound, vibration
-        visibility: 1, // PUBLIC
-        sound: 'alarm_sound.wav',
-        vibration: true,
-        lights: true,
-      });
-      console.log('Android alarm notification channel created');
-    } catch (e) {
-      console.error('Failed to create alarm channel:', e);
-    }
-  }, [isNative]);
-
-  /**
-   * Register listener for when user taps a notification (to navigate/dismiss).
-   */
-  const addActionListener = useCallback((handler: (notification: any) => void) => {
-    if (!isNative) return () => {};
-    const listener = LocalNotifications.addListener(
-      'localNotificationActionPerformed',
-      (action) => handler(action.notification)
-    );
-    return () => { listener.then(l => l.remove()); };
   }, [isNative]);
 
   return {
     isNative,
-    requestPermissions,
-    checkPermissions,
-    scheduleAlarm,
-    cancelAlarm,
-    cancelAllAlarms,
-    createAlarmChannel,
-    addActionListener,
+    createAlarm,
+    stopAlarm,
+    deleteAlarm,
+    getAllAlarms,
+    checkBatteryOptimization,
+    requestDisableBatteryOptimization,
+    requestExactAlarmPermission,
   };
 }
