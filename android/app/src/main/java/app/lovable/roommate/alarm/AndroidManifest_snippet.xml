@@ -1,0 +1,63 @@
+<!--
+  ========================================================================
+  ADD THE FOLLOWING TO YOUR android/app/src/main/AndroidManifest.xml
+  ========================================================================
+
+  1. PERMISSIONS — Add inside <manifest> before <application>:
+-->
+
+<uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+<uses-permission android:name="android.permission.VIBRATE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+<uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+<!--
+  2. Inside <application> tag, add the following components:
+-->
+
+<!-- Full-screen alarm UI — shows over lock screen -->
+<activity
+    android:name="app.lovable.roommate.alarm.AlarmActivity"
+    android:exported="false"
+    android:launchMode="singleTop"
+    android:taskAffinity=""
+    android:excludeFromRecents="true"
+    android:showWhenLocked="true"
+    android:turnScreenOn="true"
+    android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+<!-- Alarm foreground service -->
+<service
+    android:name="app.lovable.roommate.alarm.AlarmService"
+    android:enabled="true"
+    android:exported="false"
+    android:foregroundServiceType="mediaPlayback" />
+
+<!-- AlarmManager broadcast receiver -->
+<receiver
+    android:name="app.lovable.roommate.alarm.AlarmReceiver"
+    android:enabled="true"
+    android:exported="false">
+    <intent-filter>
+        <action android:name="app.lovable.roommate.ALARM_TRIGGER" />
+    </intent-filter>
+</receiver>
+
+<!-- Boot completed — reschedule all alarms after reboot -->
+<receiver
+    android:name="app.lovable.roommate.alarm.BootReceiver"
+    android:enabled="true"
+    android:exported="true"
+    android:directBootAware="true">
+    <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+        <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+    </intent-filter>
+</receiver>

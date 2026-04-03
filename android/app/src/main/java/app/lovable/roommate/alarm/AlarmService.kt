@@ -13,8 +13,9 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 
 /**
- * Foreground service that plays alarm sound continuously, vibrates,
- * acquires a WakeLock, and shows a high-priority notification.
+ * Foreground service that plays alarm sound continuously on STREAM_ALARM,
+ * forces max volume even in silent mode, vibrates, acquires WakeLock,
+ * and launches full-screen AlarmActivity over lock screen.
  */
 class AlarmService : Service() {
 
@@ -29,10 +30,10 @@ class AlarmService : Service() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 val channel = NotificationChannel(
                     CHANNEL_ID,
-                    "Alarm Notifications",
+                    "Alarm",
                     NotificationManager.IMPORTANCE_HIGH
                 ).apply {
-                    description = "Alarm ringing notifications"
+                    description = "Alarm ringing"
                     setBypassDnd(true)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     enableVibration(true)
@@ -56,6 +57,7 @@ class AlarmService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var volumeRampHandler: Handler? = null
     private var currentAlarmId: String? = null
+    private var previousAlarmVolume: Int = -1
 
     override fun onBind(intent: Intent?) = null
 
@@ -76,28 +78,46 @@ class AlarmService : Service() {
                 val ringtoneUri = intent.getStringExtra("ringtone_uri") ?: ""
 
                 currentAlarmId = alarmId
-                startForeground(NOTIFICATION_ID, buildNotification(title))
+
+                // Start foreground FIRST (Android requires this within 5s)
+                startForeground(NOTIFICATION_ID, buildNotification(title, alarmId))
+
                 acquireWakeLock()
+                forceAlarmVolume()
                 startRinging(ringtoneUri)
                 startVibration()
+                launchAlarmActivity(title, alarmId)
             }
         }
         return START_STICKY
     }
 
-    private fun buildNotification(title: String): Notification {
-        // Intent to open the app when notification is tapped
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra("alarm_ringing", true)
-            putExtra("alarm_id", currentAlarmId)
+    private fun launchAlarmActivity(title: String, alarmId: String) {
+        val activityIntent = Intent(this, AlarmActivity::class.java).apply {
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+            putExtra("alarm_id", alarmId)
+            putExtra("alarm_title", title)
         }
-        val pendingLaunch = PendingIntent.getActivity(
-            this, 0, launchIntent,
+        startActivity(activityIntent)
+    }
+
+    private fun buildNotification(title: String, alarmId: String): Notification {
+        // Full-screen intent → launches AlarmActivity on lock screen
+        val fullScreenIntent = Intent(this, AlarmActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            putExtra("alarm_id", alarmId)
+            putExtra("alarm_title", title)
+        }
+        val fullScreenPending = PendingIntent.getActivity(
+            this, 0, fullScreenIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // Stop action button
+        // Stop action in notification
         val stopIntent = Intent(this, AlarmService::class.java).apply {
             action = ACTION_STOP
         }
@@ -115,19 +135,46 @@ class AlarmService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
-            .setContentIntent(pendingLaunch)
-            .setFullScreenIntent(pendingLaunch, true) // Shows on lock screen
+            .setContentIntent(fullScreenPending)
+            .setFullScreenIntent(fullScreenPending, true)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "STOP", pendingStop)
             .build()
+    }
+
+    /**
+     * Force alarm stream to max volume, overriding silent/vibrate mode.
+     */
+    private fun forceAlarmVolume() {
+        try {
+            val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            previousAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            am.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
+            Log.d(TAG, "Alarm volume forced to max: $maxVol")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to set alarm volume", e)
+        }
+    }
+
+    private fun restoreAlarmVolume() {
+        if (previousAlarmVolume >= 0) {
+            try {
+                val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                am.setStreamVolume(AudioManager.STREAM_ALARM, previousAlarmVolume, 0)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun acquireWakeLock() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            PowerManager.FULL_WAKE_LOCK or
+            PowerManager.ACQUIRE_CAUSES_WAKEUP or
+            PowerManager.ON_AFTER_RELEASE,
             "roommate:alarm_wakelock"
         )
         wakeLock?.acquire(10 * 60 * 1000L) // 10 min max
+        Log.d(TAG, "WakeLock acquired — screen should turn on")
     }
 
     private fun startRinging(ringtoneUri: String) {
@@ -136,7 +183,7 @@ class AlarmService : Service() {
 
             val uri: Uri = when {
                 ringtoneUri.isNotEmpty() && ringtoneUri != "default" -> {
-                    try { Uri.parse(ringtoneUri) } catch (e: Exception) {
+                    try { Uri.parse(ringtoneUri) } catch (_: Exception) {
                         RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                     }
                 }
@@ -152,23 +199,16 @@ class AlarmService : Service() {
                         .build()
                 )
                 setDataSource(this@AlarmService, uri)
-                isLooping = true
-                setVolume(0.3f, 0.3f) // Start low
+                isLooping = true  // CRITICAL: continuous ring, never stops
+                setVolume(0.3f, 0.3f)
                 prepare()
                 start()
             }
 
-            // Ensure alarm stream is at max volume
-            val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-            audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVol, 0)
-
-            // Volume ramp: 0.3 → 1.0 over 30 seconds
             startVolumeRamp()
-
-            Log.d(TAG, "Alarm ringing with URI: $uri")
+            Log.d(TAG, "Alarm ringing with URI: $uri, looping=true")
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to play alarm sound, using fallback", e)
+            Log.e(TAG, "Primary ringtone failed, trying fallback", e)
             playFallbackRingtone()
         }
     }
@@ -199,15 +239,14 @@ class AlarmService : Service() {
     private fun startVolumeRamp() {
         volumeRampHandler = Handler(Looper.getMainLooper())
         val startTime = System.currentTimeMillis()
-        val rampDuration = 30_000L // 30 seconds
+        val rampDuration = 30_000L
 
         val rampRunnable = object : Runnable {
             override fun run() {
                 val elapsed = System.currentTimeMillis() - startTime
                 val progress = (elapsed.toFloat() / rampDuration).coerceIn(0f, 1f)
                 val volume = 0.3f + (0.7f * progress)
-                mediaPlayer?.setVolume(volume, volume)
-
+                try { mediaPlayer?.setVolume(volume, volume) } catch (_: Exception) {}
                 if (progress < 1f) {
                     volumeRampHandler?.postDelayed(this, 500)
                 }
@@ -228,7 +267,7 @@ class AlarmService : Service() {
         val pattern = longArrayOf(0, 800, 200, 800, 200, 800, 500)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             vibrator?.vibrate(
-                VibrationEffect.createWaveform(pattern, 0), // 0 = repeat from index 0
+                VibrationEffect.createWaveform(pattern, 0),
                 AudioAttributes.Builder()
                     .setUsage(AudioAttributes.USAGE_ALARM)
                     .build()
@@ -240,7 +279,7 @@ class AlarmService : Service() {
     }
 
     private fun stopAlarmImmediately() {
-        Log.d(TAG, "Stopping alarm immediately")
+        Log.d(TAG, "STOP — killing alarm instantly")
 
         volumeRampHandler?.removeCallbacksAndMessages(null)
         volumeRampHandler = null
@@ -253,6 +292,8 @@ class AlarmService : Service() {
 
         vibrator?.cancel()
         vibrator = null
+
+        restoreAlarmVolume()
 
         wakeLock?.let {
             if (it.isHeld) try { it.release() } catch (_: Exception) {}
