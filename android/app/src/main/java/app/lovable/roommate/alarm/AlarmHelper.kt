@@ -12,6 +12,7 @@ import java.util.Calendar
 
 /**
  * Handles alarm scheduling via AlarmManager and persistent storage via SharedPreferences.
+ * Uses setExactAndAllowWhileIdle for Doze-mode reliability.
  */
 object AlarmHelper {
 
@@ -20,7 +21,6 @@ object AlarmHelper {
     private const val KEY_ALARMS = "alarms_json"
 
     fun init(context: Context) {
-        // Create notification channel on init
         AlarmService.createNotificationChannel(context)
     }
 
@@ -28,7 +28,6 @@ object AlarmHelper {
 
     fun scheduleAlarm(context: Context, alarm: AlarmData) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-
         val triggerTime = getNextTriggerTimeMillis(alarm.hour, alarm.minute)
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
@@ -52,23 +51,25 @@ object AlarmHelper {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent
+                    alarmManager.setAlarmClock(
+                        AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
+                        pendingIntent
                     )
                 } else {
-                    // Fallback — less precise but works without permission
-                    alarmManager.setAndAllowWhileIdle(
+                    // Fallback if exact alarm permission not granted
+                    alarmManager.setExactAndAllowWhileIdle(
                         AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent
                     )
                 }
             } else {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent
+                alarmManager.setAlarmClock(
+                    AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
+                    pendingIntent
                 )
             }
-            Log.d(TAG, "Alarm scheduled: ${alarm.title} at ${alarm.hour}:${alarm.minute}, trigger=$triggerTime")
+            Log.d(TAG, "Alarm scheduled: ${alarm.title} at ${alarm.hour}:${String.format("%02d", alarm.minute)}, trigger=$triggerTime")
         } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException scheduling alarm — falling back", e)
+            Log.e(TAG, "SecurityException — falling back to inexact", e)
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent
             )
@@ -95,7 +96,7 @@ object AlarmHelper {
                 scheduleAlarm(context, alarm)
             }
         }
-        Log.d(TAG, "Rescheduled ${alarms.size} alarms after boot")
+        Log.d(TAG, "Rescheduled ${alarms.count { it.isActive }} active alarms after boot")
     }
 
     private fun getNextTriggerTimeMillis(hour: Int, minute: Int): Long {
@@ -105,14 +106,13 @@ object AlarmHelper {
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
         }
-        // If the time has already passed today, schedule for tomorrow
         if (cal.timeInMillis <= System.currentTimeMillis()) {
             cal.add(Calendar.DAY_OF_YEAR, 1)
         }
         return cal.timeInMillis
     }
 
-    // ---- Persistent Storage (SharedPreferences + JSON) ----
+    // ---- Persistent Storage ----
 
     fun saveAlarm(context: Context, alarm: AlarmData) {
         val alarms = getAllAlarms(context).toMutableList()

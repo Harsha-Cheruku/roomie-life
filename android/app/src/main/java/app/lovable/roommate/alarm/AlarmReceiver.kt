@@ -8,7 +8,8 @@ import android.util.Log
 
 /**
  * BroadcastReceiver triggered by AlarmManager.
- * Immediately starts the AlarmService as a foreground service.
+ * Immediately starts AlarmService as foreground service.
+ * If repeating, reschedules for next day.
  */
 class AlarmReceiver : BroadcastReceiver() {
 
@@ -28,7 +29,7 @@ class AlarmReceiver : BroadcastReceiver() {
         val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
         val createdBy = intent.getStringExtra("created_by") ?: ""
 
-        // Start the foreground alarm service
+        // Start the foreground alarm service immediately
         val serviceIntent = Intent(context, AlarmService::class.java).apply {
             action = AlarmService.ACTION_START
             putExtra("alarm_id", alarmId)
@@ -44,7 +45,7 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startService(serviceIntent)
         }
 
-        // If repeating, reschedule for tomorrow
+        // If repeating daily, reschedule for tomorrow
         if (repeatDaily) {
             val alarm = AlarmData(
                 id = alarmId,
@@ -58,7 +59,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 isActive = true
             )
             AlarmHelper.scheduleAlarm(context, alarm)
-            Log.d(TAG, "Repeating alarm rescheduled for tomorrow")
+            Log.d(TAG, "Daily alarm rescheduled for tomorrow")
         }
     }
 }

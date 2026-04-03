@@ -54,7 +54,6 @@ class AlarmPlugin : Plugin() {
     @PluginMethod
     fun stopAlarm(call: PluginCall) {
         val alarmId = call.getString("alarmId")
-        // Stop the foreground service immediately
         val intent = Intent(context, AlarmService::class.java).apply {
             action = AlarmService.ACTION_STOP
             if (alarmId != null) putExtra("alarm_id", alarmId)
@@ -127,7 +126,7 @@ class AlarmPlugin : Plugin() {
                 context.startActivity(intent)
                 call.resolve(JSObject().put("success", true))
             } catch (e: Exception) {
-                call.reject("Failed to open battery settings: ${e.message}")
+                call.reject("Failed: ${e.message}")
             }
         } else {
             call.resolve(JSObject().put("success", true))
@@ -145,7 +144,7 @@ class AlarmPlugin : Plugin() {
                 context.startActivity(intent)
                 call.resolve(JSObject().put("success", true))
             } catch (e: Exception) {
-                call.reject("Failed to open alarm settings: ${e.message}")
+                call.reject("Failed: ${e.message}")
             }
         } else {
             call.resolve(JSObject().put("success", true))
