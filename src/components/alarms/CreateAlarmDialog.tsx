@@ -1,11 +1,12 @@
 import { useState, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
+
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
@@ -140,12 +141,34 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
             <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="text-2xl h-14" />
           </div>
 
-          {/* Repeat toggle */}
-          <div className="flex items-center justify-between">
-            <Label>Repeat</Label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">{isRepeating ? "Daily" : "One-time"}</span>
-              <Switch checked={isRepeating} onCheckedChange={setIsRepeating} />
+          {/* Repeat toggle - Ring Once or Daily */}
+          <div>
+            <Label className="mb-2 block">Repeat</Label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsRepeating(false)}
+                className={cn(
+                  "flex-1 py-3 rounded-xl text-sm font-medium transition-all border",
+                  !isRepeating
+                    ? "bg-primary text-primary-foreground border-primary shadow-md"
+                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                )}
+              >
+                🔔 Ring Once
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsRepeating(true)}
+                className={cn(
+                  "flex-1 py-3 rounded-xl text-sm font-medium transition-all border",
+                  isRepeating
+                    ? "bg-primary text-primary-foreground border-primary shadow-md"
+                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                )}
+              >
+                🔁 Daily
+              </button>
             </div>
           </div>
 

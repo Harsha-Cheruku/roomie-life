@@ -18,8 +18,12 @@ const LADDERS: Record<number, number> = {
   1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100,
 };
 
-const PLAYER_COLORS = ["text-primary", "text-secondary", "text-green-500", "text-purple-500", "text-orange-500", "text-pink-500"];
-const PLAYER_BG = ["bg-primary/20", "bg-secondary/20", "bg-green-500/20", "bg-purple-500/20", "bg-orange-500/20", "bg-pink-500/20"];
+const PLAYER_COLORS = ["#EF4444", "#3B82F6", "#22C55E", "#A855F7", "#F97316", "#EC4899"];
+const PLAYER_NAMES_COLORS = ["text-red-500", "text-blue-500", "text-green-500", "text-purple-500", "text-orange-500", "text-pink-500"];
+
+// Classic yellow/orange checkered board colors
+const CELL_LIGHT = "bg-amber-200";
+const CELL_DARK = "bg-amber-400";
 
 interface SnakesAndLaddersProps {
   onBack: () => void;
@@ -61,7 +65,6 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     }
     if (lobby?.game_state?.lastDice) setDiceValue(lobby.game_state.lastDice);
     if (lobby?.game_state?.message !== undefined) setMessage(lobby.game_state.message);
-    // Reset move guard when state updates from server
     moveInProgressRef.current = false;
   }, [lobby?.game_state]);
 
@@ -142,10 +145,10 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
     }
 
     if (SNAKES[newPos]) {
-      msg = `Rolled ${dice} → 🐍 snake at ${newPos}, slid to ${SNAKES[newPos]}!`;
+      msg = `Rolled ${dice} → 🐍 Snake at ${newPos}! Slid to ${SNAKES[newPos]}`;
       newPos = SNAKES[newPos];
     } else if (LADDERS[newPos]) {
-      msg = `Rolled ${dice} → 🪜 ladder at ${newPos}, climbed to ${LADDERS[newPos]}!`;
+      msg = `Rolled ${dice} → 🪜 Ladder at ${newPos}! Climbed to ${LADDERS[newPos]}`;
       newPos = LADDERS[newPos];
     }
 
@@ -195,6 +198,7 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
 
   return (
     <div className="space-y-3">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">🐍 Snakes & Ladders</h2>
         {winner ? (
@@ -206,45 +210,117 @@ export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
         )}
       </div>
 
-      <div className="grid grid-cols-10 gap-[1px] bg-border rounded-lg overflow-hidden text-[9px]">
-        {Array.from({ length: 10 }).map((_, row) =>
-          Array.from({ length: 10 }).map((_, col) => {
-            const cellNum = getCellNumber(row, col);
-            const isSnakeHead = SNAKES[cellNum] !== undefined;
-            const isLadderBottom = LADDERS[cellNum] !== undefined;
-            const playersHere = getPlayersAtCell(cellNum);
-            return (
-              <div key={cellNum} className={cn("aspect-square flex flex-col items-center justify-center relative", isSnakeHead && "bg-red-500/15", isLadderBottom && "bg-green-500/15", !isSnakeHead && !isLadderBottom && (cellNum % 2 === 0 ? "bg-muted/50" : "bg-card"), cellNum === 100 && "bg-yellow-500/20")}>
-                <span className="font-mono opacity-50 leading-none">{cellNum}</span>
-                {isSnakeHead && <span className="text-[8px] leading-none">🐍</span>}
-                {isLadderBottom && <span className="text-[8px] leading-none">🪜</span>}
-                {playersHere.length > 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex -space-x-1">
-                      {playersHere.map((p) => (
-                        <span key={p.user_id} className={cn("text-[10px]", PLAYER_COLORS[players.indexOf(p)])} title={p.display_name}>
-                          <ProfileAvatar avatar={p.avatar} size="xs" />
-                        </span>
-                      ))}
+      {/* Classic Indian-style Board */}
+      <div className="relative rounded-xl overflow-hidden border-4 border-amber-700 shadow-xl bg-amber-300">
+        {/* Board header */}
+        <div className="bg-amber-600 text-center py-1">
+          <span className="text-white font-bold text-xs tracking-wider">SNAKES & LADDERS</span>
+        </div>
+        
+        <div className="grid grid-cols-10 gap-0">
+          {Array.from({ length: 10 }).map((_, row) =>
+            Array.from({ length: 10 }).map((_, col) => {
+              const cellNum = getCellNumber(row, col);
+              const isSnakeHead = SNAKES[cellNum] !== undefined;
+              const isSnakeTail = Object.values(SNAKES).includes(cellNum);
+              const isLadderBottom = LADDERS[cellNum] !== undefined;
+              const isLadderTop = Object.values(LADDERS).includes(cellNum);
+              const playersHere = getPlayersAtCell(cellNum);
+              const isEvenCell = (row + col) % 2 === 0;
+              
+              return (
+                <div
+                  key={cellNum}
+                  className={cn(
+                    "aspect-square flex flex-col items-center justify-center relative border border-amber-500/30",
+                    isEvenCell ? CELL_LIGHT : CELL_DARK,
+                    cellNum === 100 && "bg-yellow-300 ring-2 ring-yellow-500 ring-inset",
+                    cellNum === 1 && "bg-green-300"
+                  )}
+                >
+                  {/* Cell number */}
+                  <span className={cn(
+                    "font-bold leading-none z-10",
+                    cellNum === 100 ? "text-[9px] text-yellow-700" : "text-[8px] text-amber-800/60"
+                  )}>
+                    {cellNum}
+                  </span>
+                  
+                  {/* Snake/Ladder indicators */}
+                  {isSnakeHead && (
+                    <span className="text-[11px] leading-none z-10" title={`Snake → ${SNAKES[cellNum]}`}>🐍</span>
+                  )}
+                  {isSnakeTail && (
+                    <span className="absolute bottom-0 right-0 text-[7px] opacity-50">🐍</span>
+                  )}
+                  {isLadderBottom && (
+                    <span className="text-[11px] leading-none z-10" title={`Ladder → ${LADDERS[cellNum]}`}>🪜</span>
+                  )}
+                  {isLadderTop && (
+                    <span className="absolute bottom-0 right-0 text-[7px] opacity-50">🪜</span>
+                  )}
+                  
+                  {/* Star on cell 100 */}
+                  {cellNum === 100 && <span className="text-[10px]">⭐</span>}
+                  
+                  {/* Player tokens */}
+                  {playersHere.length > 0 && (
+                    <div className="absolute inset-0 flex items-center justify-center z-20">
+                      <div className="flex flex-wrap justify-center gap-[1px]">
+                        {playersHere.map((p) => {
+                          const idx = players.indexOf(p);
+                          return (
+                            <div
+                              key={p.user_id}
+                              className="w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white/50"
+                              style={{ backgroundColor: PLAYER_COLORS[idx] || "#999" }}
+                              title={p.display_name}
+                            >
+                              <span className="text-[6px] text-white font-bold">
+                                {p.display_name?.charAt(0)?.toUpperCase()}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+        
+        {/* Board footer */}
+        <div className="bg-amber-600 text-center py-1">
+          <span className="text-white/80 text-[8px]">🐍 Snakes take you down • 🪜 Ladders take you up</span>
+        </div>
       </div>
 
+      {/* Player scores */}
       <div className="flex flex-wrap gap-2">
         {players.map((p, i) => (
-          <Badge key={p.user_id} variant="outline" className={cn("text-xs", PLAYER_BG[i], lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary")}>
-            <ProfileAvatar avatar={p.avatar} size="xs" /> {p.display_name}: {positions[p.user_id] || 0}
+          <Badge
+            key={p.user_id}
+            variant="outline"
+            className={cn(
+              "text-xs gap-1 py-1",
+              lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary shadow-md"
+            )}
+          >
+            <div
+              className="w-3 h-3 rounded-full border border-white/50"
+              style={{ backgroundColor: PLAYER_COLORS[i] || "#999" }}
+            />
+            <span className={PLAYER_NAMES_COLORS[i]}>{p.display_name}</span>: {positions[p.user_id] || 0}
           </Badge>
         ))}
       </div>
 
+      {/* Message */}
       {message && <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">{message}</div>}
 
+      {/* Dice & Controls */}
       <div className="flex items-center gap-3">
         {diceValue && <div className="text-5xl animate-bounce-in">{getDiceEmoji(diceValue)}</div>}
         <div className="flex-1 space-y-2">

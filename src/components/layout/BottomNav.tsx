@@ -27,10 +27,14 @@ interface BottomNavProps {
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const { user, currentRoom } = useAuth();
   const [unreadChat, setUnreadChat] = useState(0);
+  const [pendingExpenses, setPendingExpenses] = useState(0);
   const isChatTabOpen = activeTab === "chat";
+  const isExpensesTabOpen = activeTab === "expenses";
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const expenseChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollRef = useRef<number | null>(null);
 
+  // Fetch unread chat count
   const fetchUnread = useCallback(async () => {
     if (!currentRoom?.id || !user?.id) {
       setUnreadChat(0);
@@ -52,6 +56,27 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [currentRoom?.id, user?.id]);
 
+  // Fetch pending expense splits for current user
+  const fetchPendingExpenses = useCallback(async () => {
+    if (!currentRoom?.id || !user?.id) {
+      setPendingExpenses(0);
+      return;
+    }
+
+    // Count splits where user needs to accept/reject OR needs to pay
+    const { count, error } = await supabase
+      .from("expense_splits")
+      .select("id, expense_id, expenses!inner(room_id, created_by, paid_by)", { count: "exact", head: true })
+      .eq("expenses.room_id", currentRoom.id)
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .neq("expenses.created_by", user.id);
+
+    if (!error) {
+      setPendingExpenses(count || 0);
+    }
+  }, [currentRoom?.id, user?.id]);
+
   // When chat tab is open → mark seen + clear badge
   useEffect(() => {
     if (isChatTabOpen && currentRoom?.id && user?.id) {
@@ -61,9 +86,8 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
   }, [isChatTabOpen, currentRoom?.id, user?.id]);
 
-  // Subscribe to new messages — STABLE channel name (no Date.now())
+  // Subscribe to new messages
   useEffect(() => {
-    // Cleanup previous
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current);
       channelRef.current = null;
@@ -75,16 +99,13 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
 
     if (!currentRoom?.id || !user?.id) return;
 
-    // If chat is open, no need to track
     if (isChatTabOpen) {
       setUnreadChat(0);
       return;
     }
 
-    // Initial fetch
     fetchUnread();
 
-    // Stable channel name — one per user+room combo
     const channel = supabase
       .channel(`chat-unread-${user.id}-${currentRoom.id}`)
       .on(
@@ -105,8 +126,6 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
       .subscribe();
 
     channelRef.current = channel;
-
-    // Fallback poll every 30s
     pollRef.current = window.setInterval(fetchUnread, 30000);
 
     return () => {
@@ -121,12 +140,48 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     };
   }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
 
+  // Subscribe to expense split changes for pending indicator
+  useEffect(() => {
+    if (expenseChannelRef.current) {
+      supabase.removeChannel(expenseChannelRef.current);
+      expenseChannelRef.current = null;
+    }
+
+    if (!currentRoom?.id || !user?.id) return;
+
+    fetchPendingExpenses();
+
+    const channel = supabase
+      .channel(`expense-pending-${user.id}-${currentRoom.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "expense_splits" },
+        () => fetchPendingExpenses()
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "expenses", filter: `room_id=eq.${currentRoom.id}` },
+        () => fetchPendingExpenses()
+      )
+      .subscribe();
+
+    expenseChannelRef.current = channel;
+
+    return () => {
+      if (expenseChannelRef.current) {
+        supabase.removeChannel(expenseChannelRef.current);
+        expenseChannelRef.current = null;
+      }
+    };
+  }, [currentRoom?.id, user?.id, fetchPendingExpenses]);
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
       <div className="max-w-lg mx-auto flex items-center justify-around py-2">
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
-          const showBadge = item.id === "chat" && unreadChat > 0;
+          const showChatBadge = item.id === "chat" && unreadChat > 0;
+          const showExpenseDot = item.id === "expenses" && pendingExpenses > 0 && !isExpensesTabOpen;
           const isUnreadChat = item.id === "chat" && unreadChat > 0 && !isActive;
           return (
             <button
@@ -148,10 +203,13 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
                   )}
                   strokeWidth={isActive ? 2.5 : isUnreadChat ? 2.5 : 2}
                 />
-                {showBadge && (
+                {showChatBadge && (
                   <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1 animate-scale-in">
                     {unreadChat > 9 ? "9+" : unreadChat}
                   </span>
+                )}
+                {showExpenseDot && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-destructive animate-pulse border-2 border-card" />
                 )}
               </div>
               <span
