@@ -262,7 +262,14 @@ export default function AdminPanel() {
                       {member.role === 'admin' && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />Admin</Badge>}
                     </div>
                     {member.user_id !== user?.id && (
-                      <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member.user_id)} className="text-destructive hover:text-destructive hover:bg-destructive/10"><UserMinus className="h-4 w-4" /></Button>
+                      <div className="flex items-center gap-1">
+                        {member.role !== 'admin' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleMakeAdmin(member.user_id)} className="text-primary hover:text-primary hover:bg-primary/10" title="Make Admin">
+                            <Crown className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member.user_id)} className="text-destructive hover:text-destructive hover:bg-destructive/10"><UserMinus className="h-4 w-4" /></Button>
+                      </div>
                     )}
                   </div>
                 ))}
