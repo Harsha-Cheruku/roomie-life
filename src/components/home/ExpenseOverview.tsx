@@ -125,27 +125,27 @@ export const ExpenseOverview = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="bg-primary-foreground/10 rounded-2xl p-3">
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
             <div className="flex items-center gap-1 mb-1">
-              <ArrowUpCircle className="w-4 h-4 text-coral" />
-              <span className="text-xs text-primary-foreground/70">Will Pay</span>
+              <ArrowUpCircle className="w-3.5 h-3.5 text-coral shrink-0" />
+              <span className="text-[10px] text-primary-foreground/70 truncate">Will Pay</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">₹{data.willPay.toLocaleString()}</p>
+            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.willPay.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
           </div>
-          <div className="bg-primary-foreground/10 rounded-2xl p-3">
+          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
             <div className="flex items-center gap-1 mb-1">
-              <ArrowDownCircle className="w-4 h-4 text-mint" />
-              <span className="text-xs text-primary-foreground/70">Will Get</span>
+              <ArrowDownCircle className="w-3.5 h-3.5 text-mint shrink-0" />
+              <span className="text-[10px] text-primary-foreground/70 truncate">Will Get</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">₹{data.willGet.toLocaleString()}</p>
+            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.willGet.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
           </div>
-          <div className="bg-primary-foreground/10 rounded-2xl p-3">
+          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
             <div className="flex items-center gap-1 mb-1">
-              <Calendar className="w-4 h-4 text-lavender" />
-              <span className="text-xs text-primary-foreground/70">Today</span>
+              <Calendar className="w-3.5 h-3.5 text-lavender shrink-0" />
+              <span className="text-[10px] text-primary-foreground/70 truncate">Today</span>
             </div>
-            <p className="text-lg font-bold text-primary-foreground">₹{data.todaySpending.toLocaleString()}</p>
+            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.todaySpending.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
           </div>
         </div>
       </button>
