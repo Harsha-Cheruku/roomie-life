@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { usePushNotifications } from './usePushNotifications';
 
 /**
- * Hook that listens for new notifications in realtime and triggers browser push notifications
+ * Hook that listens for new notifications in realtime and triggers browser push notifications.
+ * Always shows push for the receiver — even when the app is in foreground (WhatsApp-style).
  */
 export const useRealtimePushNotifications = () => {
   const { user, currentRoom } = useAuth();
@@ -14,7 +15,7 @@ export const useRealtimePushNotifications = () => {
     if (!user || !currentRoom || !isEnabled) return;
 
     const channel = supabase
-      .channel('realtime-push-notifications')
+      .channel(`realtime-push-${user.id}`)
       .on(
         'postgres_changes',
         {
@@ -29,18 +30,21 @@ export const useRealtimePushNotifications = () => {
             body?: string;
             type: string;
             reference_type?: string;
+            is_read?: boolean;
           };
 
-          // Only show push notification if app is not in focus
-          if (document.hidden) {
-            await showNotification(notification.title, {
-              body: notification.body || undefined,
-              tag: `roomsync-${notification.type}`,
-              data: {
-                url: getUrlForNotification(notification.reference_type)
-              }
-            });
-          }
+          // Skip if already read
+          if (notification.is_read) return;
+
+          // Always show push notification for the receiver (WhatsApp-style)
+          await showNotification(notification.title, {
+            body: notification.body || undefined,
+            tag: `roomsync-${notification.type}-${Date.now()}`,
+            requireInteraction: true,
+            data: {
+              url: getUrlForNotification(notification.reference_type)
+            }
+          });
         }
       )
       .subscribe();

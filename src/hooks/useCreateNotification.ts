@@ -58,10 +58,8 @@ export const useCreateNotification = () => {
 
       if (error) throw error;
 
-      // Trigger push notification if this notification is for the current user
-      if (userId === user?.id) {
-        await triggerPushNotification(title, body, type);
-      }
+      // Push notification is handled by useRealtimePushNotifications via realtime INSERT listener.
+      // No need to trigger here — the receiver's browser picks it up automatically.
     } catch (error) {
       console.error('Error creating notification:', error);
     }
