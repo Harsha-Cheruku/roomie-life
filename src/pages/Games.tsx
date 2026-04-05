@@ -33,7 +33,7 @@ interface MemoryCard {
 
 export default function Games() {
   const navigate = useNavigate();
-  const { currentRoom, profile, user, isSoloMode } = useAuth();
+  const { profile, user, isSoloMode } = useAuth();
   const { saveGameResult } = useGameStats();
   const gameLobby = useGameLobby();
   const [currentGame, setCurrentGame] = useState<GameType>('menu');
@@ -77,8 +77,8 @@ export default function Games() {
       return;
     }
 
-    const success = await gameLobby.joinLobby(joinCodeInput);
-    if (success && gameLobby.lobby) {
+    const joinedLobby = await gameLobby.joinLobby(joinCodeInput);
+    if (joinedLobby) {
       const gameTypeMap: Record<string, GameType> = {
         snakes_and_ladders: 'snakes',
         ludo: 'ludo',
@@ -86,7 +86,7 @@ export default function Games() {
         kabaddi_tap: 'kabaddi',
         tictactoe: 'tictactoe',
       };
-      const target = gameTypeMap[gameLobby.lobby.game_type] || 'menu';
+      const target = gameTypeMap[joinedLobby.game_type] || 'menu';
       setCurrentGame(target);
       setJoinCodeInput("");
     }
