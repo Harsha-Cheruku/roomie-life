@@ -3,6 +3,7 @@ import { Home, ListTodo, Receipt, Cloud, MessageCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { usePendingExpenseCount } from "@/hooks/usePendingExpenseCount";
 
 interface NavItem {
   icon: React.ElementType;
@@ -27,11 +28,10 @@ interface BottomNavProps {
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   const { user, currentRoom } = useAuth();
   const [unreadChat, setUnreadChat] = useState(0);
-  const [pendingExpenses, setPendingExpenses] = useState(0);
+  const pendingExpenses = usePendingExpenseCount();
   const isChatTabOpen = activeTab === "chat";
   const isExpensesTabOpen = activeTab === "expenses";
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const expenseChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const pollRef = useRef<number | null>(null);
 
   // Fetch unread chat count
@@ -53,27 +53,6 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
 
     if (!error) {
       setUnreadChat(count || 0);
-    }
-  }, [currentRoom?.id, user?.id]);
-
-  // Fetch pending expense splits for current user
-  const fetchPendingExpenses = useCallback(async () => {
-    if (!currentRoom?.id || !user?.id) {
-      setPendingExpenses(0);
-      return;
-    }
-
-    // Count splits where user needs to accept/reject OR needs to pay
-    const { count, error } = await supabase
-      .from("expense_splits")
-      .select("id, expense_id, expenses!inner(room_id, created_by, paid_by)", { count: "exact", head: true })
-      .eq("expenses.room_id", currentRoom.id)
-      .eq("user_id", user.id)
-      .eq("status", "pending")
-      .neq("expenses.created_by", user.id);
-
-    if (!error) {
-      setPendingExpenses(count || 0);
     }
   }, [currentRoom?.id, user?.id]);
 
@@ -139,41 +118,6 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
       }
     };
   }, [currentRoom?.id, user?.id, isChatTabOpen, fetchUnread]);
-
-  // Subscribe to expense split changes for pending indicator
-  useEffect(() => {
-    if (expenseChannelRef.current) {
-      supabase.removeChannel(expenseChannelRef.current);
-      expenseChannelRef.current = null;
-    }
-
-    if (!currentRoom?.id || !user?.id) return;
-
-    fetchPendingExpenses();
-
-    const channel = supabase
-      .channel(`expense-pending-${user.id}-${currentRoom.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expense_splits" },
-        () => fetchPendingExpenses()
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "expenses", filter: `room_id=eq.${currentRoom.id}` },
-        () => fetchPendingExpenses()
-      )
-      .subscribe();
-
-    expenseChannelRef.current = channel;
-
-    return () => {
-      if (expenseChannelRef.current) {
-        supabase.removeChannel(expenseChannelRef.current);
-        expenseChannelRef.current = null;
-      }
-    };
-  }, [currentRoom?.id, user?.id, fetchPendingExpenses]);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">

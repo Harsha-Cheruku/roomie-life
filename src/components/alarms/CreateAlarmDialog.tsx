@@ -36,6 +36,12 @@ const CONDITIONS = [
   { value: "multiple_ack", label: "Requires X acks", hasValue: true },
 ];
 
+const SCHEDULE_OPTIONS = [
+  { value: "once", label: "🔔 Ring Once" },
+  { value: "daily", label: "🔁 Daily" },
+  { value: "custom", label: "📅 Custom" },
+] as const;
+
 const RINGTONES = [
   { value: "default", label: "🔔 Classic Alarm" },
   { value: "gentle", label: "🌅 Gentle Wake" },
@@ -46,7 +52,7 @@ const RINGTONES = [
 export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreated }: CreateAlarmDialogProps) {
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("07:00");
-  const [isRepeating, setIsRepeating] = useState(true);
+  const [scheduleMode, setScheduleMode] = useState<(typeof SCHEDULE_OPTIONS)[number]["value"]>("daily");
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [conditionType, setConditionType] = useState("anyone_can_dismiss");
   const [conditionValue, setConditionValue] = useState(3);
@@ -60,8 +66,14 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     if (!roomId || !userId) { toast.error("Please join a room first"); return; }
     if (!title.trim()) { toast.error("Please enter an alarm title"); return; }
 
-    const daysToUse = isRepeating ? selectedDays : [new Date().getDay()];
-    if (isRepeating && selectedDays.length === 0) { toast.error("Please select at least one day"); return; }
+    const daysToUse =
+      scheduleMode === "once"
+        ? [new Date().getDay()]
+        : scheduleMode === "daily"
+          ? DAYS.map((day) => day.value)
+          : selectedDays;
+
+    if (scheduleMode === "custom" && selectedDays.length === 0) { toast.error("Please select at least one day"); return; }
 
     setCreating(true);
     const timezoneOffset = new Date().getTimezoneOffset();
@@ -88,14 +100,14 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     }
 
     // Schedule native alarm (Android AlarmManager) for reliable triggering
-    if (isNative) {
+    if (isNative && scheduleMode !== "custom") {
       const nativeCondition = conditionType === "owner_only" ? "owner_only" : "anyone";
       await createAlarm({
         id: insertedAlarm?.id || `alarm_${Date.now()}`,
         title: title.trim(),
         hour: hours,
         minute: minutes,
-        repeatDaily: isRepeating,
+        repeatDaily: scheduleMode === "daily",
         stopCondition: nativeCondition,
         createdBy: userId,
       });
@@ -107,7 +119,7 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     setCreating(false);
     setTitle("");
     setTime("07:00");
-    setIsRepeating(true);
+    setScheduleMode("daily");
     setSelectedDays([1, 2, 3, 4, 5]);
     setConditionType("anyone_can_dismiss");
     setConditionValue(3);
@@ -141,40 +153,36 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
             <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="text-2xl h-14" />
           </div>
 
-          {/* Repeat toggle - Ring Once or Daily */}
+          {/* Alarm schedule */}
           <div>
-            <Label className="mb-2 block">Repeat</Label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIsRepeating(false)}
-                className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-medium transition-all border",
-                  !isRepeating
-                    ? "bg-primary text-primary-foreground border-primary shadow-md"
-                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
-                )}
-              >
-                🔔 Ring Once
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsRepeating(true)}
-                className={cn(
-                  "flex-1 py-3 rounded-xl text-sm font-medium transition-all border",
-                  isRepeating
-                    ? "bg-primary text-primary-foreground border-primary shadow-md"
-                    : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
-                )}
-              >
-                🔁 Daily
-              </button>
+            <Label className="mb-2 block">Schedule</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {SCHEDULE_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setScheduleMode(option.value)}
+                  className={cn(
+                    "py-3 rounded-xl text-sm font-medium transition-all border",
+                    scheduleMode === option.value
+                      ? "bg-primary text-primary-foreground border-primary shadow-md"
+                      : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                  )}
+                >
+                  {option.label}
+                </button>
+              ))}
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              {scheduleMode === "once" && "Rings one time only."}
+              {scheduleMode === "daily" && "Rings every day at the selected time."}
+              {scheduleMode === "custom" && "Choose the exact days you want this alarm to ring."}
+            </p>
           </div>
 
-          {isRepeating && (
+          {scheduleMode === "custom" && (
             <div>
-              <Label>Repeat Days</Label>
+              <Label>Custom Days</Label>
               <div className="flex gap-2 mt-2">
                 {DAYS.map(day => (
                   <button

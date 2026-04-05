@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { TrendingUp, TrendingDown, Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar } from "lucide-react";
+import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,7 +18,12 @@ interface ExpenseData {
 
 const memberColors = ['bg-primary', 'bg-coral', 'bg-mint', 'bg-lavender', 'bg-accent'];
 
-export const ExpenseOverview = () => {
+const formatAmount = (amount: number) => amount.toLocaleString('en-IN', {
+  minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+  maximumFractionDigits: 2,
+});
+
+export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCount?: number }) => {
   const navigate = useNavigate();
   const { user, currentRoom, isSoloMode } = useAuth();
   const [data, setData] = useState<ExpenseData>({ total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0, members: [] });
@@ -114,38 +119,44 @@ export const ExpenseOverview = () => {
       </div>
 
       {/* Main Card - clickable */}
-      <button onClick={() => navigate('/expenses')} className="w-full text-left gradient-primary rounded-3xl p-5 shadow-glow mb-4 hover:opacity-95 transition-opacity press-effect">
+      <button onClick={() => navigate('/expenses')} className="w-full text-left gradient-primary rounded-3xl p-4 shadow-glow mb-4 hover:opacity-95 transition-opacity press-effect sm:p-5">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center">
+          <div className="relative w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center shrink-0">
             <Wallet className="w-6 h-6 text-primary-foreground" />
+            {pendingExpenseCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive/70" />
+                <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-primary-foreground bg-destructive" />
+              </span>
+            )}
           </div>
-          <div>
+          <div className="min-w-0">
             <p className="text-primary-foreground/70 text-sm">Total This Month</p>
-            <p className="text-2xl font-bold text-primary-foreground font-display">₹{data.total.toLocaleString()}</p>
+            <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.75rem,8vw,2.5rem)]">₹{formatAmount(data.total)}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5">
-          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
-            <div className="flex items-center gap-1 mb-1">
-              <ArrowUpCircle className="w-3.5 h-3.5 text-coral shrink-0" />
-              <span className="text-[10px] text-primary-foreground/70 truncate">Will Pay</span>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-2 mb-2 min-w-0">
+              <ArrowUpCircle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
+              <span className="text-xs text-primary-foreground/70 leading-tight">Will Pay</span>
             </div>
-            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.willPay.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willPay)}</p>
           </div>
-          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
-            <div className="flex items-center gap-1 mb-1">
-              <ArrowDownCircle className="w-3.5 h-3.5 text-mint shrink-0" />
-              <span className="text-[10px] text-primary-foreground/70 truncate">Will Get</span>
+          <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-2 mb-2 min-w-0">
+              <ArrowDownCircle className="w-4 h-4 text-mint shrink-0 mt-0.5" />
+              <span className="text-xs text-primary-foreground/70 leading-tight">Will Get</span>
             </div>
-            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.willGet.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willGet)}</p>
           </div>
-          <div className="bg-primary-foreground/10 rounded-2xl p-2.5 min-w-0">
-            <div className="flex items-center gap-1 mb-1">
-              <Calendar className="w-3.5 h-3.5 text-lavender shrink-0" />
-              <span className="text-[10px] text-primary-foreground/70 truncate">Today</span>
+          <div className="col-span-2 bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
+            <div className="flex items-start gap-2 mb-2 min-w-0">
+              <Calendar className="w-4 h-4 text-lavender shrink-0 mt-0.5" />
+              <span className="text-xs text-primary-foreground/70 leading-tight">Today</span>
             </div>
-            <p className="text-sm font-bold text-primary-foreground truncate">₹{data.todaySpending.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.todaySpending)}</p>
           </div>
         </div>
       </button>

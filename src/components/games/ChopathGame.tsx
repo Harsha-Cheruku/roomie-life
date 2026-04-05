@@ -342,7 +342,7 @@ export const ChopathGame = ({ onBack }: ChopathProps) => {
   );
 };
 
-const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<boolean>; isLoading: boolean }) => {
+const JoinInput = ({ onJoin, isLoading }: { onJoin: (code: string) => Promise<unknown>; isLoading: boolean }) => {
   const [code, setCode] = useState("");
   return (
     <div className="flex gap-2">

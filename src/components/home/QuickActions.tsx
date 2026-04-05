@@ -13,6 +13,10 @@ interface QuickAction {
   soloOnly?: boolean;
 }
 
+interface QuickActionsProps {
+  pendingExpenseCount?: number;
+}
+
 const actions: QuickAction[] = [
   { icon: Music, label: "Music Sync", gradient: "gradient-ocean", delay: 0, route: "/music", soloHidden: true },
   { icon: Gamepad2, label: "Games", gradient: "gradient-lavender", delay: 50, route: "/games", soloHidden: true },
@@ -23,7 +27,7 @@ const actions: QuickAction[] = [
   { icon: Users, label: "Roommates", gradient: "gradient-sunset", delay: 250, route: "/room-settings", soloHidden: true },
 ];
 
-export const QuickActions = () => {
+export const QuickActions = ({ pendingExpenseCount = 0 }: QuickActionsProps) => {
   const navigate = useNavigate();
   const { isSoloMode } = useAuth();
 
@@ -50,12 +54,18 @@ export const QuickActions = () => {
             key={action.label}
             onClick={() => handleClick(action)}
             className={cn(
-              "flex flex-col items-center gap-2 p-4 rounded-2xl transition-all duration-300",
+              "relative flex flex-col items-center gap-2 p-4 rounded-2xl transition-all duration-300",
               "hover:scale-105 active:scale-95 shadow-card animate-slide-up",
               action.gradient
             )}
             style={{ animationDelay: `${index * 50}ms` }}
           >
+            {action.route === "/expenses" && pendingExpenseCount > 0 && (
+              <span className="absolute right-3 top-3 flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive/70" />
+                <span className="relative inline-flex h-3 w-3 rounded-full border-2 border-primary-foreground bg-destructive" />
+              </span>
+            )}
             <div className="w-12 h-12 rounded-xl bg-primary-foreground/20 backdrop-blur-sm flex items-center justify-center">
               <action.icon className="w-6 h-6 text-primary-foreground" />
             </div>
