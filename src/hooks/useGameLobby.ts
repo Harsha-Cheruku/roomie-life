@@ -112,7 +112,11 @@ export const useGameLobby = () => {
         if (joinedError) throw joinedError;
 
         const lobbyIds = Array.from(
-          new Set(((joinedRows as { lobby_id: string }[] | null) || []).map((row) => row.lobby_id).filter(Boolean))
+          new Set(
+            (((joinedRows as unknown as { lobby_id: string }[] | null) || [])
+              .map((row) => row.lobby_id)
+              .filter(Boolean))
+          )
         );
 
         if (!lobbyIds.length || cancelled) return;
@@ -195,8 +199,8 @@ export const useGameLobby = () => {
   );
 
   const joinLobby = useCallback(
-    async (joinCode: string) => {
-      if (!user || !profile) return false;
+    async (joinCode: string): Promise<GameLobby | null> => {
+      if (!user || !profile) return null;
       setIsLoading(true);
 
       try {
@@ -278,7 +282,7 @@ export const useGameLobby = () => {
         .eq("lobby_id", lobby.id)
         .eq("user_id", user.id);
     },
-    [lobby, user]
+    [fetchPlayers, lobby, user]
   );
 
   const startGame = useCallback(
