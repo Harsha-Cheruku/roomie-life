@@ -120,7 +120,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
 
       {/* Main Card - clickable */}
       <button onClick={() => navigate('/expenses')} className="w-full text-left gradient-primary rounded-3xl p-4 shadow-glow mb-4 hover:opacity-95 transition-opacity press-effect sm:p-5">
-        <div className="flex items-center gap-3 mb-4">
+        <div className="mb-4 flex items-start gap-3">
           <div className="relative w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center shrink-0">
             <Wallet className="w-6 h-6 text-primary-foreground" />
             {pendingExpenseCount > 0 && (
@@ -130,33 +130,33 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
               </span>
             )}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-primary-foreground/70 text-sm">Total This Month</p>
-            <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.75rem,8vw,2.5rem)]">₹{formatAmount(data.total)}</p>
+            <p className="font-bold text-primary-foreground font-display leading-[0.95] tracking-tight break-all tabular-nums text-[clamp(1.65rem,7vw,2.5rem)]">₹{formatAmount(data.total)}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
-            <div className="flex items-start gap-2 mb-2 min-w-0">
+            <div className="mb-2 flex items-start gap-2 min-w-0">
               <ArrowUpCircle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Pay</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willPay)}</p>
+            <p className="font-bold text-primary-foreground leading-tight break-all tabular-nums text-[clamp(1rem,4.8vw,1.125rem)]">₹{formatAmount(data.willPay)}</p>
           </div>
           <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
-            <div className="flex items-start gap-2 mb-2 min-w-0">
+            <div className="mb-2 flex items-start gap-2 min-w-0">
               <ArrowDownCircle className="w-4 h-4 text-mint shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Get</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willGet)}</p>
+            <p className="font-bold text-primary-foreground leading-tight break-all tabular-nums text-[clamp(1rem,4.8vw,1.125rem)]">₹{formatAmount(data.willGet)}</p>
           </div>
-          <div className="col-span-2 bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
-            <div className="flex items-start gap-2 mb-2 min-w-0">
+          <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden sm:col-span-2">
+            <div className="mb-2 flex items-start gap-2 min-w-0">
               <Calendar className="w-4 h-4 text-lavender shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Today</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.todaySpending)}</p>
+            <p className="font-bold text-primary-foreground leading-tight break-all tabular-nums text-[clamp(1rem,4.8vw,1.125rem)]">₹{formatAmount(data.todaySpending)}</p>
           </div>
         </div>
       </button>
@@ -167,15 +167,15 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
           <p className="text-sm font-medium text-muted-foreground mb-3">Per Roommate (Paid)</p>
           <div className="space-y-3">
             {data.members.map((member, index) => (
-              <div key={member.name} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+              <div key={member.name} className="flex items-center gap-3 animate-slide-up min-w-0" style={{ animationDelay: `${index * 50}ms` }}>
                 <ProfileAvatar avatar={member.avatar} size="md" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{member.name}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
                     <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: data.total > 0 ? `${(member.amount / data.total) * 100}%` : '0%' }} />
                   </div>
                 </div>
-                <p className="text-sm font-semibold text-foreground">₹{member.amount.toLocaleString()}</p>
+                <p className="max-w-[6.5rem] text-right text-xs font-semibold text-foreground break-all tabular-nums sm:text-sm">₹{member.amount.toLocaleString()}</p>
               </div>
             ))}
           </div>
