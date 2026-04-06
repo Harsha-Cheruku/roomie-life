@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameLobby } from "@/hooks/useGameLobby";
+import type { GameLobbyController } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
 import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
@@ -22,11 +22,11 @@ interface ChopathPawn {
 
 interface ChopathProps {
   onBack: () => void;
+  gameLobby: GameLobbyController;
 }
 
-export const ChopathGame = ({ onBack }: ChopathProps) => {
+export const ChopathGame = ({ onBack, gameLobby }: ChopathProps) => {
   const { user } = useAuth();
-  const gameLobby = useGameLobby();
   const { saveGameResult } = useGameStats();
   const { lobby, players, isHost, isMyTurn } = gameLobby;
 

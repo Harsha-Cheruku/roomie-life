@@ -433,3 +433,5 @@ export const useGameLobby = () => {
     fetchPlayers,
   };
 };
+
+export type GameLobbyController = ReturnType<typeof useGameLobby>;
