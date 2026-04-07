@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import type { GameLobbyController } from "@/hooks/useGameLobby";
+import { useGameLobby } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
 import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
@@ -61,7 +61,7 @@ const START_ABS = [1, 14, 27, 40];
 
 interface LudoToken { position: number; isFinished: boolean; }
 interface LudoPlayerState { tokens: LudoToken[]; startOffset: number; }
-interface LudoGameProps { onBack: () => void; gameLobby: GameLobbyController; }
+interface LudoGameProps { onBack: () => void; }
 
 const getAbsolutePosition = (relPos: number, startOffset: number): number => {
   if (relPos === 0 || relPos > BOARD_SIZE) return -1;
@@ -316,8 +316,9 @@ const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
 };
 
 // ─── Main Game Component ───────────────────────────────
-export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
+export const LudoGame = ({ onBack }: LudoGameProps) => {
   const { user } = useAuth();
+  const gameLobby = useGameLobby();
   const { saveGameResult } = useGameStats();
   const { lobby, players, isHost, isMyTurn } = gameLobby;
 

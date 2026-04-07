@@ -49,25 +49,6 @@ const RINGTONES = [
   { value: "beep", label: "🎵 Digital Beep" },
 ];
 
-const RINGTONE_PREVIEW_SOUNDS: Record<string, string> = {
-  default: "/alarm_sound.wav",
-  gentle: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
-  loud: "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
-  beep: "/alarm_sound.wav",
-};
-
-const getOneTimeAlarmDay = (timeValue: string) => {
-  const [hours, minutes] = timeValue.split(":").map(Number);
-  const nextOccurrence = new Date();
-  nextOccurrence.setHours(hours, minutes, 0, 0);
-
-  if (nextOccurrence.getTime() <= Date.now()) {
-    nextOccurrence.setDate(nextOccurrence.getDate() + 1);
-  }
-
-  return nextOccurrence.getDay();
-};
-
 export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreated }: CreateAlarmDialogProps) {
   const [title, setTitle] = useState("");
   const [time, setTime] = useState("07:00");
@@ -85,11 +66,9 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     if (!roomId || !userId) { toast.error("Please join a room first"); return; }
     if (!title.trim()) { toast.error("Please enter an alarm title"); return; }
 
-    const nativeRingtoneUri = RINGTONE_PREVIEW_SOUNDS[ringtone] ?? RINGTONE_PREVIEW_SOUNDS.default;
-
     const daysToUse =
       scheduleMode === "once"
-        ? [getOneTimeAlarmDay(time)]
+        ? [new Date().getDay()]
         : scheduleMode === "daily"
           ? DAYS.map((day) => day.value)
           : selectedDays;
@@ -129,7 +108,6 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
         hour: hours,
         minute: minutes,
         repeatDaily: scheduleMode === "daily",
-        ringtoneUri: nativeRingtoneUri,
         stopCondition: nativeCondition,
         createdBy: userId,
       });
@@ -178,15 +156,14 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           {/* Alarm schedule */}
           <div>
             <Label className="mb-2 block">Schedule</Label>
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-3 gap-2">
               {SCHEDULE_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   onClick={() => setScheduleMode(option.value)}
-                  aria-pressed={scheduleMode === option.value}
                   className={cn(
-                    "flex w-full items-center justify-center rounded-xl border px-3 py-3 text-sm font-medium transition-all",
+                    "py-3 rounded-xl text-sm font-medium transition-all border",
                     scheduleMode === option.value
                       ? "bg-primary text-primary-foreground border-primary shadow-md"
                       : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
@@ -206,18 +183,16 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
           {scheduleMode === "custom" && (
             <div>
               <Label>Custom Days</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
+              <div className="flex gap-2 mt-2">
                 {DAYS.map(day => (
                   <button
                     key={day.value}
-                    type="button"
                     onClick={() => toggleDay(day.value)}
-                    className={cn(
-                      "min-w-10 rounded-full px-3 py-2 text-sm font-medium transition-colors",
+                    className={`w-10 h-10 rounded-full text-sm font-medium transition-colors ${
                       selectedDays.includes(day.value)
                         ? "bg-primary text-primary-foreground"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    )}
+                    }`}
                   >
                     {day.label}
                   </button>
@@ -231,11 +206,18 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
             <Select value={ringtone} onValueChange={(v) => {
               setRingtone(v);
               if (previewAudioRef.current) { previewAudioRef.current.pause(); previewAudioRef.current = null; }
-              const audio = new Audio(RINGTONE_PREVIEW_SOUNDS[v] || RINGTONE_PREVIEW_SOUNDS.default);
-              audio.volume = 0.5;
-              audio.play().catch(() => {});
-              setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
-              previewAudioRef.current = audio;
+              if (v !== "beep") {
+                const sounds: Record<string, string> = {
+                  default: "/alarm_sound.wav",
+                  gentle: "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3",
+                  loud: "https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3",
+                };
+                const audio = new Audio(sounds[v] || "/alarm_sound.wav");
+                audio.volume = 0.5;
+                audio.play().catch(() => {});
+                setTimeout(() => { audio.pause(); audio.currentTime = 0; }, 2000);
+                previewAudioRef.current = audio;
+              }
             }}>
               <SelectTrigger className="mt-2">
                 <SelectValue />

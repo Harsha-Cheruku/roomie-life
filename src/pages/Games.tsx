@@ -251,10 +251,10 @@ export default function Games() {
 
   const renderGame = () => {
     switch (currentGame) {
-      case 'snakes': return <SnakesAndLadders onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'ludo': return <LudoGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'chopat': return <ChopathGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'kabaddi': return <KabaddiTapGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
+      case 'snakes': return <SnakesAndLadders onBack={() => setCurrentGame('menu')} />;
+      case 'ludo': return <LudoGame onBack={() => setCurrentGame('menu')} />;
+      case 'chopat': return <ChopathGame onBack={() => setCurrentGame('menu')} />;
+      case 'kabaddi': return <KabaddiTapGame onBack={() => setCurrentGame('menu')} />;
       
       case 'tictactoe':
         return (

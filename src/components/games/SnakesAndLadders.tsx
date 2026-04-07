@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
-import type { GameLobbyController } from "@/hooks/useGameLobby";
+import { useGameLobby } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
 import { Input } from "@/components/ui/input";
@@ -27,11 +27,11 @@ const CELL_DARK = "bg-amber-400";
 
 interface SnakesAndLaddersProps {
   onBack: () => void;
-  gameLobby: GameLobbyController;
 }
 
-export const SnakesAndLadders = ({ onBack, gameLobby }: SnakesAndLaddersProps) => {
+export const SnakesAndLadders = ({ onBack }: SnakesAndLaddersProps) => {
   const { user } = useAuth();
+  const gameLobby = useGameLobby();
   const { saveGameResult } = useGameStats();
   const { lobby, players, isHost, isMyTurn } = gameLobby;
 
