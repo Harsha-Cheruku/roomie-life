@@ -420,10 +420,41 @@ export type Database = {
           },
         ]
       }
+      message_views: {
+        Row: {
+          id: string
+          message_id: string
+          seen_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          seen_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          seen_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_views_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           content: string
           created_at: string
+          deleted_at: string | null
+          edited_at: string | null
           id: string
           message_type: string
           room_id: string
@@ -432,6 +463,8 @@ export type Database = {
         Insert: {
           content: string
           created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
           id?: string
           message_type?: string
           room_id: string
@@ -440,6 +473,8 @@ export type Database = {
         Update: {
           content?: string
           created_at?: string
+          deleted_at?: string | null
+          edited_at?: string | null
           id?: string
           message_type?: string
           room_id?: string
