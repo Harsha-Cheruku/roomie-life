@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
-import { useGameLobby } from "@/hooks/useGameLobby";
+import type { UseGameLobbyReturn } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
 import { Trophy, ArrowLeft, RotateCcw, Zap } from "lucide-react";
@@ -14,11 +14,11 @@ import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface KabaddiProps {
   onBack: () => void;
+  gameLobby: UseGameLobbyReturn;
 }
 
-export const KabaddiTapGame = ({ onBack }: KabaddiProps) => {
+export const KabaddiTapGame = ({ onBack, gameLobby }: KabaddiProps) => {
   const { user } = useAuth();
-  const gameLobby = useGameLobby();
   const { saveGameResult } = useGameStats();
   const { lobby, players, isHost, isMyTurn } = gameLobby;
 
