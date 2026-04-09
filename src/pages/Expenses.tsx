@@ -543,50 +543,38 @@ export const Expenses = () => {
 
       {/* Summary Card with Bill KPIs */}
       <div className="px-4 mb-6">
-        <div className="gradient-coral rounded-3xl p-5 shadow-coral">
+        <div className="gradient-coral rounded-3xl p-4 sm:p-5 shadow-coral">
           <div className="flex items-center justify-between mb-4">
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-primary-foreground/70 text-sm">Total This Month</p>
-              <p className="text-3xl font-bold text-primary-foreground font-display">
+              <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.5rem,6vw,2.25rem)]">
                 ₹{stats.total.toLocaleString()}
               </p>
             </div>
-            <div className="w-14 h-14 rounded-2xl bg-primary-foreground/20 flex items-center justify-center">
-              <Receipt className="w-7 h-7 text-primary-foreground" />
+            <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center shrink-0 ml-3">
+              <Receipt className="w-6 h-6 text-primary-foreground" />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <div className="bg-primary-foreground/10 rounded-xl p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">Paid</span>
+          <div className="grid grid-cols-3 gap-1.5 mb-3">
+            {[
+              { icon: TrendingUp, label: 'Paid', value: stats.youPaid },
+              { icon: TrendingDown, label: 'Will Pay', value: stats.youOwe },
+              { icon: TrendingUp, label: 'Will Get', value: stats.youAreOwed },
+            ].map((item) => (
+              <div key={item.label} className="bg-primary-foreground/10 rounded-xl p-2.5 min-w-0 overflow-hidden">
+                <div className="flex items-center gap-1 mb-1">
+                  <item.icon className="w-3 h-3 text-primary-foreground/70 shrink-0" />
+                  <span className="text-[10px] text-primary-foreground/70 truncate">{item.label}</span>
+                </div>
+                <p className="text-sm font-bold text-primary-foreground leading-tight break-all">
+                  ₹{item.value.toLocaleString()}
+                </p>
               </div>
-              <p className="text-base font-bold text-primary-foreground">
-                ₹{stats.youPaid.toLocaleString()}
-              </p>
-            </div>
-            <div className="bg-primary-foreground/10 rounded-xl p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <TrendingDown className="w-3 h-3 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">Will Pay</span>
-              </div>
-              <p className="text-base font-bold text-primary-foreground">
-                ₹{stats.youOwe.toLocaleString()}
-              </p>
-            </div>
-            <div className="bg-primary-foreground/10 rounded-xl p-3">
-              <div className="flex items-center gap-1 mb-1">
-                <TrendingUp className="w-3 h-3 text-primary-foreground/70" />
-                <span className="text-xs text-primary-foreground/70">Will Get</span>
-              </div>
-              <p className="text-base font-bold text-primary-foreground">
-                ₹{stats.youAreOwed.toLocaleString()}
-              </p>
-            </div>
+            ))}
           </div>
 
-          {/* Bill Status KPIs - Clickable for filtering */}
+          {/* Bill Status KPIs */}
           <div className="grid grid-cols-5 gap-1 pt-3 border-t border-primary-foreground/20">
             {[
               { key: 'all' as const, label: 'Total', value: stats.totalBills },
@@ -605,8 +593,8 @@ export const Expenses = () => {
                     : "hover:bg-primary-foreground/10"
                 )}
               >
-                <p className="text-lg font-bold text-primary-foreground">{item.value}</p>
-                <p className="text-[10px] text-primary-foreground/70">{item.label}</p>
+                <p className="text-base font-bold text-primary-foreground">{item.value}</p>
+                <p className="text-[9px] text-primary-foreground/70 truncate">{item.label}</p>
               </button>
             ))}
           </div>
