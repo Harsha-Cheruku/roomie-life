@@ -24,6 +24,9 @@ interface Alarm {
   owner_device_id?: string | null;
 }
 
+// Ignore triggers older than 90 seconds to prevent stale alarms replaying on app open
+const FRESH_TRIGGER_WINDOW_MS = 90_000;
+
 export function useGlobalAlarm() {
   const { user, currentRoom } = useAuth();
   const deviceId = useDeviceId();
@@ -36,6 +39,10 @@ export function useGlobalAlarm() {
   const pollIntervalRef = useRef<number | null>(null);
 
   const roomId = currentRoom?.id || null;
+
+  // Suppress web audio on native platforms (native AlarmService handles it)
+  const isNative = typeof (window as any)?.Capacitor !== 'undefined' &&
+    (window as any)?.Capacitor?.isNativePlatform?.() === true;
 
   useEffect(() => { preloadAudio(); }, [preloadAudio]);
 
@@ -54,6 +61,14 @@ export function useGlobalAlarm() {
 
       if (triggers && triggers.length > 0) {
         const t = triggers[0];
+        // Check freshness — ignore stale triggers
+        const triggerAge = Date.now() - new Date(t.triggered_at).getTime();
+        if (triggerAge > FRESH_TRIGGER_WINDOW_MS) {
+          // Auto-dismiss stale trigger
+          setActiveTrigger(null);
+          setActiveAlarm(null);
+          return;
+        }
         setActiveTrigger({
           id: t.id, alarm_id: t.alarm_id, ring_count: t.ring_count,
           status: t.status, dismissed_by: t.dismissed_by, triggered_at: t.triggered_at,
@@ -101,7 +116,7 @@ export function useGlobalAlarm() {
       user.id === activeAlarm.created_by &&
       (!activeAlarm.owner_device_id || activeAlarm.owner_device_id === deviceId);
 
-    if (isOwnerDevice && !isPlayingRef.current) {
+    if (isOwnerDevice && !isPlayingRef.current && !isNative) {
       isPlayingRef.current = true;
       playAttemptedRef.current = true;
       playAlarm().catch((err) => {
