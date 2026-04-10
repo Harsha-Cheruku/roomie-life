@@ -333,6 +333,33 @@ export const ExpenseDetailSheet = ({
                         <div className="mt-2 p-2 bg-coral/10 rounded-lg">
                           <p className="text-xs text-coral font-medium">Rejection reason:</p>
                           <p className="text-xs text-foreground">{split.rejection_comment}</p>
+                          {isCreator && !isReadOnly && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-7 text-xs gap-1 border-primary text-primary hover:bg-primary/10"
+                              onClick={async () => {
+                                setUpdatingId(split.id);
+                                try {
+                                  const { error } = await supabase
+                                    .from('expense_splits')
+                                    .update({ status: 'pending', rejection_comment: null })
+                                    .eq('id', split.id);
+                                  if (error) throw error;
+                                  toast({ title: 'Bill resent for approval' });
+                                  onUpdate();
+                                } catch (err) {
+                                  toast({ title: 'Failed to resend', variant: 'destructive' });
+                                } finally {
+                                  setUpdatingId(null);
+                                }
+                              }}
+                              disabled={updatingId === split.id}
+                            >
+                              {updatingId === split.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                              Resend Bill
+                            </Button>
+                          )}
                         </div>
                       )}
 
