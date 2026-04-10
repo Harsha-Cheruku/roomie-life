@@ -53,6 +53,34 @@ export const RoomHeader = () => {
     }
   }, [currentRoom?.id, user?.id]);
 
+  // Fetch unread notification counts for all rooms
+  useEffect(() => {
+    if (!user?.id || userRooms.length <= 1) return;
+
+    const fetchRoomUnreads = async () => {
+      const otherRooms = userRooms.filter(r => r.id !== currentRoom?.id);
+      const counts: Record<string, number> = {};
+
+      for (const room of otherRooms) {
+        const { count } = await supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("room_id", room.id)
+          .eq("is_read", false);
+        counts[room.id] = count || 0;
+      }
+
+      setRoomUnreadCounts(counts);
+    };
+
+    fetchRoomUnreads();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchRoomUnreads, 30000);
+    return () => clearInterval(interval);
+  }, [user?.id, userRooms, currentRoom?.id]);
+
   const updateOnlineStatus = (presenceState: Record<string, any[]>) => {
     const onlineUsers = new Set<string>();
     Object.values(presenceState).forEach(presences => {
