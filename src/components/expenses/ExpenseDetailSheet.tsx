@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2 } from 'lucide-react';
+import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
