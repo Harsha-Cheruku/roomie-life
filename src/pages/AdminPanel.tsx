@@ -180,24 +180,21 @@ export default function AdminPanel() {
   const handleMakeAdmin = async (userId: string) => {
     if (!currentRoom?.id || !user?.id) return;
     try {
-      // Use RPC to promote - avoids RLS self-referencing issues
-      const { error } = await supabase.rpc('is_room_admin', {
-        _room_id: currentRoom.id,
-        _user_id: user.id,
-      });
-      
-      // Now do the update
-      const { error: updateError } = await supabase
+      const { error } = await supabase
         .from('room_members')
         .update({ role: 'admin' })
         .eq('user_id', userId)
         .eq('room_id', currentRoom.id);
-      if (updateError) throw updateError;
+      if (error) throw error;
       toast({ title: "Member promoted to admin! 👑" });
       refetchMembers();
     } catch (error: any) {
       console.error('Error promoting member:', error);
-      toast({ title: "Failed to promote member", description: error?.message || "Check your connection and try again", variant: "destructive" });
+      toast({ 
+        title: "Failed to promote member", 
+        description: error?.message || "Check your connection and try again", 
+        variant: "destructive" 
+      });
     }
   };
 
