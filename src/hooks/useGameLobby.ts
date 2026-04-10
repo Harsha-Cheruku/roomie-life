@@ -104,6 +104,9 @@ export const useGameLobby = () => {
 
     const restoreJoinedLobby = async () => {
       try {
+        // Only restore lobbies updated in the last 2 hours to avoid stale sessions
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
         const { data: joinedRows, error: joinedError } = await supabase
           .from("game_lobby_players" as any)
           .select("lobby_id")
@@ -127,6 +130,7 @@ export const useGameLobby = () => {
           .in("id", lobbyIds)
           .eq("room_id", currentRoom.id)
           .in("status", ["waiting", "playing"])
+          .gte("updated_at", twoHoursAgo)
           .order("updated_at", { ascending: false })
           .limit(1);
 
