@@ -220,10 +220,14 @@ export const RoomHeader = () => {
           <p className="text-sm text-muted-foreground">Welcome back{profile?.display_name ? `, ${profile.display_name}` : ''} 👋</p>
           <button 
             onClick={() => setShowRoomSwitcher(!showRoomSwitcher)}
-            className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors"
+            className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors relative"
           >
             {currentRoom?.name || "Room"}
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            {/* Dot when other rooms have unread notifications */}
+            {Object.values(roomUnreadCounts).some(c => c > 0) && (
+              <span className="w-2.5 h-2.5 bg-coral rounded-full absolute -top-0.5 -right-3 animate-pulse" />
+            )}
           </button>
         </div>
         <div className="flex items-center gap-2">
