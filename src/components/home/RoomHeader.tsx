@@ -342,8 +342,13 @@ export const RoomHeader = () => {
               )}
             >
               <span className="text-lg">🏠</span>
-              <span className="text-sm font-medium">{room.name}</span>
+              <span className="text-sm font-medium flex-1">{room.name}</span>
               {room.id === currentRoom?.id && <Check className="w-4 h-4 ml-auto" />}
+              {room.id !== currentRoom?.id && (roomUnreadCounts[room.id] || 0) > 0 && (
+                <span className="ml-auto w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center">
+                  {roomUnreadCounts[room.id] > 99 ? '99+' : roomUnreadCounts[room.id]}
+                </span>
+              )}
             </button>
           ))}
           <div className="border-t border-border my-1" />
