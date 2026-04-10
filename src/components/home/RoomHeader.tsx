@@ -27,6 +27,7 @@ export const RoomHeader = () => {
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
+  const [roomUnreadCounts, setRoomUnreadCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (currentRoom?.id) {
