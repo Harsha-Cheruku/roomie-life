@@ -151,10 +151,20 @@ export const useGameLobby = () => {
 
   const createLobby = useCallback(
     async (gameType: string, maxPlayers: number = 4) => {
-      if (!user || !profile || !currentRoom) return null;
+      if (!user || !profile || !currentRoom) {
+        toast.error("Please log in and join a room first");
+        return null;
+      }
       setIsLoading(true);
 
       try {
+        // Ensure session is fresh
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          toast.error("Session expired. Please refresh the page.");
+          return null;
+        }
+
         const { data: lobbyData, error: lobbyError } = await supabase
           .from("game_lobbies" as any)
           .insert({
@@ -189,7 +199,7 @@ export const useGameLobby = () => {
         return newLobby;
       } catch (e: any) {
         console.error("Create lobby error:", e);
-        toast.error("Failed to create game");
+        toast.error(e?.message?.includes("fetch") ? "Network error. Check your connection." : "Failed to create game");
         return null;
       } finally {
         setIsLoading(false);

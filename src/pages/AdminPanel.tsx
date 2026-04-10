@@ -178,7 +178,7 @@ export default function AdminPanel() {
   };
 
   const handleMakeAdmin = async (userId: string) => {
-    if (!currentRoom?.id) return;
+    if (!currentRoom?.id || !user?.id) return;
     try {
       const { error } = await supabase
         .from('room_members')
@@ -188,9 +188,13 @@ export default function AdminPanel() {
       if (error) throw error;
       toast({ title: "Member promoted to admin! 👑" });
       refetchMembers();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error promoting member:', error);
-      toast({ title: "Failed to promote member", variant: "destructive" });
+      toast({ 
+        title: "Failed to promote member", 
+        description: error?.message || "Check your connection and try again", 
+        variant: "destructive" 
+      });
     }
   };
 

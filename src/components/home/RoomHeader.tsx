@@ -188,7 +188,7 @@ export const RoomHeader = () => {
     <header className="px-4 pt-6 pb-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <p className="text-sm text-muted-foreground">Welcome back 👋</p>
+          <p className="text-sm text-muted-foreground">Welcome back{profile?.display_name ? `, ${profile.display_name}` : ''} 👋</p>
           <button 
             onClick={() => setShowRoomSwitcher(!showRoomSwitcher)}
             className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors"
