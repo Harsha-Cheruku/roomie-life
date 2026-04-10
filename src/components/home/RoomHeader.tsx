@@ -27,6 +27,7 @@ export const RoomHeader = () => {
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
+  const [roomUnreadCounts, setRoomUnreadCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (currentRoom?.id) {
@@ -51,6 +52,34 @@ export const RoomHeader = () => {
       };
     }
   }, [currentRoom?.id, user?.id]);
+
+  // Fetch unread notification counts for all rooms
+  useEffect(() => {
+    if (!user?.id || userRooms.length <= 1) return;
+
+    const fetchRoomUnreads = async () => {
+      const otherRooms = userRooms.filter(r => r.id !== currentRoom?.id);
+      const counts: Record<string, number> = {};
+
+      for (const room of otherRooms) {
+        const { count } = await supabase
+          .from("notifications")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .eq("room_id", room.id)
+          .eq("is_read", false);
+        counts[room.id] = count || 0;
+      }
+
+      setRoomUnreadCounts(counts);
+    };
+
+    fetchRoomUnreads();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchRoomUnreads, 30000);
+    return () => clearInterval(interval);
+  }, [user?.id, userRooms, currentRoom?.id]);
 
   const updateOnlineStatus = (presenceState: Record<string, any[]>) => {
     const onlineUsers = new Set<string>();
@@ -191,10 +220,14 @@ export const RoomHeader = () => {
           <p className="text-sm text-muted-foreground">Welcome back{profile?.display_name ? `, ${profile.display_name}` : ''} 👋</p>
           <button 
             onClick={() => setShowRoomSwitcher(!showRoomSwitcher)}
-            className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors"
+            className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors relative"
           >
             {currentRoom?.name || "Room"}
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
+            {/* Dot when other rooms have unread notifications */}
+            {Object.values(roomUnreadCounts).some(c => c > 0) && (
+              <span className="w-2.5 h-2.5 bg-coral rounded-full absolute -top-0.5 -right-3 animate-pulse" />
+            )}
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -309,8 +342,13 @@ export const RoomHeader = () => {
               )}
             >
               <span className="text-lg">🏠</span>
-              <span className="text-sm font-medium">{room.name}</span>
+              <span className="text-sm font-medium flex-1">{room.name}</span>
               {room.id === currentRoom?.id && <Check className="w-4 h-4 ml-auto" />}
+              {room.id !== currentRoom?.id && (roomUnreadCounts[room.id] || 0) > 0 && (
+                <span className="ml-auto w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center">
+                  {roomUnreadCounts[room.id] > 99 ? '99+' : roomUnreadCounts[room.id]}
+                </span>
+              )}
             </button>
           ))}
           <div className="border-t border-border my-1" />

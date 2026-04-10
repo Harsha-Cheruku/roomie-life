@@ -104,6 +104,9 @@ export const useGameLobby = () => {
 
     const restoreJoinedLobby = async () => {
       try {
+        // Only restore lobbies updated in the last 2 hours to avoid stale sessions
+        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
         const { data: joinedRows, error: joinedError } = await supabase
           .from("game_lobby_players" as any)
           .select("lobby_id")
@@ -127,6 +130,7 @@ export const useGameLobby = () => {
           .in("id", lobbyIds)
           .eq("room_id", currentRoom.id)
           .in("status", ["waiting", "playing"])
+          .gte("updated_at", twoHoursAgo)
           .order("updated_at", { ascending: false })
           .limit(1);
 
@@ -163,6 +167,29 @@ export const useGameLobby = () => {
         if (!session) {
           toast.error("Session expired. Please refresh the page.");
           return null;
+        }
+
+        // Clean up any stale lobbies the user is in before creating new one
+        const { data: oldPlayerRows } = await supabase
+          .from("game_lobby_players" as any)
+          .select("lobby_id")
+          .eq("user_id", user.id);
+        
+        if (oldPlayerRows && (oldPlayerRows as any[]).length > 0) {
+          const oldLobbyIds = (oldPlayerRows as any[]).map(r => r.lobby_id);
+          // Remove player from old lobbies
+          await supabase
+            .from("game_lobby_players" as any)
+            .delete()
+            .eq("user_id", user.id)
+            .in("lobby_id", oldLobbyIds);
+          // Delete old waiting lobbies hosted by this user
+          await supabase
+            .from("game_lobbies" as any)
+            .delete()
+            .eq("host_id", user.id)
+            .eq("status", "waiting")
+            .in("id", oldLobbyIds);
         }
 
         const { data: lobbyData, error: lobbyError } = await supabase
