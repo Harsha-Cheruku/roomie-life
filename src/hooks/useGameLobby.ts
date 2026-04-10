@@ -169,6 +169,29 @@ export const useGameLobby = () => {
           return null;
         }
 
+        // Clean up any stale lobbies the user is in before creating new one
+        const { data: oldPlayerRows } = await supabase
+          .from("game_lobby_players" as any)
+          .select("lobby_id")
+          .eq("user_id", user.id);
+        
+        if (oldPlayerRows && (oldPlayerRows as any[]).length > 0) {
+          const oldLobbyIds = (oldPlayerRows as any[]).map(r => r.lobby_id);
+          // Remove player from old lobbies
+          await supabase
+            .from("game_lobby_players" as any)
+            .delete()
+            .eq("user_id", user.id)
+            .in("lobby_id", oldLobbyIds);
+          // Delete old waiting lobbies hosted by this user
+          await supabase
+            .from("game_lobbies" as any)
+            .delete()
+            .eq("host_id", user.id)
+            .eq("status", "waiting")
+            .in("id", oldLobbyIds);
+        }
+
         const { data: lobbyData, error: lobbyError } = await supabase
           .from("game_lobbies" as any)
           .insert({
