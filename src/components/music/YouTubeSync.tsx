@@ -95,9 +95,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const playerRef = useRef<any>(null);
   const playerContainerRef = useRef<HTMLDivElement>(null);
   const isHostRef = useRef(false);
-  // Guard to prevent broadcast feedback loops when we programmatically control the player
   const ignoreBroadcastRef = useRef(false);
-  // Track the host's authoritative timestamp for continuous correction
   const lastHostSyncRef = useRef<{ time: number; hostTime: number; rate: number } | null>(null);
 
   useEffect(() => {
@@ -105,7 +103,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Keep isHostRef in sync
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
 
   // Initialize YouTube player when video becomes active
@@ -117,17 +114,20 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       await loadYouTubeApi();
       if (destroyed || !isMountedRef.current) return;
 
-      // Destroy previous player
       if (playerRef.current) {
         try { playerRef.current.destroy(); } catch {}
         playerRef.current = null;
       }
 
       const isPlaylistOnly = activeVideoId.startsWith('playlist-');
+      const currentIsHost = isHostRef.current;
+      
       const playerVars: Record<string, any> = {
         autoplay: 1, rel: 0, modestbranding: 1, playsinline: 1,
-        disablekb: isHostRef.current ? 0 : 1,
-        controls: isHostRef.current ? 1 : 0,
+        // Listeners: disable ALL controls so only host drives playback
+        disablekb: currentIsHost ? 0 : 1,
+        controls: currentIsHost ? 1 : 0,
+        fs: currentIsHost ? 1 : 0,
       };
       if (activePlaylistId) {
         playerVars.listType = 'playlist';
@@ -138,14 +138,12 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         playerVars,
         events: {
           onReady: (event: any) => {
-            // Ensure listeners start playing immediately
             if (!isHostRef.current) {
               event.target.playVideo();
             }
           },
           onStateChange: (event: any) => {
             if (!isMountedRef.current || ignoreBroadcastRef.current) return;
-            // Only host broadcasts state changes
             if (!isHostRef.current) return;
             const state = event.data;
             const YT = (window as any).YT.PlayerState;
@@ -181,7 +179,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     };
   }, [activeVideoId]);
 
-  // Host heartbeat: periodically broadcast current position so listeners can correct drift
+  // Host heartbeat
   useEffect(() => {
     if (heartbeatRef.current) {
       clearInterval(heartbeatRef.current);
@@ -196,7 +194,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       const YT = (window as any).YT?.PlayerState;
       if (!YT) return;
       const state = player.getPlayerState();
-      // Broadcast both playing and paused states so listeners can recover
       if (state === YT.PLAYING) {
         broadcastPlaybackState("heartbeat", player.getCurrentTime(), player.getPlaybackRate());
       } else if (state === YT.PAUSED) {
@@ -212,7 +209,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     };
   }, [isHost, activeVideoId]);
 
-  // Listener-side continuous drift correction between heartbeats
+  // Listener-side continuous drift correction
   useEffect(() => {
     if (isHost || !activeVideoId) return;
 
@@ -223,7 +220,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
       const YT = (window as any).YT?.PlayerState;
       if (!YT || player.getPlayerState() !== YT.PLAYING) return;
 
-      // Calculate where the host should be now based on last sync + elapsed time
       const elapsed = (Date.now() - sync.time) / 1000;
       const expectedTime = sync.hostTime + elapsed * sync.rate;
       const actualTime = player.getCurrentTime();
@@ -300,12 +296,11 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         .on("broadcast", { event: "youtube_playback" }, (payload) => {
           if (!isMountedRef.current) return;
           const data = payload.payload;
-          if (data.sender_id === user.id) return; // Ignore own broadcasts
+          if (data.sender_id === user.id) return;
           
           const player = playerRef.current;
           if (!player || typeof player.seekTo !== "function") return;
 
-          // Set guard to prevent our programmatic changes from re-broadcasting
           ignoreBroadcastRef.current = true;
 
           try {
@@ -315,18 +310,16 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               player.seekTo(data.currentTime, true);
               player.pauseVideo();
               setIsPaused(true);
-              lastHostSyncRef.current = null; // Stop drift correction while paused
+              lastHostSyncRef.current = null;
             } else if (data.action === "playing") {
               const targetTime = data.currentTime + networkDelay;
               player.seekTo(targetTime, true);
               if (data.rate) player.setPlaybackRate(data.rate);
               player.playVideo();
               setIsPaused(false);
-              // Record sync point for continuous drift correction
               lastHostSyncRef.current = { time: Date.now(), hostTime: targetTime, rate: data.rate || 1 };
             } else if (data.action === "speed") {
               if (data.rate) player.setPlaybackRate(data.rate);
-              // Update sync ref rate
               if (lastHostSyncRef.current) {
                 lastHostSyncRef.current.rate = data.rate || 1;
               }
@@ -337,7 +330,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
               const YT = (window as any).YT?.PlayerState;
               if (!YT) return;
               
-              // If listener is paused but host is playing, resume
               if (player.getPlayerState() !== YT.PLAYING) {
                 player.seekTo(expectedTime, true);
                 player.playVideo();
@@ -353,7 +345,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
                 }
               }
             } else if (data.action === "heartbeat_paused") {
-              // Host is paused — ensure listener is also paused
               const YT = (window as any).YT?.PlayerState;
               if (YT && player.getPlayerState() === YT.PLAYING) {
                 player.seekTo(data.currentTime, true);
@@ -404,7 +395,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     const playlistId = extractPlaylistId(youtubeUrl);
     const playlist = extractPlaylistUrl(youtubeUrl);
 
-    // Accept either a video link or a playlist-only link
     if (!videoId && !playlistId) {
       toast.error("Paste a valid YouTube video or playlist link");
       return;
@@ -413,7 +403,6 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
     if (playlist) setLastPlaylistUrl(playlist);
     if (playlistId) setActivePlaylistId(playlistId);
 
-    // For playlist-only URLs without a video ID, use a blank ID (YT API loads first playlist item)
     const effectiveVideoId = videoId || "";
     setActiveVideoId(effectiveVideoId || `playlist-${playlistId}`);
     setSharedBy(profile?.display_name || "You");
@@ -543,7 +532,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         </Card>
       )}
 
-      {/* Share Input */}
+      {/* Share Input — only host can share */}
       <div className="flex gap-2">
         <Input
           placeholder="Paste YouTube video or playlist link..."
@@ -563,6 +552,7 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
         <Card className="overflow-hidden shadow-lg">
           <div className="relative">
             <div ref={playerContainerRef} className="w-full aspect-video" />
+            {/* Only host sees playback controls */}
             {isHost && (
               <div className="absolute top-2 right-2 flex gap-1">
                 <Button variant="secondary" size="icon" className="w-8 h-8 rounded-full opacity-90 hover:opacity-100" onClick={togglePlayPause}>
@@ -573,13 +563,32 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
                 </Button>
               </div>
             )}
+            {/* Listener: show a stop-only button (leave session) */}
+            {!isHost && activeVideoId && (
+              <div className="absolute top-2 right-2">
+                <Button variant="destructive" size="icon" className="w-8 h-8 rounded-full opacity-80 hover:opacity-100" onClick={() => {
+                  if (playerRef.current) {
+                    try { playerRef.current.destroy(); } catch {}
+                    playerRef.current = null;
+                  }
+                  setActiveVideoId(null);
+                  setSharedBy("");
+                  setIsHost(false);
+                  setIsPaused(false);
+                  lastHostSyncRef.current = null;
+                  toast.info("Left the music session");
+                }}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
           <CardContent className="p-3 space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 min-w-0">
                 <Play className="h-4 w-4 text-primary shrink-0" />
                 <span className="text-sm font-medium truncate text-foreground">
-                  {isHost ? "You're sharing (you control playback)" : `Shared by ${sharedBy} (synced)`}
+                  {isHost ? "You're the host (you control playback)" : `Shared by ${sharedBy}`}
                 </span>
               </div>
               {isHost && (
@@ -587,10 +596,15 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
                   <Music className="h-3 w-3 mr-1" /> Host
                 </Badge>
               )}
+              {!isHost && (
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  🔒 Synced
+                </Badge>
+              )}
             </div>
             {!isHost && (
               <p className="text-[10px] text-muted-foreground">
-                🔒 Host controls playback. You're synced automatically — sit back and enjoy!
+                🎧 Host controls playback — you're synced automatically. Sit back and enjoy!
               </p>
             )}
             {lastPlaylistUrl && (

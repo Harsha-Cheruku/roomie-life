@@ -39,11 +39,52 @@ const getErrorMessage = (error: any, fallback: string): string => {
   if (normalized.includes("jwt") || normalized.includes("session") || normalized.includes("token")) {
     return "Session expired. Please sign in again.";
   }
-  if (normalized.includes("row-level security") || normalized.includes("rls")) {
+  if (normalized.includes("row-level security") || normalized.includes("rls") || normalized.includes("policy")) {
     return "Permission denied. You may need to rejoin the room.";
+  }
+  if (normalized.includes("duplicate") || normalized.includes("unique")) {
+    return "You're already in this game.";
   }
   return message || fallback;
 };
+
+const ensureSession = async (): Promise<boolean> => {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) return true;
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    return !!refreshed.session;
+  } catch {
+    return false;
+  }
+};
+
+const parseLobby = (data: any): GameLobby => ({
+  id: data.id,
+  room_id: data.room_id,
+  game_type: data.game_type,
+  join_code: data.join_code,
+  host_id: data.host_id,
+  status: data.status as GameLobby["status"],
+  max_players: data.max_players,
+  current_turn_user_id: data.current_turn_user_id,
+  game_state: (data.game_state as Record<string, any>) || {},
+  created_at: data.created_at,
+  updated_at: data.updated_at,
+});
+
+const parsePlayer = (p: any): LobbyPlayer => ({
+  id: p.id,
+  lobby_id: p.lobby_id,
+  user_id: p.user_id,
+  display_name: p.display_name,
+  avatar: p.avatar || "😊",
+  player_order: p.player_order,
+  is_ready: p.is_ready,
+  score: p.score,
+  player_state: (p.player_state as Record<string, any>) || {},
+  joined_at: p.joined_at,
+});
 
 export const useGameLobby = () => {
   const { user, profile, currentRoom } = useAuth();
@@ -51,17 +92,6 @@ export const useGameLobby = () => {
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-
-  const refreshSession = useCallback(async () => {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) throw error;
-    if (data.session) return data.session;
-    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
-    if (refreshError || !refreshed.session) {
-      throw refreshError ?? new Error("Session expired. Please sign in again.");
-    }
-    return refreshed.session;
-  }, []);
 
   const fetchPlayers = useCallback(async (lobbyId: string): Promise<LobbyPlayer[]> => {
     const { data, error } = await supabase
@@ -75,19 +105,7 @@ export const useGameLobby = () => {
       return [];
     }
 
-    const result = (data || []).map((p) => ({
-      id: p.id,
-      lobby_id: p.lobby_id,
-      user_id: p.user_id,
-      display_name: p.display_name,
-      avatar: p.avatar || "😊",
-      player_order: p.player_order,
-      is_ready: p.is_ready,
-      score: p.score,
-      player_state: (p.player_state as Record<string, any>) || {},
-      joined_at: p.joined_at,
-    })) as LobbyPlayer[];
-
+    const result = (data || []).map(parsePlayer);
     setPlayers(result);
     return result;
   }, []);
@@ -107,8 +125,7 @@ export const useGameLobby = () => {
         { event: "*", schema: "public", table: "game_lobbies", filter: `id=eq.${lobby.id}` },
         (payload) => {
           if (payload.eventType === "UPDATE") {
-            const updated = payload.new as unknown as GameLobby;
-            setLobby(updated);
+            setLobby(parseLobby(payload.new));
           } else if (payload.eventType === "DELETE") {
             setLobby(null);
             setPlayers([]);
@@ -172,7 +189,7 @@ export const useGameLobby = () => {
 
         if (lobbyError || !activeLobbies?.length || cancelled) return;
 
-        const activeLobby = activeLobbies[0] as unknown as GameLobby;
+        const activeLobby = parseLobby(activeLobbies[0]);
         setLobby(activeLobby);
         await fetchPlayers(activeLobby.id);
       } catch (error) {
@@ -190,33 +207,54 @@ export const useGameLobby = () => {
         toast.error("Please log in and join a room first");
         return null;
       }
+
+      const hasSession = await ensureSession();
+      if (!hasSession) {
+        toast.error("Session expired. Please sign in again.");
+        return null;
+      }
+
       setIsLoading(true);
 
       try {
-        await refreshSession();
-
-        // Clean up old waiting lobbies by this user in this room
+        // Clean up ALL stale lobbies by this user in this room (waiting or finished)
         const { data: oldLobbies } = await supabase
           .from("game_lobbies")
           .select("id")
           .eq("room_id", currentRoom.id)
           .eq("host_id", user.id)
-          .eq("status", "waiting");
+          .in("status", ["waiting", "finished"]);
 
         if (oldLobbies?.length) {
           const oldIds = oldLobbies.map((l) => l.id);
-          await supabase
-            .from("game_lobby_players")
-            .delete()
-            .eq("user_id", user.id)
-            .in("lobby_id", oldIds);
+          // Delete players first, then lobbies
+          for (const oldId of oldIds) {
+            await supabase.from("game_lobby_players").delete().eq("lobby_id", oldId);
+          }
           await supabase
             .from("game_lobbies")
             .delete()
             .eq("host_id", user.id)
-            .eq("status", "waiting")
-            .in("id", oldIds);
+            .in("status", ["waiting", "finished"])
+            .eq("room_id", currentRoom.id);
         }
+
+        // Also leave any other lobbies this user is in (to prevent conflicts)
+        const { data: myOtherJoins } = await supabase
+          .from("game_lobby_players")
+          .select("lobby_id")
+          .eq("user_id", user.id);
+
+        if (myOtherJoins?.length) {
+          await supabase
+            .from("game_lobby_players")
+            .delete()
+            .eq("user_id", user.id);
+        }
+
+        // Clear local state
+        setLobby(null);
+        setPlayers([]);
 
         const { data: lobbyData, error: lobbyError } = await supabase
           .from("game_lobbies")
@@ -232,19 +270,7 @@ export const useGameLobby = () => {
 
         if (lobbyError) throw lobbyError;
 
-        const newLobby: GameLobby = {
-          id: lobbyData.id,
-          room_id: lobbyData.room_id,
-          game_type: lobbyData.game_type,
-          join_code: lobbyData.join_code,
-          host_id: lobbyData.host_id,
-          status: lobbyData.status as GameLobby["status"],
-          max_players: lobbyData.max_players,
-          current_turn_user_id: lobbyData.current_turn_user_id,
-          game_state: (lobbyData.game_state as Record<string, any>) || {},
-          created_at: lobbyData.created_at,
-          updated_at: lobbyData.updated_at,
-        };
+        const newLobby = parseLobby(lobbyData);
 
         // Host auto-joins
         const { error: joinError } = await supabase
@@ -262,26 +288,35 @@ export const useGameLobby = () => {
 
         setLobby(newLobby);
         await fetchPlayers(newLobby.id);
+        toast.success("Game created! Share the code with your roommates.");
         return newLobby;
       } catch (e: any) {
         console.error("Create lobby error:", e);
-        toast.error(getErrorMessage(e, "Failed to create game"));
+        toast.error(getErrorMessage(e, "Failed to create game. Try again."));
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [currentRoom, fetchPlayers, profile, refreshSession, user]
+    [currentRoom, fetchPlayers, profile, user]
   );
 
   const joinLobby = useCallback(
     async (joinCode: string): Promise<GameLobby | null> => {
-      if (!user || !profile) return null;
+      if (!user || !profile) {
+        toast.error("Please log in first");
+        return null;
+      }
+
+      const hasSession = await ensureSession();
+      if (!hasSession) {
+        toast.error("Session expired. Please sign in again.");
+        return null;
+      }
+
       setIsLoading(true);
 
       try {
-        await refreshSession();
-
         const { data: lobbies, error: findError } = await supabase
           .from("game_lobbies")
           .select("*")
@@ -295,7 +330,7 @@ export const useGameLobby = () => {
           return null;
         }
 
-        const foundLobby = lobbies[0] as unknown as GameLobby;
+        const foundLobby = parseLobby(lobbies[0]);
 
         // Check player count
         const { data: existingPlayers } = await supabase
@@ -323,6 +358,12 @@ export const useGameLobby = () => {
           return foundLobby;
         }
 
+        // Leave any other lobbies first
+        await supabase
+          .from("game_lobby_players")
+          .delete()
+          .eq("user_id", user.id);
+
         const { error: joinError } = await supabase
           .from("game_lobby_players")
           .insert({
@@ -342,20 +383,19 @@ export const useGameLobby = () => {
         return foundLobby;
       } catch (e: any) {
         console.error("Join lobby error:", e);
-        toast.error(getErrorMessage(e, "Failed to join game"));
+        toast.error(getErrorMessage(e, "Failed to join game. Try again."));
         return null;
       } finally {
         setIsLoading(false);
       }
     },
-    [fetchPlayers, profile, refreshSession, user]
+    [fetchPlayers, profile, user]
   );
 
   const setReady = useCallback(
     async (ready: boolean) => {
       if (!lobby || !user) return;
       try {
-        await refreshSession();
         const { error } = await supabase
           .from("game_lobby_players")
           .update({ is_ready: ready })
@@ -371,19 +411,27 @@ export const useGameLobby = () => {
         toast.error(getErrorMessage(error, "Couldn't update ready state"));
       }
     },
-    [lobby, refreshSession, user]
+    [lobby, user]
   );
 
   const startGame = useCallback(
     async (initialState: Record<string, any> = {}) => {
-      if (!lobby || !user || lobby.host_id !== user.id) return false;
+      if (!lobby || !user || lobby.host_id !== user.id) {
+        toast.error("Only the host can start the game");
+        return false;
+      }
+
+      const hasSession = await ensureSession();
+      if (!hasSession) {
+        toast.error("Session expired. Please sign in again.");
+        return false;
+      }
 
       try {
-        await refreshSession();
         const freshPlayers = await fetchPlayers(lobby.id);
 
         if (freshPlayers.length < 2) {
-          toast.error("Need at least 2 players!");
+          toast.error("Need at least 2 players to start!");
           return false;
         }
         if (!freshPlayers.every((p) => p.is_ready)) {
@@ -399,36 +447,40 @@ export const useGameLobby = () => {
             game_state: initialState as any,
           })
           .eq("id", lobby.id)
+          .eq("status", "waiting") // Only transition from waiting
           .select()
           .single();
 
-        if (error) throw error;
-        if (!startedLobby) throw new Error("Failed to start game - no data returned");
+        if (error) {
+          console.error("Start game DB error:", error);
+          throw error;
+        }
+        if (!startedLobby) {
+          toast.error("Game may have already started. Refreshing...");
+          // Try to fetch current state
+          const { data: currentLobby } = await supabase
+            .from("game_lobbies")
+            .select("*")
+            .eq("id", lobby.id)
+            .single();
+          if (currentLobby) {
+            setLobby(parseLobby(currentLobby));
+          }
+          return false;
+        }
 
-        const updatedLobby: GameLobby = {
-          id: startedLobby.id,
-          room_id: startedLobby.room_id,
-          game_type: startedLobby.game_type,
-          join_code: startedLobby.join_code,
-          host_id: startedLobby.host_id,
-          status: startedLobby.status as GameLobby["status"],
-          max_players: startedLobby.max_players,
-          current_turn_user_id: startedLobby.current_turn_user_id,
-          game_state: (startedLobby.game_state as Record<string, any>) || {},
-          created_at: startedLobby.created_at,
-          updated_at: startedLobby.updated_at,
-        };
-
+        const updatedLobby = parseLobby(startedLobby);
         setLobby(updatedLobby);
         setPlayers(freshPlayers);
+        toast.success("Game started! 🎮");
         return true;
       } catch (error) {
         console.error("Start game error:", error);
-        toast.error(getErrorMessage(error, "Failed to start game"));
+        toast.error(getErrorMessage(error, "Failed to start game. Try again."));
         return false;
       }
     },
-    [fetchPlayers, lobby, refreshSession, user]
+    [fetchPlayers, lobby, user]
   );
 
   const updateGameState = useCallback(
@@ -440,8 +492,6 @@ export const useGameLobby = () => {
       if (!lobby || !user) return false;
 
       try {
-        await refreshSession();
-
         const shouldEnforceTurn = options?.enforceTurn ?? lobby.status === "playing";
 
         const { data, error } = await supabase.rpc("update_game_lobby_state", {
@@ -453,16 +503,14 @@ export const useGameLobby = () => {
 
         if (error) {
           console.error("Failed to update game state:", error);
-          toast.error(getErrorMessage(error, "Sync error. Please try again."));
           return false;
         }
 
         if (!data) {
-          toast.error(
-            shouldEnforceTurn
-              ? "Turn already moved. Syncing latest state..."
-              : "Sync error. Please try again."
-          );
+          if (shouldEnforceTurn) {
+            // Silently fail — turn likely moved
+            return false;
+          }
           return false;
         }
 
@@ -480,18 +528,16 @@ export const useGameLobby = () => {
         return true;
       } catch (error) {
         console.error("Update game state error:", error);
-        toast.error(getErrorMessage(error, "Sync error. Please try again."));
         return false;
       }
     },
-    [lobby, refreshSession, user]
+    [lobby, user]
   );
 
   const updatePlayerState = useCallback(
     async (userId: string, playerState: Record<string, any>, score?: number) => {
       if (!lobby) return;
       try {
-        await refreshSession();
         const update: Record<string, any> = { player_state: playerState as any };
         if (score !== undefined) update.score = score;
 
@@ -504,14 +550,13 @@ export const useGameLobby = () => {
         console.error("Update player state error:", error);
       }
     },
-    [lobby, refreshSession]
+    [lobby]
   );
 
   const endGame = useCallback(
     async (winnerId?: string) => {
       if (!lobby) return;
       try {
-        await refreshSession();
         await supabase
           .from("game_lobbies")
           .update({ status: "finished" as string })
@@ -520,15 +565,13 @@ export const useGameLobby = () => {
         console.error("End game error:", error);
       }
     },
-    [lobby, refreshSession]
+    [lobby]
   );
 
   const leaveLobby = useCallback(async () => {
     if (!lobby || !user) return;
 
     try {
-      await refreshSession();
-
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
@@ -541,6 +584,8 @@ export const useGameLobby = () => {
         .eq("user_id", user.id);
 
       if (lobby.host_id === user.id) {
+        // Delete all players first, then the lobby
+        await supabase.from("game_lobby_players").delete().eq("lobby_id", lobby.id);
         await supabase.from("game_lobbies").delete().eq("id", lobby.id);
       }
 
@@ -549,7 +594,7 @@ export const useGameLobby = () => {
     } catch (error) {
       console.error("Leave lobby error:", error);
     }
-  }, [lobby, refreshSession, user]);
+  }, [lobby, user]);
 
   const isHost = lobby?.host_id === user?.id;
   const isMyTurn = lobby?.current_turn_user_id === user?.id;
