@@ -525,7 +525,17 @@ export const CreateExpenseDialog = ({
               <Select value={paidBy} onValueChange={setPaidBy}>
                 <SelectTrigger className="mt-1 rounded-xl h-12">
                   <SelectValue>
-                    {roomMembers.find(m => m.user_id === paidBy)?.profile.display_name || 'Select payer'}
+                    {(() => {
+                      const payer = roomMembers.find(m => m.user_id === paidBy);
+                      if (!payer) return 'Select payer';
+                      return (
+                        <span className="flex items-center gap-2">
+                          <ProfileAvatar avatar={payer.profile.avatar} size="xs" />
+                          <span>{payer.profile.display_name}</span>
+                          {payer.user_id === user?.id && <span className="text-xs text-primary">(You)</span>}
+                        </span>
+                      );
+                    })()}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
