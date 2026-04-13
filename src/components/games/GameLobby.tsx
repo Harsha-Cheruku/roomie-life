@@ -151,7 +151,9 @@ export const GameLobbyComponent = ({
             disabled={!canStart || isLoading}
           >
             <Play className="h-4 w-4 mr-2" />
-            {!allReady
+            {isLoading
+              ? "Starting..."
+              : !allReady
               ? "Waiting for all to be ready..."
               : players.length < minPlayers
               ? `Need ${minPlayers}+ players`

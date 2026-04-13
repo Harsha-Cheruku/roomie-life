@@ -39,6 +39,31 @@ interface PendingAttachment {
   fileName: string;
 }
 
+interface SeenReceipt {
+  message_id: string;
+  user_id: string;
+  seen_at: string;
+}
+
+const sortSeenReceipts = (receipts: SeenReceipt[]) =>
+  [...receipts].sort((a, b) => new Date(b.seen_at).getTime() - new Date(a.seen_at).getTime());
+
+const mergeSeenReceipts = (
+  current: Record<string, SeenReceipt[]>,
+  receipts: SeenReceipt[]
+) => {
+  const next = { ...current };
+
+  receipts.forEach((receipt) => {
+    next[receipt.message_id] = sortSeenReceipts([
+      ...(next[receipt.message_id] ?? []).filter((existing) => existing.user_id !== receipt.user_id),
+      receipt,
+    ]);
+  });
+
+  return next;
+};
+
 export const Chat = () => {
   const { user, currentRoom } = useAuth();
   const { toast: toastHook } = useToast();
@@ -52,29 +77,73 @@ export const Chat = () => {
   const [pendingAttachment, setPendingAttachment] = useState<PendingAttachment | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [seenDialogMessageId, setSeenDialogMessageId] = useState<string | null>(null);
+  const [messageViews, setMessageViews] = useState<Record<string, SeenReceipt[]>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const messageIdsRef = useRef<Set<string>>(new Set());
 
   const scrollToBottom = useCallback(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, []);
 
   useEffect(() => {
-    if (currentRoom) { fetchRoomMembers(); fetchMessages(); }
-  }, [currentRoom]);
+    messageIdsRef.current = new Set(messages.map((message) => message.id));
+  }, [messages]);
+
+  const fetchMessageViews = useCallback(async (messageList: Message[]) => {
+    if (messageList.length === 0) {
+      setMessageViews({});
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('message_views')
+      .select('message_id, user_id, seen_at')
+      .in('message_id', messageList.map((message) => message.id));
+
+    if (error) {
+      console.error('Error fetching message views:', error);
+      return;
+    }
+
+    setMessageViews(mergeSeenReceipts({}, (data || []) as SeenReceipt[]));
+  }, []);
+
+  useEffect(() => {
+    if (!currentRoom) {
+      setMessages([]);
+      setMessageViews({});
+      return;
+    }
+
+    void fetchRoomMembers();
+    void fetchMessages();
+  }, [currentRoom, fetchMessageViews]);
 
   // Mark messages as seen
   const markMessagesSeen = useCallback(async () => {
     if (!user || !currentRoom || messages.length === 0) return;
-    const otherMessages = messages.filter(m => m.sender_id !== user.id && !m.deleted_at);
-    if (otherMessages.length === 0) return;
-    const lastMsg = otherMessages[otherMessages.length - 1];
-    await supabase.from('message_views').upsert(
-      { message_id: lastMsg.id, user_id: user.id, seen_at: new Date().toISOString() },
-      { onConflict: 'message_id,user_id' }
-    ).then(() => {});
-  }, [messages, user, currentRoom]);
+    const unseenIncoming = messages.filter((message) => {
+      if (message.sender_id === user.id || message.deleted_at) return false;
+      return !(messageViews[message.id] || []).some((receipt) => receipt.user_id === user.id);
+    });
+
+    if (unseenIncoming.length === 0) return;
+
+    const seenAt = new Date().toISOString();
+    const payload = unseenIncoming.map((message) => ({
+      message_id: message.id,
+      user_id: user.id,
+      seen_at: seenAt,
+    }));
+
+    const { error } = await supabase.from('message_views').upsert(payload, { onConflict: 'message_id,user_id' });
+
+    if (!error) {
+      setMessageViews((prev) => mergeSeenReceipts(prev, payload));
+    }
+  }, [currentRoom, messageViews, messages, user]);
 
   useEffect(() => { markMessagesSeen(); }, [markMessagesSeen]);
 
@@ -102,6 +171,17 @@ export const Chat = () => {
         (payload) => {
           const updated = payload.new as Message;
           setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+        }
+      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_views' },
+        (payload) => {
+          if (payload.eventType === 'DELETE') return;
+
+          const receipt = payload.new as Partial<SeenReceipt>;
+          if (!receipt.message_id || !receipt.user_id || !receipt.seen_at) return;
+          if (!messageIdsRef.current.has(receipt.message_id)) return;
+
+          setMessageViews((prev) => mergeSeenReceipts(prev, [receipt as SeenReceipt]));
         }
       )
       .subscribe();
@@ -133,7 +213,9 @@ export const Chat = () => {
     try {
       const { data, error } = await supabase.from('messages').select('*').eq('room_id', currentRoom.id).order('created_at', { ascending: true }).limit(100);
       if (error) throw error;
-      setMessages(data || []);
+      const nextMessages = data || [];
+      setMessages(nextMessages);
+      await fetchMessageViews(nextMessages);
     } catch (error) { console.error('Error fetching messages:', error); }
     finally { setIsLoading(false); }
   };
@@ -272,27 +354,41 @@ export const Chat = () => {
     navigate(routes[tab] || '/');
   };
 
+  const getSeenReceipts = (messageId: string) =>
+    sortSeenReceipts((messageViews[messageId] || []).filter((receipt) => receipt.user_id !== user?.id));
+
+  const getSeenLabel = (receipts: SeenReceipt[]) => {
+    if (receipts.length === 0) return 'Sent';
+
+    const names = receipts.map((receipt) => profilesMap.get(receipt.user_id)?.display_name || 'Someone');
+
+    if (receipts.length === 1) return `Seen by ${names[0]}`;
+    return `Seen by ${names[0]} +${receipts.length - 1}`;
+  };
+
   const messageGroups = groupMessagesByDate(messages);
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
-      <header className="px-4 py-3 bg-card border-b border-border flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => navigate('/')} className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center hover:bg-muted/80 transition-all active:scale-95">
+      <header className="sticky top-0 z-10 border-b border-border/60 bg-card/95 px-4 py-3 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
           <ArrowLeft className="w-5 h-5 text-foreground" />
-        </button>
-        <div className="flex-1">
-          <h1 className="font-display font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
-        </div>
-        <div className="flex -space-x-2">
-          {roomMembers.slice(0, 4).map(member => (
-            <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="border-2 border-card" />
-          ))}
-          {roomMembers.length > 4 && <Avatar className="w-8 h-8 border-2 border-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
+            <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+          </div>
+          <div className="flex -space-x-2">
+            {roomMembers.slice(0, 4).map(member => (
+              <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="ring-2 ring-card" />
+            ))}
+            {roomMembers.length > 4 && <Avatar className="w-8 h-8 ring-2 ring-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+          </div>
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
         {isLoading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
@@ -301,51 +397,89 @@ export const Chat = () => {
           messageGroups.map((group, gi) => (
             <div key={gi} className="space-y-3">
               <div className="flex items-center justify-center">
-                <span className="bg-muted/80 text-muted-foreground text-xs px-3 py-1 rounded-full">{formatDateHeader(group.date)}</span>
+                <span className="rounded-full border border-border/60 bg-card/80 px-3 py-1 text-xs text-muted-foreground shadow-sm">{formatDateHeader(group.date)}</span>
               </div>
               {group.messages.map((message, mi) => {
                 const isOwnMessage = message.sender_id === user?.id;
                 const senderProfile = profilesMap.get(message.sender_id);
                 const showAvatar = mi === 0 || group.messages[mi - 1]?.sender_id !== message.sender_id;
+                const nextMessage = group.messages[mi + 1];
+                const isLastOwnInStack = isOwnMessage && (!nextMessage || nextMessage.sender_id !== message.sender_id);
+                const seenReceipts = isOwnMessage ? getSeenReceipts(message.id) : [];
+                const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} className={cn('flex gap-2', isOwnMessage ? 'flex-row-reverse' : 'flex-row')}>
-                    <div className="w-8 shrink-0">
-                      {showAvatar && !isOwnMessage && <ProfileAvatar avatar={senderProfile?.avatar} size="sm" />}
-                    </div>
-                    <MessageActionsMenu
-                      isOwnMessage={isOwnMessage}
-                      messageContent={message.content}
-                      messageType={message.message_type}
-                      onEdit={() => {
-                        if (message.message_type === 'text' && !message.deleted_at) {
-                          setEditingMessageId(message.id);
-                          setNewMessage(message.content);
-                          inputRef.current?.focus();
-                        }
-                      }}
-                      onDelete={() => handleDeleteMessage(message.id)}
-                      onViewSeen={() => setSeenDialogMessageId(message.id)}
-                    >
-                      <div className={cn(
-                        'max-w-[75%] rounded-2xl px-4 py-2',
-                        message.message_type === 'sticker' ? 'bg-transparent px-0' :
-                        isOwnMessage ? 'bg-primary text-primary-foreground rounded-tr-sm' : 'bg-muted text-foreground rounded-tl-sm'
-                      )}>
-                        {showAvatar && !isOwnMessage && message.message_type !== 'sticker' && (
-                          <p className="text-xs font-medium text-primary mb-1">{senderProfile?.display_name || 'Unknown'}</p>
-                        )}
-                        {renderMessageContent(message, isOwnMessage)}
-                        <div className={cn('flex items-center gap-1 mt-1', isOwnMessage ? 'justify-end' : '')}>
-                          <p className={cn('text-[10px]', isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
-                            {formatTime(message.created_at)}
-                          </p>
-                          {isOwnMessage && !message.deleted_at && (
-                            <CheckCheck className={cn('w-3 h-3', 'text-primary-foreground/50')} />
+                  <div key={message.id} className={cn('flex gap-2', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                    {!isOwnMessage && (
+                      <div className="w-8 shrink-0">
+                        {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
+                      </div>
+                    )}
+
+                    <div className={cn('flex max-w-[82%] flex-col gap-1', isOwnMessage ? 'items-end' : 'items-start')}>
+                      <MessageActionsMenu
+                        isOwnMessage={isOwnMessage}
+                        messageContent={message.content}
+                        messageType={message.message_type}
+                        onEdit={() => {
+                          if (message.message_type === 'text' && !message.deleted_at) {
+                            setEditingMessageId(message.id);
+                            setNewMessage(message.content);
+                            inputRef.current?.focus();
+                          }
+                        }}
+                        onDelete={() => handleDeleteMessage(message.id)}
+                        onViewSeen={() => setSeenDialogMessageId(message.id)}
+                      >
+                        <div className={cn(
+                          'max-w-full rounded-[1.6rem] px-4 py-3 shadow-card transition-all',
+                          message.message_type === 'sticker' ? 'bg-transparent px-0 py-0 shadow-none' :
+                          isOwnMessage ? 'bg-primary text-primary-foreground rounded-br-md' : 'rounded-bl-md border border-border/60 bg-card text-foreground'
+                        )}>
+                          {showAvatar && !isOwnMessage && message.message_type !== 'sticker' && (
+                            <p className="mb-1 text-xs font-semibold text-primary">{senderProfile?.display_name || 'Unknown'}</p>
+                          )}
+                          {renderMessageContent(message, isOwnMessage)}
+                          {message.message_type !== 'sticker' && (
+                            <div className={cn('mt-1 flex items-center gap-1', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                              <p className={cn('text-[10px]', isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+                                {formatTime(message.created_at)}
+                              </p>
+                              {isOwnMessage && !message.deleted_at && (
+                                <CheckCheck className={cn('h-3 w-3', hasSeen ? 'text-primary-foreground' : 'text-primary-foreground/50')} />
+                              )}
+                            </div>
                           )}
                         </div>
-                      </div>
-                    </MessageActionsMenu>
+                      </MessageActionsMenu>
+
+                      {isOwnMessage && !message.deleted_at && isLastOwnInStack && (
+                        hasSeen ? (
+                          <button
+                            type="button"
+                            onClick={() => setSeenDialogMessageId(message.id)}
+                            className="flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:bg-card"
+                          >
+                            <div className="flex -space-x-2">
+                              {seenReceipts.slice(0, 3).map((receipt) => (
+                                <ProfileAvatar
+                                  key={`${message.id}-${receipt.user_id}`}
+                                  avatar={profilesMap.get(receipt.user_id)?.avatar}
+                                  size="xs"
+                                  className="ring-2 ring-background"
+                                />
+                              ))}
+                            </div>
+                            <span>{getSeenLabel(seenReceipts)}</span>
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
+                            <Check className="h-3 w-3" />
+                            <span>Sent</span>
+                          </div>
+                        )
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -367,17 +501,19 @@ export const Chat = () => {
         </div>
       )}
 
-      <form onSubmit={sendMessage} className="sticky bottom-20 left-0 right-0 bg-card border-t border-border p-4 flex items-center gap-2">
-        <StickerPicker onStickerSelect={handleStickerSelect} disabled={isSending} />
-        <AttachmentPicker userId={user?.id || ''} onAttachmentUploaded={handleAttachmentUploaded} disabled={isSending} />
-        <Input ref={inputRef} value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder={editingMessageId ? "Edit message..." : "Type a message..."} className="flex-1 h-12 rounded-xl bg-muted border-0" disabled={isSending} />
-        {newMessage.trim() || pendingAttachment ? (
-          <Button type="submit" size="icon" className="h-12 w-12 rounded-xl shrink-0" disabled={isSending}>
-            {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          </Button>
-        ) : (
-          <VoiceRecorder onRecordingComplete={uploadVoiceNote} disabled={isSending} />
-        )}
+      <form onSubmit={sendMessage} className="sticky bottom-20 left-0 right-0 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-md">
+        <div className="flex items-center gap-2 rounded-[1.75rem] border border-border/60 bg-card px-3 py-2 shadow-card">
+          <StickerPicker onStickerSelect={handleStickerSelect} disabled={isSending} />
+          <AttachmentPicker userId={user?.id || ''} onAttachmentUploaded={handleAttachmentUploaded} disabled={isSending} />
+          <Input ref={inputRef} value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder={editingMessageId ? "Edit message..." : "Type a message..."} className="h-11 flex-1 border-0 bg-transparent px-1 shadow-none focus-visible:ring-0" disabled={isSending} />
+          {newMessage.trim() || pendingAttachment ? (
+            <Button type="submit" size="icon" className="h-11 w-11 shrink-0 rounded-full" disabled={isSending}>
+              {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+            </Button>
+          ) : (
+            <VoiceRecorder onRecordingComplete={uploadVoiceNote} disabled={isSending} />
+          )}
+        </div>
       </form>
 
       <SeenByDialog open={!!seenDialogMessageId} onOpenChange={(o) => !o && setSeenDialogMessageId(null)} messageId={seenDialogMessageId || ''} />

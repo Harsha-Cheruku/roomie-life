@@ -31,8 +31,12 @@ export interface GameLobby {
 }
 
 const getErrorMessage = (error: any, fallback: string): string => {
+  const code = typeof error?.code === "string" ? error.code : "";
   const message = typeof error?.message === "string" ? error.message : "";
   const normalized = message.toLowerCase();
+  if (code === "PGRST116" || normalized.includes("json object requested") || normalized.includes("0 rows")) {
+    return "Game is already starting. Please wait a moment.";
+  }
   if (normalized.includes("failed to fetch") || normalized.includes("network") || normalized.includes("fetch")) {
     return "Network error. Check your connection and try again.";
   }
@@ -50,9 +54,16 @@ const getErrorMessage = (error: any, fallback: string): string => {
 
 const ensureSession = async (): Promise<boolean> => {
   try {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) return true;
-    const { data: refreshed } = await supabase.auth.refreshSession();
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return false;
+
+    const expiresAt = data.session?.expires_at ? data.session.expires_at * 1000 : 0;
+    const hasFreshSession = !!data.session && (!expiresAt || expiresAt - Date.now() > 60_000);
+
+    if (hasFreshSession) return true;
+
+    const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError) return false;
     return !!refreshed.session;
   } catch {
     return false;
@@ -92,6 +103,7 @@ export const useGameLobby = () => {
   const [players, setPlayers] = useState<LobbyPlayer[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const startInFlightRef = useRef(false);
 
   const fetchPlayers = useCallback(async (lobbyId: string): Promise<LobbyPlayer[]> => {
     const { data, error } = await supabase
@@ -421,16 +433,26 @@ export const useGameLobby = () => {
         return false;
       }
 
+      if (startInFlightRef.current) {
+        return false;
+      }
+
+      startInFlightRef.current = true;
+      setIsLoading(true);
+
       const hasSession = await ensureSession();
       if (!hasSession) {
         toast.error("Session expired. Please sign in again.");
+        startInFlightRef.current = false;
+        setIsLoading(false);
         return false;
       }
 
       try {
         const freshPlayers = await fetchPlayers(lobby.id);
+        const firstPlayerId = freshPlayers[0]?.user_id;
 
-        if (freshPlayers.length < 2) {
+        if (freshPlayers.length < 2 || !firstPlayerId) {
           toast.error("Need at least 2 players to start!");
           return false;
         }
@@ -439,38 +461,46 @@ export const useGameLobby = () => {
           return false;
         }
 
+        const nextUpdatedAt = new Date().toISOString();
+
         const { data: startedLobby, error } = await supabase
           .from("game_lobbies")
           .update({
             status: "playing" as string,
-            current_turn_user_id: freshPlayers[0].user_id,
+            current_turn_user_id: firstPlayerId,
             game_state: initialState as any,
+            updated_at: nextUpdatedAt,
           })
           .eq("id", lobby.id)
           .eq("status", "waiting") // Only transition from waiting
           .select()
-          .single();
+          .maybeSingle();
 
         if (error) {
           console.error("Start game DB error:", error);
           throw error;
         }
-        if (!startedLobby) {
-          toast.error("Game may have already started. Refreshing...");
-          // Try to fetch current state
+
+        let resolvedLobby = startedLobby ? parseLobby(startedLobby) : null;
+
+        if (!resolvedLobby) {
           const { data: currentLobby } = await supabase
             .from("game_lobbies")
             .select("*")
             .eq("id", lobby.id)
-            .single();
-          if (currentLobby) {
-            setLobby(parseLobby(currentLobby));
+            .maybeSingle();
+
+          if (currentLobby?.status === "playing") {
+            resolvedLobby = parseLobby(currentLobby);
           }
+        }
+
+        if (!resolvedLobby) {
+          toast.error("Game is already starting. Please wait a moment.");
           return false;
         }
 
-        const updatedLobby = parseLobby(startedLobby);
-        setLobby(updatedLobby);
+        setLobby(resolvedLobby);
         setPlayers(freshPlayers);
         toast.success("Game started! 🎮");
         return true;
@@ -478,6 +508,9 @@ export const useGameLobby = () => {
         console.error("Start game error:", error);
         toast.error(getErrorMessage(error, "Failed to start game. Try again."));
         return false;
+      } finally {
+        startInFlightRef.current = false;
+        setIsLoading(false);
       }
     },
     [fetchPlayers, lobby, user]
