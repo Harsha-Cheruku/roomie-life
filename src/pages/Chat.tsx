@@ -189,12 +189,13 @@ export const Chat = () => {
     if (!currentRoom) {
       setMessages([]);
       setMessageViews({});
+      setIsLoading(false);
       return;
     }
 
     void fetchRoomMembers();
     void fetchMessages();
-  }, [currentRoom, fetchMessageViews]);
+  }, [currentRoom, fetchMessages, fetchRoomMembers]);
 
   // Mark messages as seen
   const markMessagesSeen = useCallback(async () => {
