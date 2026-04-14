@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS message_views_message_user_unique ON public.message_views (message_id, user_id);
