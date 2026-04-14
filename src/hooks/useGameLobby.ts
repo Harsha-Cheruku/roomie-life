@@ -122,6 +122,29 @@ export const useGameLobby = () => {
     return result;
   }, []);
 
+  const fetchLobbyState = useCallback(async (lobbyId: string): Promise<GameLobby | null> => {
+    const { data, error } = await supabase
+      .from("game_lobbies")
+      .select("*")
+      .eq("id", lobbyId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Fetch lobby error:", error);
+      return null;
+    }
+
+    if (!data) {
+      setLobby(null);
+      setPlayers([]);
+      return null;
+    }
+
+    const result = parseLobby(data);
+    setLobby(result);
+    return result;
+  }, []);
+
   // Subscribe to lobby changes
   useEffect(() => {
     if (!lobby?.id) return;
@@ -138,6 +161,7 @@ export const useGameLobby = () => {
         (payload) => {
           if (payload.eventType === "UPDATE") {
             setLobby(parseLobby(payload.new));
+            void fetchPlayers(lobby.id);
           } else if (payload.eventType === "DELETE") {
             setLobby(null);
             setPlayers([]);
@@ -161,6 +185,17 @@ export const useGameLobby = () => {
       channelRef.current = null;
     };
   }, [fetchPlayers, lobby?.id]);
+
+  useEffect(() => {
+    if (!lobby?.id) return;
+
+    const interval = window.setInterval(() => {
+      void fetchLobbyState(lobby.id);
+      void fetchPlayers(lobby.id);
+    }, lobby.status === "waiting" ? 1500 : 3000);
+
+    return () => window.clearInterval(interval);
+  }, [fetchLobbyState, fetchPlayers, lobby?.id, lobby?.status]);
 
   // Clear lobby if room changes
   useEffect(() => {
@@ -440,14 +475,24 @@ export const useGameLobby = () => {
       }
 
       try {
-        const freshPlayers = await fetchPlayers(lobby.id);
-        const firstPlayerId = freshPlayers[0]?.user_id;
+        let readyPlayers = players.length
+          ? [...players].sort((a, b) => a.player_order - b.player_order)
+          : await fetchPlayers(lobby.id);
 
-        if (freshPlayers.length < 2 || !firstPlayerId) {
+        if (readyPlayers.length < 2 || !readyPlayers.every((player) => player.is_ready)) {
+          const latestPlayers = await fetchPlayers(lobby.id);
+          if (latestPlayers.length > 0) {
+            readyPlayers = latestPlayers;
+          }
+        }
+
+        const firstPlayerId = readyPlayers[0]?.user_id;
+
+        if (readyPlayers.length < 2 || !firstPlayerId) {
           toast.error("Need at least 2 players to start!");
           return false;
         }
-        if (!freshPlayers.every((p) => p.is_ready)) {
+        if (!readyPlayers.every((p) => p.is_ready)) {
           toast.error("All players must be ready!");
           return false;
         }
@@ -460,9 +505,9 @@ export const useGameLobby = () => {
           game_state: initialState,
         };
         setLobby(optimisticLobby);
-        setPlayers(freshPlayers);
+        setPlayers(readyPlayers);
 
-        const { error } = await supabase
+        const { data: updatedLobbyRow, error } = await supabase
           .from("game_lobbies")
           .update({
             status: "playing" as string,
@@ -471,7 +516,9 @@ export const useGameLobby = () => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", lobby.id)
-          .eq("status", "waiting");
+          .eq("status", "waiting")
+          .select("*")
+          .maybeSingle();
 
         if (error) {
           console.error("Start game DB error:", error);
@@ -480,6 +527,26 @@ export const useGameLobby = () => {
           toast.error("Failed to start game. Try again.");
           return false;
         }
+
+        const confirmedLobby = updatedLobbyRow
+          ? parseLobby(updatedLobbyRow)
+          : await fetchLobbyState(lobby.id);
+
+        if (!confirmedLobby || confirmedLobby.status !== "playing") {
+          setLobby(lobby);
+          toast.error("Failed to start game. Try again.");
+          return false;
+        }
+
+        setLobby({
+          ...confirmedLobby,
+          current_turn_user_id: confirmedLobby.current_turn_user_id ?? firstPlayerId,
+          game_state:
+            Object.keys(confirmedLobby.game_state || {}).length > 0
+              ? confirmedLobby.game_state
+              : initialState,
+        });
+        await fetchPlayers(confirmedLobby.id);
 
         toast.success("Game started! 🎮");
         return true;
@@ -494,7 +561,7 @@ export const useGameLobby = () => {
         setIsLoading(false);
       }
     },
-    [fetchPlayers, lobby, user]
+    [fetchLobbyState, fetchPlayers, lobby, players, user]
   );
 
   const updateGameState = useCallback(
