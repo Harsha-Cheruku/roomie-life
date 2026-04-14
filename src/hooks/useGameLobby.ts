@@ -344,18 +344,6 @@ export const useGameLobby = () => {
 
         const foundLobby = parseLobby(lobbies[0]);
 
-        // Check player count
-        const { data: existingPlayers } = await supabase
-          .from("game_lobby_players")
-          .select("id")
-          .eq("lobby_id", foundLobby.id);
-
-        const playerCount = existingPlayers?.length || 0;
-        if (playerCount >= foundLobby.max_players) {
-          toast.error("Game is full!");
-          return null;
-        }
-
         // Check if already joined
         const { data: alreadyIn } = await supabase
           .from("game_lobby_players")
@@ -370,11 +358,17 @@ export const useGameLobby = () => {
           return foundLobby;
         }
 
-        // Leave any other lobbies first
-        await supabase
+        // Check player count
+        const { data: existingPlayers } = await supabase
           .from("game_lobby_players")
-          .delete()
-          .eq("user_id", user.id);
+          .select("id")
+          .eq("lobby_id", foundLobby.id);
+
+        const playerCount = existingPlayers?.length || 0;
+        if (playerCount >= foundLobby.max_players) {
+          toast.error("Game is full!");
+          return null;
+        }
 
         const { error: joinError } = await supabase
           .from("game_lobby_players")
@@ -433,10 +427,7 @@ export const useGameLobby = () => {
         return false;
       }
 
-      if (startInFlightRef.current) {
-        return false;
-      }
-
+      if (startInFlightRef.current) return false;
       startInFlightRef.current = true;
       setIsLoading(true);
 
@@ -461,51 +452,41 @@ export const useGameLobby = () => {
           return false;
         }
 
-        const nextUpdatedAt = new Date().toISOString();
+        // Optimistic UI: immediately show "playing" state for host
+        const optimisticLobby: GameLobby = {
+          ...lobby,
+          status: "playing",
+          current_turn_user_id: firstPlayerId,
+          game_state: initialState,
+        };
+        setLobby(optimisticLobby);
+        setPlayers(freshPlayers);
 
-        const { data: startedLobby, error } = await supabase
+        const { error } = await supabase
           .from("game_lobbies")
           .update({
             status: "playing" as string,
             current_turn_user_id: firstPlayerId,
             game_state: initialState as any,
-            updated_at: nextUpdatedAt,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", lobby.id)
-          .eq("status", "waiting") // Only transition from waiting
-          .select()
-          .maybeSingle();
+          .eq("status", "waiting");
 
         if (error) {
           console.error("Start game DB error:", error);
-          throw error;
-        }
-
-        let resolvedLobby = startedLobby ? parseLobby(startedLobby) : null;
-
-        if (!resolvedLobby) {
-          const { data: currentLobby } = await supabase
-            .from("game_lobbies")
-            .select("*")
-            .eq("id", lobby.id)
-            .maybeSingle();
-
-          if (currentLobby?.status === "playing") {
-            resolvedLobby = parseLobby(currentLobby);
-          }
-        }
-
-        if (!resolvedLobby) {
-          toast.error("Game is already starting. Please wait a moment.");
+          // Revert optimistic update
+          setLobby(lobby);
+          toast.error("Failed to start game. Try again.");
           return false;
         }
 
-        setLobby(resolvedLobby);
-        setPlayers(freshPlayers);
         toast.success("Game started! 🎮");
         return true;
       } catch (error) {
         console.error("Start game error:", error);
+        // Revert optimistic update
+        setLobby(lobby);
         toast.error(getErrorMessage(error, "Failed to start game. Try again."));
         return false;
       } finally {
