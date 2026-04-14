@@ -64,6 +64,24 @@ const mergeSeenReceipts = (
   return next;
 };
 
+const messagesAreEqual = (current: Message[], next: Message[]) => {
+  if (current.length !== next.length) return false;
+
+  return current.every((message, index) => {
+    const candidate = next[index];
+
+    return (
+      candidate &&
+      message.id === candidate.id &&
+      message.content === candidate.content &&
+      message.message_type === candidate.message_type &&
+      message.created_at === candidate.created_at &&
+      message.edited_at === candidate.edited_at &&
+      message.deleted_at === candidate.deleted_at
+    );
+  });
+};
+
 export const Chat = () => {
   const { user, currentRoom } = useAuth();
   const { toast: toastHook } = useToast();
@@ -110,6 +128,63 @@ export const Chat = () => {
     setMessageViews(mergeSeenReceipts({}, (data || []) as SeenReceipt[]));
   }, []);
 
+  const fetchRoomMembers = useCallback(async () => {
+    if (!currentRoom) return;
+
+    const { data: membersData } = await supabase
+      .from('room_members')
+      .select('user_id')
+      .eq('room_id', currentRoom.id);
+
+    const userIds = membersData?.map((member) => member.user_id) || [];
+
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, avatar')
+      .in('user_id', userIds);
+
+    const members = userIds.map((userId) => {
+      const profile = profilesData?.find((item) => item.user_id === userId);
+      return {
+        user_id: userId,
+        profile: {
+          display_name: profile?.display_name || 'Unknown',
+          avatar: profile?.avatar || '😊',
+        },
+      };
+    });
+
+    setRoomMembers(members);
+
+    const nextProfilesMap = new Map<string, { display_name: string; avatar: string }>();
+    members.forEach((member) => nextProfilesMap.set(member.user_id, member.profile));
+    setProfilesMap(nextProfilesMap);
+  }, [currentRoom]);
+
+  const fetchMessages = useCallback(async (options?: { silent?: boolean }) => {
+    if (!currentRoom) return;
+    if (!options?.silent) setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('room_id', currentRoom.id)
+        .order('created_at', { ascending: true })
+        .limit(100);
+
+      if (error) throw error;
+
+      const nextMessages = data || [];
+      setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
+      await fetchMessageViews(nextMessages);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      if (!options?.silent) setIsLoading(false);
+    }
+  }, [currentRoom, fetchMessageViews]);
+
   useEffect(() => {
     if (!currentRoom) {
       setMessages([]);
@@ -151,7 +226,7 @@ export const Chat = () => {
 
   // Realtime subscription
   useEffect(() => {
-    if (!currentRoom || profilesMap.size === 0) return;
+    if (!currentRoom) return;
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
     const channel = supabase
@@ -192,35 +267,17 @@ export const Chat = () => {
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
   }, [currentRoom, profilesMap, user?.id, toastHook]);
 
+  useEffect(() => {
+    if (!currentRoom) return;
+
+    const interval = window.setInterval(() => {
+      void fetchMessages({ silent: true });
+    }, 3500);
+
+    return () => window.clearInterval(interval);
+  }, [currentRoom, fetchMessages]);
+
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
-
-  const fetchRoomMembers = async () => {
-    if (!currentRoom) return;
-    const { data: membersData } = await supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id);
-    const userIds = membersData?.map(m => m.user_id) || [];
-    const { data: profilesData } = await supabase.from('profiles').select('user_id, display_name, avatar').in('user_id', userIds);
-    const members = userIds.map(userId => {
-      const profile = profilesData?.find(p => p.user_id === userId);
-      return { user_id: userId, profile: { display_name: profile?.display_name || 'Unknown', avatar: profile?.avatar || '😊' } };
-    });
-    setRoomMembers(members);
-    const map = new Map<string, { display_name: string; avatar: string }>();
-    members.forEach(m => map.set(m.user_id, m.profile));
-    setProfilesMap(map);
-  };
-
-  const fetchMessages = async () => {
-    if (!currentRoom) return;
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase.from('messages').select('*').eq('room_id', currentRoom.id).order('created_at', { ascending: true }).limit(100);
-      if (error) throw error;
-      const nextMessages = data || [];
-      setMessages(nextMessages);
-      await fetchMessageViews(nextMessages);
-    } catch (error) { console.error('Error fetching messages:', error); }
-    finally { setIsLoading(false); }
-  };
 
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
@@ -254,14 +311,54 @@ export const Chat = () => {
   };
 
   const handleEditMessage = async (messageId: string, newContent: string) => {
-    if (!newContent.trim()) return;
-    await supabase.from('messages').update({ content: newContent, edited_at: new Date().toISOString() }).eq('id', messageId);
+    const trimmedContent = newContent.trim();
+    if (!trimmedContent) return;
+
+    const editedAt = new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId
+          ? { ...message, content: trimmedContent, edited_at: editedAt }
+          : message
+      )
+    );
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ content: trimmedContent, edited_at: editedAt })
+      .eq('id', messageId);
+
+    if (error) {
+      console.error('Error editing message:', error);
+      toast.error('Failed to edit message');
+      await fetchMessages({ silent: true });
+      return;
+    }
+
     setEditingMessageId(null);
     setNewMessage('');
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    await supabase.from('messages').update({ deleted_at: new Date().toISOString(), content: 'This message was deleted' }).eq('id', messageId);
+    const deletedAt = new Date().toISOString();
+    setMessages((prev) =>
+      prev.map((message) =>
+        message.id === messageId
+          ? { ...message, deleted_at: deletedAt, content: 'This message was deleted' }
+          : message
+      )
+    );
+
+    const { error } = await supabase
+      .from('messages')
+      .update({ deleted_at: deletedAt, content: 'This message was deleted' })
+      .eq('id', messageId);
+
+    if (error) {
+      console.error('Error deleting message:', error);
+      toast.error('Failed to delete message');
+      await fetchMessages({ silent: true });
+    }
   };
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -339,7 +436,7 @@ export const Chat = () => {
     if (message.message_type === 'text') {
       return (
         <div>
-          <p className="text-sm break-words">{message.content}</p>
+          <p className="text-sm break-words whitespace-pre-wrap">{message.content}</p>
           {message.edited_at && <span className="text-[9px] opacity-50 italic">edited</span>}
         </div>
       );
@@ -348,7 +445,7 @@ export const Chat = () => {
     if (['image', 'voice', 'file'].includes(message.message_type)) {
       return <SecureAttachment filePath={attachment.filePath} type={message.message_type as any} fileName={attachment.fileName} isOwnMessage={isOwnMessage} />;
     }
-    return <p className="text-sm break-words">{message.content}</p>;
+    return <p className="text-sm break-words whitespace-pre-wrap">{message.content}</p>;
   };
 
   const handleTabChange = (tab: string) => {
@@ -418,7 +515,7 @@ export const Chat = () => {
                       </div>
                     )}
 
-                    <div className={cn('flex max-w-[82%] flex-col gap-1', isOwnMessage ? 'items-end' : 'items-start')}>
+                    <div className={cn('flex min-w-0 max-w-[78%] flex-col gap-1 sm:max-w-[72%]', isOwnMessage ? 'items-end' : 'items-start')}>
                       <MessageActionsMenu
                         isOwnMessage={isOwnMessage}
                         messageContent={message.content}
@@ -460,7 +557,7 @@ export const Chat = () => {
                           <button
                             type="button"
                             onClick={() => setSeenDialogMessageId(message.id)}
-                            className="flex items-center gap-2 rounded-full border border-border/60 bg-card/80 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:bg-card"
+                            className="flex max-w-full items-center gap-2 rounded-full border border-border/60 bg-card/80 px-2.5 py-1 text-[11px] text-muted-foreground shadow-sm transition-colors hover:bg-card"
                           >
                             <div className="flex -space-x-2">
                               {seenReceipts.slice(0, 3).map((receipt) => (

@@ -268,9 +268,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
                         onClick={() => onTaskClick?.(task)}
                         className="w-full flex items-center gap-3 p-3 rounded-xl bg-muted/50 hover:bg-muted transition-colors text-left"
                       >
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm">
-                          {task.assignee_profile?.avatar || "😊"}
-                        </div>
+                        <ProfileAvatar avatar={task.assignee_profile?.avatar} size="sm" />
                         <div className="flex-1 min-w-0">
                           <p className={cn(
                             "font-medium text-sm truncate",
