@@ -138,10 +138,12 @@ export const Chat = () => {
       seen_at: seenAt,
     }));
 
-    const { error } = await supabase.from('message_views').upsert(payload, { onConflict: 'message_id,user_id' });
+    const { error } = await supabase.from('message_views').upsert(payload, { onConflict: 'message_id,user_id', ignoreDuplicates: true });
 
     if (!error) {
       setMessageViews((prev) => mergeSeenReceipts(prev, payload));
+    } else {
+      console.error('Error marking messages seen:', error);
     }
   }, [currentRoom, messageViews, messages, user]);
 
