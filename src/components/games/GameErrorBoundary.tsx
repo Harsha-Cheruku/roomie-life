@@ -1,6 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { AlertTriangle, RotateCcw, ArrowLeft } from "lucide-react";
 
 interface Props {
@@ -25,7 +24,18 @@ export class GameErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Game crash caught by ErrorBoundary:", error, errorInfo);
+    console.error("[Games] crash caught by ErrorBoundary", {
+      gameName: this.props.gameName,
+      message: error.message,
+      stack: error.stack,
+      componentStack: errorInfo.componentStack,
+    });
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.hasError && prevProps.gameName !== this.props.gameName) {
+      this.setState({ hasError: false, error: null });
+    }
   }
 
   handleRetry = () => {
@@ -37,7 +47,7 @@ export class GameErrorBoundary extends Component<Props, State> {
       return (
         <div className="space-y-4 text-center py-6">
           <AlertTriangle className="h-12 w-12 mx-auto text-destructive" />
-          <h3 className="text-lg font-bold">Game encountered an error</h3>
+          <h3 className="text-lg font-bold">{this.props.gameName || "Game"} encountered an error</h3>
           <p className="text-sm text-muted-foreground max-w-xs mx-auto">
             Something went wrong. Please try again or go back to the menu.
           </p>

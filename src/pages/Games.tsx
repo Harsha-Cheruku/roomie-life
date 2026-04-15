@@ -264,22 +264,22 @@ export default function Games() {
   const renderGame = () => {
     switch (currentGame) {
       case 'snakes': return (
-        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Snakes & Ladders">
+        <GameErrorBoundary key="snakes" onBack={() => switchGame('menu')} gameName="Snakes & Ladders">
           <SnakesAndLadders onBack={() => switchGame('menu')} gameLobby={gameLobby} />
         </GameErrorBoundary>
       );
       case 'ludo': return (
-        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Ludo">
+        <GameErrorBoundary key="ludo" onBack={() => switchGame('menu')} gameName="Ludo">
           <LudoGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
         </GameErrorBoundary>
       );
       case 'chopat': return (
-        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Chopat">
+        <GameErrorBoundary key="chopat" onBack={() => switchGame('menu')} gameName="Chopat">
           <ChopathGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
         </GameErrorBoundary>
       );
       case 'kabaddi': return (
-        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Kabaddi Tap">
+        <GameErrorBoundary key="kabaddi" onBack={() => switchGame('menu')} gameName="Kabaddi Tap">
           <KabaddiTapGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
         </GameErrorBoundary>
       );

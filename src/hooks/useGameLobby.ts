@@ -490,8 +490,9 @@ export const useGameLobby = () => {
           return false;
         }
 
-        // DB write first, then update UI (no optimistic update to avoid flash-revert)
-        const { data: updatedRow, error } = await supabase
+        // Use array returning here instead of maybeSingle() because object-mode responses
+        // on UPDATE can be flaky and falsely surface start failures.
+        const { data: updatedRows, error } = await supabase
           .from("game_lobbies")
           .update({
             status: "playing" as string,
@@ -501,14 +502,24 @@ export const useGameLobby = () => {
           })
           .eq("id", lobby.id)
           .eq("status", "waiting")
-          .select("*")
-          .maybeSingle();
+          .select("*");
 
         if (error) {
-          console.error("Start game DB error:", error);
+          console.error("Start game DB error:", {
+            error,
+            lobbyId: lobby.id,
+            hostId: user.id,
+            readyPlayers: readyPlayers.map((player) => ({
+              userId: player.user_id,
+              ready: player.is_ready,
+            })),
+            firstPlayerId,
+          });
           toast.error("Failed to start game. Try again.");
           return false;
         }
+
+        const updatedRow = updatedRows?.[0] ?? null;
 
         if (!updatedRow) {
           // Lobby might already be started - check current state
@@ -519,6 +530,15 @@ export const useGameLobby = () => {
             await fetchPlayers(current.id);
             return true;
           }
+          console.error("Start game returned no rows after update:", {
+            lobbyId: lobby.id,
+            hostId: user.id,
+            readyPlayers: readyPlayers.map((player) => ({
+              userId: player.user_id,
+              ready: player.is_ready,
+            })),
+            firstPlayerId,
+          });
           toast.error("Game couldn't be started. Try again.");
           return false;
         }
