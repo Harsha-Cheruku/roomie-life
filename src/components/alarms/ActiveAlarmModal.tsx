@@ -149,6 +149,41 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
         return;
       }
 
+      // Log the dismissal for audit trail
+      try {
+        await supabase.from("alarm_audit_logs").insert({
+          alarm_id: alarm.id,
+          trigger_id: trigger.id,
+          user_id: userId,
+          action: "dismissed",
+          details: {
+            ring_count: ringCount,
+            is_owner: isOwnerUser,
+            dismissed_at: new Date().toISOString(),
+          },
+        });
+      } catch (auditErr) {
+        console.warn("Failed to log alarm audit:", auditErr);
+      }
+
+      // Notify alarm owner if someone else dismissed it
+      if (!isOwnerUser) {
+        try {
+          await supabase.from("notifications").insert({
+            user_id: alarm.created_by,
+            room_id: alarm.room_id || "",
+            type: "alarm",
+            title: "⚠️ Alarm stopped by roommate",
+            body: `Your alarm "${alarm.title}" was stopped by a roommate at ring #${ringCount}.`,
+            reference_type: "alarm",
+            reference_id: alarm.id,
+            is_read: false,
+          });
+        } catch (notifyErr) {
+          console.warn("Failed to notify alarm owner:", notifyErr);
+        }
+      }
+
       toast.success("Alarm dismissed!");
       hasClosedRef.current = true;
       onDismissed();
