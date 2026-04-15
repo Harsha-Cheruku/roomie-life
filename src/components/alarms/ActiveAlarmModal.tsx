@@ -27,6 +27,7 @@ interface Alarm {
   condition_type: string;
   condition_value: number;
   created_by: string;
+  room_id: string;
   owner_device_id?: string | null;
 }
 
