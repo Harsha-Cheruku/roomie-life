@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Bell, BellOff, Volume2, VolumeX } from "lucide-react";
+import { Slider } from "@/components/ui/slider";
+import { Bell, BellOff, Volume2, VolumeX, Volume1 } from "lucide-react";
 import { toast } from "sonner";
 import { useDeviceId } from "@/hooks/useDeviceId";
 import { useAuth } from "@/contexts/AuthContext";
@@ -27,6 +28,7 @@ interface Alarm {
   condition_type: string;
   condition_value: number;
   created_by: string;
+  room_id: string;
   owner_device_id?: string | null;
 }
 
@@ -41,9 +43,10 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
   const { user } = useAuth();
   const userId = user?.id;
   const deviceId = useDeviceId();
-  const { stopAlarm: stopWebAlarm } = useAlarmSound();
+  const { stopAlarm: stopWebAlarm, setVolume } = useAlarmSound();
   const { isNative, stopAlarm: stopNativeAlarm } = useNativeAlarm();
   const triggeredAtMs = useMemo(() => new Date(trigger.triggered_at).getTime(), [trigger.triggered_at]);
+  const [alarmVolume, setAlarmVolume] = useState(100);
 
   const [ringCount, setRingCount] = useState<number>(() => {
     const diff = Date.now() - triggeredAtMs;
@@ -149,6 +152,41 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
         return;
       }
 
+      // Log the dismissal for audit trail
+      try {
+        await supabase.from("alarm_audit_logs").insert({
+          alarm_id: alarm.id,
+          trigger_id: trigger.id,
+          user_id: userId,
+          action: "dismissed",
+          details: {
+            ring_count: ringCount,
+            is_owner: isOwnerUser,
+            dismissed_at: new Date().toISOString(),
+          },
+        });
+      } catch (auditErr) {
+        console.warn("Failed to log alarm audit:", auditErr);
+      }
+
+      // Notify alarm owner if someone else dismissed it
+      if (!isOwnerUser) {
+        try {
+          await supabase.from("notifications").insert({
+            user_id: alarm.created_by,
+            room_id: alarm.room_id || "",
+            type: "alarm",
+            title: "⚠️ Alarm stopped by roommate",
+            body: `Your alarm "${alarm.title}" was stopped by a roommate at ring #${ringCount}.`,
+            reference_type: "alarm",
+            reference_id: alarm.id,
+            is_read: false,
+          });
+        } catch (notifyErr) {
+          console.warn("Failed to notify alarm owner:", notifyErr);
+        }
+      }
+
       toast.success("Alarm dismissed!");
       hasClosedRef.current = true;
       onDismissed();
@@ -208,6 +246,25 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
             <Volume2 className="h-3 w-3" />
             Ring #{ringCount}
           </Badge>
+
+          {/* Volume Control */}
+          {isOwnerDevice && (
+            <div className="flex items-center gap-3 px-4">
+              <Volume1 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+              <Slider
+                value={[alarmVolume]}
+                onValueChange={([v]) => {
+                  setAlarmVolume(v);
+                  setVolume(v / 100);
+                }}
+                min={0}
+                max={100}
+                step={5}
+                className="flex-1"
+              />
+              <span className="text-xs text-muted-foreground w-8">{alarmVolume}%</span>
+            </div>
+          )}
 
           <Button
             onClick={handleDismiss}

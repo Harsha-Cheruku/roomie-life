@@ -466,29 +466,16 @@ export const useGameLobby = () => {
       startInFlightRef.current = true;
       setIsLoading(true);
 
-      const hasSession = await ensureSession();
-      if (!hasSession) {
-        toast.error("Session expired. Please sign in again.");
-        startInFlightRef.current = false;
-        setIsLoading(false);
-        return false;
-      }
-
       try {
-        let readyPlayers = players.length
-          ? [...players].sort((a, b) => a.player_order - b.player_order)
-          : await fetchPlayers(lobby.id);
-
-        if (readyPlayers.length < 2 || !readyPlayers.every((player) => player.is_ready)) {
-          const latestPlayers = await fetchPlayers(lobby.id);
-          if (latestPlayers.length > 0) {
-            readyPlayers = latestPlayers;
-          }
+        const hasSession = await ensureSession();
+        if (!hasSession) {
+          toast.error("Session expired. Please sign in again.");
+          return false;
         }
 
-        const firstPlayerId = readyPlayers[0]?.user_id;
-
-        if (readyPlayers.length < 2 || !firstPlayerId) {
+        // Always fetch fresh players to avoid stale state
+        let readyPlayers = await fetchPlayers(lobby.id);
+        if (readyPlayers.length < 2) {
           toast.error("Need at least 2 players to start!");
           return false;
         }
@@ -497,17 +484,14 @@ export const useGameLobby = () => {
           return false;
         }
 
-        // Optimistic UI: immediately show "playing" state for host
-        const optimisticLobby: GameLobby = {
-          ...lobby,
-          status: "playing",
-          current_turn_user_id: firstPlayerId,
-          game_state: initialState,
-        };
-        setLobby(optimisticLobby);
-        setPlayers(readyPlayers);
+        const firstPlayerId = readyPlayers[0]?.user_id;
+        if (!firstPlayerId) {
+          toast.error("No players found!");
+          return false;
+        }
 
-        const { data: updatedLobbyRow, error } = await supabase
+        // DB write first, then update UI (no optimistic update to avoid flash-revert)
+        const { data: updatedRow, error } = await supabase
           .from("game_lobbies")
           .update({
             status: "playing" as string,
@@ -522,22 +506,24 @@ export const useGameLobby = () => {
 
         if (error) {
           console.error("Start game DB error:", error);
-          // Revert optimistic update
-          setLobby(lobby);
           toast.error("Failed to start game. Try again.");
           return false;
         }
 
-        const confirmedLobby = updatedLobbyRow
-          ? parseLobby(updatedLobbyRow)
-          : await fetchLobbyState(lobby.id);
-
-        if (!confirmedLobby || confirmedLobby.status !== "playing") {
-          setLobby(lobby);
-          toast.error("Failed to start game. Try again.");
+        if (!updatedRow) {
+          // Lobby might already be started - check current state
+          const current = await fetchLobbyState(lobby.id);
+          if (current?.status === "playing") {
+            // Already started (race condition) - just sync
+            setLobby(current);
+            await fetchPlayers(current.id);
+            return true;
+          }
+          toast.error("Game couldn't be started. Try again.");
           return false;
         }
 
+        const confirmedLobby = parseLobby(updatedRow);
         setLobby({
           ...confirmedLobby,
           current_turn_user_id: confirmedLobby.current_turn_user_id ?? firstPlayerId,
@@ -546,14 +532,12 @@ export const useGameLobby = () => {
               ? confirmedLobby.game_state
               : initialState,
         });
-        await fetchPlayers(confirmedLobby.id);
+        setPlayers(readyPlayers);
 
         toast.success("Game started! 🎮");
         return true;
       } catch (error) {
         console.error("Start game error:", error);
-        // Revert optimistic update
-        setLobby(lobby);
         toast.error(getErrorMessage(error, "Failed to start game. Try again."));
         return false;
       } finally {

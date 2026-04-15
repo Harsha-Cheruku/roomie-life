@@ -21,6 +21,7 @@ import { SnakesAndLadders } from "@/components/games/SnakesAndLadders";
 import { LudoGame } from "@/components/games/LudoGame";
 import { ChopathGame } from "@/components/games/ChopathGame";
 import { KabaddiTapGame } from "@/components/games/KabaddiTapGame";
+import { GameErrorBoundary } from "@/components/games/GameErrorBoundary";
 
 type GameType = 'menu' | 'tictactoe' | 'memory' | 'reaction' | 'dice' | 'stats' | 'snakes' | 'ludo' | 'chopat' | 'kabaddi';
 
@@ -37,6 +38,17 @@ export default function Games() {
   const { saveGameResult } = useGameStats();
   const gameLobby = useGameLobby();
   const [currentGame, setCurrentGame] = useState<GameType>('menu');
+
+  // Clear lobby state when switching to a different game or back to menu
+  const switchGame = (game: GameType) => {
+    if (game === 'menu' || (gameLobby.lobby && !['snakes', 'ludo', 'chopat', 'kabaddi'].includes(game))) {
+      // Only clear lobby when going to menu or switching to a local game
+      if (game === 'menu' && gameLobby.lobby) {
+        // Don't auto-clear; user might want to come back
+      }
+    }
+    setCurrentGame(game);
+  };
   
   // Global join code
   const [joinCodeInput, setJoinCodeInput] = useState("");
@@ -251,10 +263,26 @@ export default function Games() {
 
   const renderGame = () => {
     switch (currentGame) {
-      case 'snakes': return <SnakesAndLadders onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'ludo': return <LudoGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'chopat': return <ChopathGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
-      case 'kabaddi': return <KabaddiTapGame onBack={() => setCurrentGame('menu')} gameLobby={gameLobby} />;
+      case 'snakes': return (
+        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Snakes & Ladders">
+          <SnakesAndLadders onBack={() => switchGame('menu')} gameLobby={gameLobby} />
+        </GameErrorBoundary>
+      );
+      case 'ludo': return (
+        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Ludo">
+          <LudoGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
+        </GameErrorBoundary>
+      );
+      case 'chopat': return (
+        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Chopat">
+          <ChopathGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
+        </GameErrorBoundary>
+      );
+      case 'kabaddi': return (
+        <GameErrorBoundary onBack={() => switchGame('menu')} gameName="Kabaddi Tap">
+          <KabaddiTapGame onBack={() => switchGame('menu')} gameLobby={gameLobby} />
+        </GameErrorBoundary>
+      );
       
       case 'tictactoe':
         return (
@@ -492,7 +520,7 @@ export default function Games() {
       <TopBar 
         title={currentGame === 'menu' ? 'Games' : undefined}
         showBack={true}
-        onBack={() => currentGame === 'menu' ? navigate('/') : setCurrentGame('menu')}
+        onBack={() => currentGame === 'menu' ? navigate('/') : switchGame('menu')}
         hint="Play games with your roommates! 🎮"
       />
       <div className="p-4 max-w-2xl mx-auto">
