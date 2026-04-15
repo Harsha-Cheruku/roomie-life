@@ -43,6 +43,51 @@ export type Database = {
           },
         ]
       }
+      alarm_audit_logs: {
+        Row: {
+          action: string
+          alarm_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          trigger_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          alarm_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          trigger_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          alarm_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          trigger_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alarm_audit_logs_alarm_id_fkey"
+            columns: ["alarm_id"]
+            isOneToOne: false
+            referencedRelation: "alarms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alarm_audit_logs_trigger_id_fkey"
+            columns: ["trigger_id"]
+            isOneToOne: false
+            referencedRelation: "alarm_triggers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alarm_triggers: {
         Row: {
           alarm_id: string
