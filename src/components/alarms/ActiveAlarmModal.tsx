@@ -257,6 +257,18 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
                   setAlarmVolume(v);
                   setVolume(v / 100);
                 }}
+                onValueCommit={([v]) => {
+                  // Log volume change for audit
+                  if (userId) {
+                    supabase.from("alarm_audit_logs").insert({
+                      alarm_id: alarm.id,
+                      trigger_id: trigger.id,
+                      user_id: userId,
+                      action: "volume_change",
+                      details: { volume: v, is_owner: isOwnerUser },
+                    }).then(() => {}).catch(() => {});
+                  }
+                }}
                 min={0}
                 max={100}
                 step={5}
