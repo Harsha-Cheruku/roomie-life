@@ -384,10 +384,12 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
     return true;
   }, []);
 
-  const getNextPlayer = useCallback((): string => {
+  const getNextPlayer = useCallback((): string | null => {
     const currentUser = userRef.current;
     const currentPlayers = playersRef.current;
-    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser?.id);
+    if (!currentUser || currentPlayers.length === 0) return null;
+    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
+    if (idx < 0) return currentPlayers[0].user_id;
     return currentPlayers[(idx + 1) % currentPlayers.length].user_id;
   }, []);
 
@@ -416,7 +418,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   const handleDiceResult = async (dice: number) => {
     const currentUser = userRef.current;
     const currentLobby = lobbyRef.current;
-    if (!currentUser || !currentLobby) { moveInProgressRef.current = false; return; }
+    if (!currentUser || !currentLobby || playersRef.current.length === 0) { moveInProgressRef.current = false; return; }
 
     const myState = playerStatesRef.current[currentUser.id];
     if (!myState) { moveInProgressRef.current = false; return; }
@@ -425,6 +427,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
 
     if (!canMove) {
       const nextPlayer = getNextPlayer();
+      if (!nextPlayer) { moveInProgressRef.current = false; return; }
       await updateGameStateRef.current(
         { playerStates: playerStatesRef.current, winner: winnerRef.current, lastDice: dice, hasRolled: false, message: `No valid moves. Turn passed.` },
         nextPlayer
