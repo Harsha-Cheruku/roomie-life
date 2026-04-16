@@ -241,7 +241,11 @@ export default function Alarms() {
         )}
       </div>
 
-      <DeleteConfirmDialog
+      {/* Alarm Activity Log */}
+      <div className="px-4 pb-4">
+        <AlarmAuditLog roomId={roomId} />
+      </div>
+
         open={!!deleteAlarmId}
         onOpenChange={(open) => !open && setDeleteAlarmId(null)}
         onConfirm={() => deleteAlarmId ? deleteAlarm(deleteAlarmId) : Promise.resolve()}
