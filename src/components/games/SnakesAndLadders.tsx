@@ -118,10 +118,12 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: SnakesAndLaddersProps) =
     if (newPos > 100) {
       msg = `Rolled ${dice} — need exact number to win!`;
       const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
-      const nextIdx = (currentIdx + 1) % currentPlayers.length;
+      const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentPlayers.length : 0;
+      const nextPlayerId = currentPlayers[nextIdx]?.user_id;
+      if (!nextPlayerId) { moveInProgressRef.current = false; return; }
       const success = await updateGameStateRef.current(
         { positions: currentPositions, winner: null, lastDice: dice, message: msg },
-        currentPlayers[nextIdx].user_id
+        nextPlayerId
       );
       if (!success) moveInProgressRef.current = false;
       return;
@@ -154,10 +156,12 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: SnakesAndLaddersProps) =
 
     const newPositions = { ...currentPositions, [currentUser.id]: newPos };
     const currentIdx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
-    const nextIdx = (currentIdx + 1) % currentPlayers.length;
+    const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % currentPlayers.length : 0;
+    const nextPlayerId = currentPlayers[nextIdx]?.user_id;
+    if (!nextPlayerId) { moveInProgressRef.current = false; return; }
     const success = await updateGameStateRef.current(
       { positions: newPositions, winner: null, lastDice: dice, message: msg },
-      currentPlayers[nextIdx].user_id
+      nextPlayerId
     );
     if (!success) moveInProgressRef.current = false;
   };
