@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { useNotifications } from "@/hooks/useNotifications";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { AlarmAuditLog } from "@/components/alarms/AlarmAuditLog";
 
 interface Alarm {
   id: string;
