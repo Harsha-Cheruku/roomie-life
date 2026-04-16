@@ -507,7 +507,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
       nextPlayer = user.id;
       msg = "Rolled 6 — extra turn!";
     } else {
-      nextPlayer = getNextPlayer();
+      nextPlayer = getNextPlayer() ?? undefined;
       msg = "";
     }
 
