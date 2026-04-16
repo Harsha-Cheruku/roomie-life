@@ -108,7 +108,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: SnakesAndLaddersProps) =
     const currentUser = userRef.current;
     const currentLobby = lobbyRef.current;
     const currentPlayers = playersRef.current;
-    if (!currentUser || !currentLobby) { moveInProgressRef.current = false; return; }
+    if (!currentUser || !currentLobby || currentPlayers.length === 0) { moveInProgressRef.current = false; return; }
 
     const currentPositions = { ...positionsRef.current };
     const currentPos = currentPositions[currentUser.id] || 0;
