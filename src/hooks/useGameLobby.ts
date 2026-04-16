@@ -56,12 +56,9 @@ const ensureSession = async (): Promise<boolean> => {
   try {
     const { data, error } = await supabase.auth.getSession();
     if (error) return false;
-
     const expiresAt = data.session?.expires_at ? data.session.expires_at * 1000 : 0;
     const hasFreshSession = !!data.session && (!expiresAt || expiresAt - Date.now() > 60_000);
-
     if (hasFreshSession) return true;
-
     const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) return false;
     return !!refreshed.session;
@@ -88,7 +85,7 @@ const parsePlayer = (p: any): LobbyPlayer => ({
   id: p.id,
   lobby_id: p.lobby_id,
   user_id: p.user_id,
-  display_name: p.display_name,
+  display_name: p.display_name || "Player",
   avatar: p.avatar || "😊",
   player_order: p.player_order,
   is_ready: p.is_ready,
@@ -104,45 +101,61 @@ export const useGameLobby = () => {
   const [isLoading, setIsLoading] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const startInFlightRef = useRef(false);
+  // Suppress polling updates for 3s after startGame to avoid overwriting
+  const suppressPollUntilRef = useRef(0);
 
   const fetchPlayers = useCallback(async (lobbyId: string): Promise<LobbyPlayer[]> => {
-    const { data, error } = await supabase
-      .from("game_lobby_players")
-      .select("*")
-      .eq("lobby_id", lobbyId)
-      .order("player_order");
+    try {
+      const { data, error } = await supabase
+        .from("game_lobby_players")
+        .select("*")
+        .eq("lobby_id", lobbyId)
+        .order("player_order");
 
-    if (error) {
-      console.error("Fetch players error:", error);
+      if (error) {
+        console.error("Fetch players error:", error);
+        return [];
+      }
+
+      const result = (data || []).map(parsePlayer);
+      setPlayers(result);
+      return result;
+    } catch (err) {
+      console.error("Fetch players exception:", err);
       return [];
     }
-
-    const result = (data || []).map(parsePlayer);
-    setPlayers(result);
-    return result;
   }, []);
 
   const fetchLobbyState = useCallback(async (lobbyId: string): Promise<GameLobby | null> => {
-    const { data, error } = await supabase
-      .from("game_lobbies")
-      .select("*")
-      .eq("id", lobbyId)
-      .maybeSingle();
+    try {
+      const { data, error } = await supabase
+        .from("game_lobbies")
+        .select("*")
+        .eq("id", lobbyId)
+        .maybeSingle();
 
-    if (error) {
-      console.error("Fetch lobby error:", error);
+      if (error) {
+        console.error("Fetch lobby error:", error);
+        return null;
+      }
+
+      if (!data) {
+        setLobby(null);
+        setPlayers([]);
+        return null;
+      }
+
+      const result = parseLobby(data);
+      // Don't overwrite if we're in a suppress window (just after startGame)
+      if (Date.now() < suppressPollUntilRef.current) {
+        return result;
+      }
+      setLobby(result);
+      return result;
+    } catch (err) {
+      console.error("Fetch lobby exception:", err);
       return null;
     }
-
-    if (!data) {
-      setLobby(null);
-      setPlayers([]);
-      return null;
-    }
-
-    const result = parseLobby(data);
-    setLobby(result);
-    return result;
   }, []);
 
   // Subscribe to lobby changes
@@ -160,6 +173,7 @@ export const useGameLobby = () => {
         { event: "*", schema: "public", table: "game_lobbies", filter: `id=eq.${lobby.id}` },
         (payload) => {
           if (payload.eventType === "UPDATE") {
+            if (Date.now() < suppressPollUntilRef.current) return;
             setLobby(parseLobby(payload.new));
             void fetchPlayers(lobby.id);
           } else if (payload.eventType === "DELETE") {
@@ -186,13 +200,15 @@ export const useGameLobby = () => {
     };
   }, [fetchPlayers, lobby?.id]);
 
+  // Polling
   useEffect(() => {
     if (!lobby?.id) return;
 
     const interval = window.setInterval(() => {
+      if (Date.now() < suppressPollUntilRef.current) return;
       void fetchLobbyState(lobby.id);
       void fetchPlayers(lobby.id);
-    }, lobby.status === "waiting" ? 1500 : 3000);
+    }, lobby.status === "waiting" ? 2000 : 3000);
 
     return () => window.clearInterval(interval);
   }, [fetchLobbyState, fetchPlayers, lobby?.id, lobby?.status]);
@@ -205,7 +221,7 @@ export const useGameLobby = () => {
     }
   }, [currentRoom?.id, lobby?.room_id]);
 
-  // Restore joined lobby on mount
+  // Restore joined lobby on mount — only "waiting" status to avoid stale game restores
   useEffect(() => {
     if (!user?.id || !currentRoom?.id || lobby?.id) return;
 
@@ -264,7 +280,7 @@ export const useGameLobby = () => {
       setIsLoading(true);
 
       try {
-        // Clean up ALL stale lobbies by this user in this room (waiting or finished)
+        // Clean up stale lobbies by this user
         const { data: oldLobbies } = await supabase
           .from("game_lobbies")
           .select("id")
@@ -274,7 +290,6 @@ export const useGameLobby = () => {
 
         if (oldLobbies?.length) {
           const oldIds = oldLobbies.map((l) => l.id);
-          // Delete players first, then lobbies
           for (const oldId of oldIds) {
             await supabase.from("game_lobby_players").delete().eq("lobby_id", oldId);
           }
@@ -286,20 +301,12 @@ export const useGameLobby = () => {
             .eq("room_id", currentRoom.id);
         }
 
-        // Also leave any other lobbies this user is in (to prevent conflicts)
-        const { data: myOtherJoins } = await supabase
+        // Leave any other lobbies
+        await supabase
           .from("game_lobby_players")
-          .select("lobby_id")
+          .delete()
           .eq("user_id", user.id);
 
-        if (myOtherJoins?.length) {
-          await supabase
-            .from("game_lobby_players")
-            .delete()
-            .eq("user_id", user.id);
-        }
-
-        // Clear local state
         setLobby(null);
         setPlayers([]);
 
@@ -319,7 +326,6 @@ export const useGameLobby = () => {
 
         const newLobby = parseLobby(lobbyData);
 
-        // Host auto-joins
         const { error: joinError } = await supabase
           .from("game_lobby_players")
           .insert({
@@ -379,7 +385,6 @@ export const useGameLobby = () => {
 
         const foundLobby = parseLobby(lobbies[0]);
 
-        // Check if already joined
         const { data: alreadyIn } = await supabase
           .from("game_lobby_players")
           .select("id")
@@ -393,7 +398,6 @@ export const useGameLobby = () => {
           return foundLobby;
         }
 
-        // Check player count
         const { data: existingPlayers } = await supabase
           .from("game_lobby_players")
           .select("id")
@@ -473,8 +477,7 @@ export const useGameLobby = () => {
           return false;
         }
 
-        // Always fetch fresh players to avoid stale state
-        let readyPlayers = await fetchPlayers(lobby.id);
+        const readyPlayers = await fetchPlayers(lobby.id);
         if (readyPlayers.length < 2) {
           toast.error("Need at least 2 players to start!");
           return false;
@@ -490,8 +493,9 @@ export const useGameLobby = () => {
           return false;
         }
 
-        // Use array returning here instead of maybeSingle() because object-mode responses
-        // on UPDATE can be flaky and falsely surface start failures.
+        // Suppress polling for 3 seconds so it doesn't overwrite our optimistic state
+        suppressPollUntilRef.current = Date.now() + 3000;
+
         const { data: updatedRows, error } = await supabase
           .from("game_lobbies")
           .update({
@@ -505,16 +509,7 @@ export const useGameLobby = () => {
           .select("*");
 
         if (error) {
-          console.error("Start game DB error:", {
-            error,
-            lobbyId: lobby.id,
-            hostId: user.id,
-            readyPlayers: readyPlayers.map((player) => ({
-              userId: player.user_id,
-              ready: player.is_ready,
-            })),
-            firstPlayerId,
-          });
+          console.error("Start game DB error:", error);
           toast.error("Failed to start game. Try again.");
           return false;
         }
@@ -522,27 +517,17 @@ export const useGameLobby = () => {
         const updatedRow = updatedRows?.[0] ?? null;
 
         if (!updatedRow) {
-          // Lobby might already be started - check current state
           const current = await fetchLobbyState(lobby.id);
           if (current?.status === "playing") {
-            // Already started (race condition) - just sync
             setLobby(current);
             await fetchPlayers(current.id);
             return true;
           }
-          console.error("Start game returned no rows after update:", {
-            lobbyId: lobby.id,
-            hostId: user.id,
-            readyPlayers: readyPlayers.map((player) => ({
-              userId: player.user_id,
-              ready: player.is_ready,
-            })),
-            firstPlayerId,
-          });
           toast.error("Game couldn't be started. Try again.");
           return false;
         }
 
+        // Set state directly with our known-good data
         const confirmedLobby = parseLobby(updatedRow);
         setLobby({
           ...confirmedLobby,
@@ -565,7 +550,7 @@ export const useGameLobby = () => {
         setIsLoading(false);
       }
     },
-    [fetchLobbyState, fetchPlayers, lobby, players, user]
+    [fetchLobbyState, fetchPlayers, lobby, user]
   );
 
   const updateGameState = useCallback(
@@ -591,15 +576,8 @@ export const useGameLobby = () => {
           return false;
         }
 
-        if (!data) {
-          if (shouldEnforceTurn) {
-            // Silently fail — turn likely moved
-            return false;
-          }
-          return false;
-        }
+        if (!data) return false;
 
-        // Optimistic local update
         setLobby((prev) =>
           prev
             ? {
@@ -669,7 +647,6 @@ export const useGameLobby = () => {
         .eq("user_id", user.id);
 
       if (lobby.host_id === user.id) {
-        // Delete all players first, then the lobby
         await supabase.from("game_lobby_players").delete().eq("lobby_id", lobby.id);
         await supabase.from("game_lobbies").delete().eq("id", lobby.id);
       }

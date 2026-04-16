@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { useNotifications } from "@/hooks/useNotifications";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
+import { AlarmAuditLog } from "@/components/alarms/AlarmAuditLog";
 
 interface Alarm {
   id: string;
@@ -238,6 +239,11 @@ export default function Alarms() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Alarm Activity Log */}
+      <div className="px-4 pb-4">
+        <AlarmAuditLog roomId={roomId} />
       </div>
 
       <DeleteConfirmDialog
