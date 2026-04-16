@@ -103,10 +103,12 @@ export const ChopathGame = ({ onBack, gameLobby }: ChopathProps) => {
     return true;
   };
 
-  const getNextPlayer = useCallback((): string => {
+  const getNextPlayer = useCallback((): string | null => {
     const currentUser = userRef.current;
     const currentPlayers = playersRef.current;
-    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser?.id);
+    if (!currentUser || currentPlayers.length === 0) return null;
+    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
+    if (idx < 0) return currentPlayers[0]?.user_id ?? null;
     return currentPlayers[(idx + 1) % currentPlayers.length].user_id;
   }, []);
 
@@ -129,23 +131,26 @@ export const ChopathGame = ({ onBack, gameLobby }: ChopathProps) => {
 
         // Use refs to get fresh state
         const currentUser = userRef.current;
-        const myPawns = pawnStatesRef.current[currentUser!.id];
+        if (!currentUser) return;
+        const myPawns = pawnStatesRef.current[currentUser.id];
         const canMoveAny = myPawns?.some(
           (p) => !p.isFinished && (p.position > 0 || dice === 6 || dice === 1)
         );
 
         if (!canMoveAny) {
           const nextPlayer = getNextPlayer();
-          updateGameStateRef.current(
-            {
-              pawnStates: pawnStatesRef.current,
-              winner: winnerRef.current,
-              lastDice: dice,
-              hasRolled: false,
-              message: `Threw ${dice} 🐚 — no valid moves!`,
-            },
-            nextPlayer
-          );
+          if (nextPlayer) {
+            updateGameStateRef.current(
+              {
+                pawnStates: pawnStatesRef.current,
+                winner: winnerRef.current,
+                lastDice: dice,
+                hasRolled: false,
+                message: `Threw ${dice} 🐚 — no valid moves!`,
+              },
+              nextPlayer
+            );
+          }
           return;
         }
 
@@ -204,7 +209,7 @@ export const ChopathGame = ({ onBack, gameLobby }: ChopathProps) => {
       nextPlayer = user.id;
       msg = "Bonus turn! 🐚";
     } else {
-      nextPlayer = getNextPlayer();
+      nextPlayer = getNextPlayer() ?? undefined;
     }
 
     await gameLobby.updateGameState(
