@@ -266,7 +266,7 @@ export function ActiveAlarmModal({ trigger, alarm, onDismissed }: ActiveAlarmMod
                       user_id: userId,
                       action: "volume_change",
                       details: { volume: v, is_owner: isOwnerUser },
-                    }).then(() => {}).catch(() => {});
+                    }).then(() => {}, () => {});
                   }
                 }}
                 min={0}
