@@ -20,13 +20,18 @@ const navItems: NavItem[] = [
   { icon: MessageCircle, label: "Chat", id: "chat", color: "text-accent" },
 ];
 
+const SOLO_HIDDEN_TABS = new Set(["chat"]);
+
 interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
 
 export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
+  const visibleNavItems = isSoloMode
+    ? navItems.filter((it) => !SOLO_HIDDEN_TABS.has(it.id))
+    : navItems;
   const [unreadChat, setUnreadChat] = useState(0);
   const pendingExpenses = usePendingExpenseCount();
   const isChatTabOpen = activeTab === "chat";
@@ -122,7 +127,7 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card/95 backdrop-blur-lg border-t border-border/50 px-2 pb-safe">
       <div className="max-w-lg mx-auto flex items-center justify-around py-2">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = activeTab === item.id;
           const showChatBadge = item.id === "chat" && unreadChat > 0;
           const showExpenseDot = item.id === "expenses" && pendingExpenses > 0 && !isExpensesTabOpen;

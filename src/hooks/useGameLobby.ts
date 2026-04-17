@@ -487,7 +487,20 @@ export const useGameLobby = () => {
           return false;
         }
 
-        const firstPlayerId = readyPlayers[0]?.user_id;
+        // Randomize turn order — shuffle player_order so first player is random each game
+        const shuffled = [...readyPlayers].sort(() => Math.random() - 0.5);
+        await Promise.all(
+          shuffled.map((p, idx) =>
+            supabase
+              .from("game_lobby_players")
+              .update({ player_order: idx })
+              .eq("id", p.id)
+          )
+        );
+        const orderedPlayers = shuffled.map((p, idx) => ({ ...p, player_order: idx }));
+        setPlayers(orderedPlayers);
+
+        const firstPlayerId = orderedPlayers[0]?.user_id;
         if (!firstPlayerId) {
           toast.error("No players found!");
           return false;
