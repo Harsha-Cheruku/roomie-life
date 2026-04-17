@@ -487,7 +487,20 @@ export const useGameLobby = () => {
           return false;
         }
 
-        const firstPlayerId = readyPlayers[0]?.user_id;
+        // Randomize turn order — shuffle player_order so first player is random each game
+        const shuffled = [...readyPlayers].sort(() => Math.random() - 0.5);
+        await Promise.all(
+          shuffled.map((p, idx) =>
+            supabase
+              .from("game_lobby_players")
+              .update({ player_order: idx })
+              .eq("id", p.id)
+          )
+        );
+        const orderedPlayers = shuffled.map((p, idx) => ({ ...p, player_order: idx }));
+        setPlayers(orderedPlayers);
+
+        const firstPlayerId = orderedPlayers[0]?.user_id;
         if (!firstPlayerId) {
           toast.error("No players found!");
           return false;
@@ -557,42 +570,58 @@ export const useGameLobby = () => {
     async (
       state: Record<string, any>,
       nextTurnUserId?: string,
-      options?: { enforceTurn?: boolean }
-    ) => {
+      options?: { enforceTurn?: boolean; retries?: number }
+    ): Promise<boolean> => {
       if (!lobby || !user) return false;
 
-      try {
-        const shouldEnforceTurn = options?.enforceTurn ?? lobby.status === "playing";
+      const shouldEnforceTurn = options?.enforceTurn ?? lobby.status === "playing";
+      const maxRetries = options?.retries ?? 2;
 
-        const { data, error } = await supabase.rpc("update_game_lobby_state", {
-          _lobby_id: lobby.id,
-          _state: state as any,
-          _next_turn_user_id: nextTurnUserId ?? null,
-          _expected_turn_user_id: shouldEnforceTurn ? user.id : null,
-        });
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const { data, error } = await supabase.rpc("update_game_lobby_state", {
+            _lobby_id: lobby.id,
+            _state: state as any,
+            _next_turn_user_id: nextTurnUserId ?? null,
+            _expected_turn_user_id: shouldEnforceTurn ? user.id : null,
+          });
 
-        if (error) {
-          console.error("Failed to update game state:", error);
-          return false;
+          if (error) {
+            console.error(`updateGameState attempt ${attempt + 1} failed:`, error);
+            if (attempt === maxRetries) {
+              toast.error("Network issue — your move couldn't be saved. Try again.");
+              return false;
+            }
+            await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+            continue;
+          }
+
+          if (!data) {
+            // Turn enforcement failed — likely already advanced
+            return false;
+          }
+
+          setLobby((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  game_state: state,
+                  current_turn_user_id: nextTurnUserId ?? prev.current_turn_user_id,
+                }
+              : prev
+          );
+
+          return true;
+        } catch (err) {
+          console.error(`updateGameState attempt ${attempt + 1} exception:`, err);
+          if (attempt === maxRetries) {
+            toast.error("Connection error. Please try again.");
+            return false;
+          }
+          await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
         }
-
-        if (!data) return false;
-
-        setLobby((prev) =>
-          prev
-            ? {
-                ...prev,
-                game_state: state,
-                current_turn_user_id: nextTurnUserId ?? prev.current_turn_user_id,
-              }
-            : prev
-        );
-
-        return true;
-      } catch (error) {
-        console.error("Update game state error:", error);
-        return false;
       }
+      return false;
     },
     [lobby, user]
   );
