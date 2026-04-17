@@ -5,9 +5,11 @@ import { TaskPreview } from "@/components/home/TaskPreview";
 import { FloatingActionButton } from "@/components/home/FloatingActionButton";
 import { RecentMessagesPreview } from "@/components/home/RecentMessagesPreview";
 import { usePendingExpenseCount } from "@/hooks/usePendingExpenseCount";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Home = () => {
   const pendingExpenseCount = usePendingExpenseCount();
+  const { isSoloMode } = useAuth();
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -15,7 +17,7 @@ export const Home = () => {
       
       <div className="space-y-6">
         <QuickActions pendingExpenseCount={pendingExpenseCount} />
-        <RecentMessagesPreview />
+        {!isSoloMode && <RecentMessagesPreview />}
         <ExpenseOverview pendingExpenseCount={pendingExpenseCount} />
         <TaskPreview />
       </div>

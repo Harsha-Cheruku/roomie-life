@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { BillScanner } from "@/components/expenses/BillScanner";
 import { ExpenseSplitter } from "@/components/expenses/ExpenseSplitter";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface FabAction {
   icon: React.ElementType;
@@ -20,6 +21,7 @@ interface ScanResult {
 
 export const FloatingActionButton = () => {
   const navigate = useNavigate();
+  const { isSoloMode } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showSplitter, setShowSplitter] = useState(false);
@@ -37,8 +39,8 @@ export const FloatingActionButton = () => {
     setReceiptImage(null);
   };
 
-  const actions: FabAction[] = [
-    {
+  const allActions: FabAction[] = [
+    ...(!isSoloMode ? [{
       icon: MessageCircle,
       label: "Chat",
       color: "bg-lavender",
@@ -46,7 +48,7 @@ export const FloatingActionButton = () => {
         setIsOpen(false);
         navigate('/chat');
       }
-    },
+    }] : []),
     {
       icon: Receipt,
       label: "Add Expense",
@@ -84,6 +86,8 @@ export const FloatingActionButton = () => {
       }
     }
   ];
+
+  const actions = allActions;
 
   return (
     <>

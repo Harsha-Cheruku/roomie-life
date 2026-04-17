@@ -509,6 +509,7 @@ export const useGameLobby = () => {
         // Suppress polling for 3 seconds so it doesn't overwrite our optimistic state
         suppressPollUntilRef.current = Date.now() + 3000;
 
+        // Update without status filter — host has authority to start
         const { data: updatedRows, error } = await supabase
           .from("game_lobbies")
           .update({
@@ -518,25 +519,36 @@ export const useGameLobby = () => {
             updated_at: new Date().toISOString(),
           })
           .eq("id", lobby.id)
-          .eq("status", "waiting")
+          .eq("host_id", user.id)
           .select("*");
 
         if (error) {
-          console.error("Start game DB error:", error);
-          toast.error("Failed to start game. Try again.");
+          console.error("Start game DB error:", error, { lobbyId: lobby.id, hostId: user.id, readyPlayers: readyPlayers.length });
+          // Try to recover by re-fetching
+          const current = await fetchLobbyState(lobby.id);
+          if (current?.status === "playing") {
+            setLobby(current);
+            await fetchPlayers(current.id);
+            toast.success("Game started! 🎮");
+            return true;
+          }
+          toast.error("Couldn't start game. Please try again.");
           return false;
         }
 
         const updatedRow = updatedRows?.[0] ?? null;
 
         if (!updatedRow) {
+          // Update returned no rows — likely already started or RLS issue. Re-fetch to confirm.
           const current = await fetchLobbyState(lobby.id);
           if (current?.status === "playing") {
             setLobby(current);
             await fetchPlayers(current.id);
+            toast.success("Game started! 🎮");
             return true;
           }
-          toast.error("Game couldn't be started. Try again.");
+          console.error("Start game: no row updated", { lobbyId: lobby.id, currentStatus: current?.status });
+          toast.error("Couldn't start game. Please try again.");
           return false;
         }
 
