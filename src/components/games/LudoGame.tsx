@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import type { UseGameLobbyReturn } from "@/hooks/useGameLobby";
 import { useGameStats } from "@/hooks/useGameStats";
 import { GameLobbyComponent } from "./GameLobby";
 import { Dices, Trophy, ArrowLeft, RotateCcw } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-// Ludo King style: Red (top-left), Green (top-right), Yellow (bottom-right), Blue (bottom-left)
+// ─── Constants & Rules Engine ──────────────────────────────────────────────
 const PLAYER_COLORS = {
   bg: ["#E53935", "#43A047", "#FDD835", "#1E88E5"],
   light: ["#FFCDD2", "#C8E6C9", "#FFF9C4", "#BBDEFB"],
@@ -20,13 +20,12 @@ const PLAYER_COLORS = {
   tokenLight: ["#FF8A80", "#69F0AE", "#FFD740", "#82B1FF"],
 };
 const PLAYER_EMOJIS = ["🔴", "🟢", "🟡", "🔵"];
-const PLAYER_NAMES = ["Red", "Green", "Yellow", "Blue"];
 
 const BOARD_SIZE = 52;
 const HOME_STRETCH = 6;
 const SAFE_SQUARES = [0, 8, 13, 21, 26, 34, 39, 47];
+const START_OFFSETS = [0, 13, 26, 39];
 
-// 52 path positions mapped to [row, col] on a 15x15 grid
 const PATH_GRID: [number, number][] = [
   [6,1],[6,2],[6,3],[6,4],[6,5],
   [5,6],[4,6],[3,6],[2,6],[1,6],[0,6],
@@ -41,57 +40,65 @@ const PATH_GRID: [number, number][] = [
   [8,5],[8,4],[8,3],[8,2],[8,1],[8,0],
   [7,0],[6,0],
 ];
-
 const HOME_STRETCH_GRID: [number, number][][] = [
   [[7,1],[7,2],[7,3],[7,4],[7,5],[7,6]],
   [[1,7],[2,7],[3,7],[4,7],[5,7],[6,7]],
   [[7,13],[7,12],[7,11],[7,10],[7,9],[7,8]],
   [[13,7],[12,7],[11,7],[10,7],[9,7],[8,7]],
 ];
-
 const HOME_TOKEN_POS: [number, number][][] = [
   [[1.5,1.5],[1.5,3.5],[3.5,1.5],[3.5,3.5]],
   [[1.5,10.5],[1.5,12.5],[3.5,10.5],[3.5,12.5]],
   [[10.5,10.5],[10.5,12.5],[12.5,10.5],[12.5,12.5]],
   [[10.5,1.5],[10.5,3.5],[12.5,1.5],[12.5,3.5]],
 ];
-
-const STAR_POSITIONS = new Set(SAFE_SQUARES.filter(s => s > 0));
+const STAR_POSITIONS = new Set(SAFE_SQUARES.filter((s) => s > 0));
 const START_ABS = [1, 14, 27, 40];
 
 interface LudoToken { position: number; isFinished: boolean; }
 interface LudoPlayerState { tokens: LudoToken[]; startOffset: number; }
+interface LudoGameState {
+  playerStates: Record<string, LudoPlayerState>;
+  winner: string | null;
+  lastDice: number | null;
+  hasRolled: boolean;
+  message: string;
+  movesCount: Record<string, number>;
+}
 interface LudoGameProps { onBack: () => void; gameLobby: UseGameLobbyReturn; }
 
+// Pure rules engine — fully testable
 const getAbsolutePosition = (relPos: number, startOffset: number): number => {
   if (relPos === 0 || relPos > BOARD_SIZE) return -1;
   return ((relPos - 1 + startOffset) % BOARD_SIZE) + 1;
 };
 
-// Get pixel position for a token on the board
+const canMoveToken = (token: LudoToken, dice: number): boolean => {
+  if (token.isFinished) return false;
+  if (token.position === 0) return dice === 6;
+  const newPos = token.position + dice;
+  return newPos <= BOARD_SIZE + HOME_STRETCH;
+};
+
+const hasAnyValidMove = (state: LudoPlayerState, dice: number): boolean =>
+  state.tokens.some((t) => canMoveToken(t, dice));
+
+// ─── Token rendering helpers ───────────────────────────────────────────────
 const getTokenPosition = (
   token: LudoToken, playerIdx: number, tokenIdx: number, startOffset: number, boardSize: number
 ): { x: number; y: number } | null => {
   const cellSize = boardSize / 15;
-  
-  if (token.isFinished) {
-    // Center area
-    return { x: 7 * cellSize + cellSize / 2, y: 7 * cellSize + cellSize / 2 };
-  }
-  
+  if (token.isFinished) return { x: 7 * cellSize + cellSize / 2, y: 7 * cellSize + cellSize / 2 };
   if (token.position === 0) {
-    // Home base
     const [r, c] = HOME_TOKEN_POS[playerIdx][tokenIdx];
     return { x: c * cellSize + cellSize / 2, y: r * cellSize + cellSize / 2 };
   }
-  
   if (token.position > BOARD_SIZE) {
     const stretchIdx = token.position - BOARD_SIZE - 1;
-    const pos = HOME_STRETCH_GRID[playerIdx][stretchIdx];
+    const pos = HOME_STRETCH_GRID[playerIdx]?.[stretchIdx];
     if (!pos) return null;
     return { x: pos[1] * cellSize + cellSize / 2, y: pos[0] * cellSize + cellSize / 2 };
   }
-  
   const abs = getAbsolutePosition(token.position, startOffset);
   if (abs >= 1 && abs <= 52) {
     const [r, c] = PATH_GRID[abs - 1];
@@ -100,7 +107,7 @@ const getTokenPosition = (
   return null;
 };
 
-// ─── Board Component ───────────────────────────────────
+// ─── Board ─────────────────────────────────────────────────────────────────
 interface BoardProps {
   players: { user_id: string; display_name: string }[];
   playerStates: Record<string, LudoPlayerState>;
@@ -108,14 +115,12 @@ interface BoardProps {
   isMyTurn: boolean;
   hasRolled: boolean;
   diceValue: number | null;
-  canMoveToken: (token: LudoToken, dice: number) => boolean;
   onTokenClick: (tokenIdx: number) => void;
-  moveInProgress: boolean;
+  actionInFlight: boolean;
 }
 
 const LudoBoard = ({
-  players, playerStates, currentUserId, isMyTurn, hasRolled, diceValue,
-  canMoveToken, onTokenClick, moveInProgress,
+  players, playerStates, currentUserId, isMyTurn, hasRolled, diceValue, onTokenClick, actionInFlight,
 }: BoardProps) => {
   const boardRef = useRef<HTMLDivElement>(null);
   const [boardSize, setBoardSize] = useState(340);
@@ -132,10 +137,9 @@ const LudoBoard = ({
   }, []);
 
   const cellSize = boardSize / 15;
-  const myPlayerIdx = players.findIndex(p => p.user_id === currentUserId);
+  const myPlayerIdx = players.findIndex((p) => p.user_id === currentUserId);
   const myState = currentUserId ? playerStates[currentUserId] : undefined;
 
-  // Collect all tokens with positions
   const allTokens = useMemo(() => {
     const tokens: { playerIdx: number; tokenIdx: number; x: number; y: number; isClickable: boolean }[] = [];
     players.forEach((p, pIdx) => {
@@ -144,137 +148,69 @@ const LudoBoard = ({
       state.tokens.forEach((token, tIdx) => {
         const pos = getTokenPosition(token, pIdx, tIdx, state.startOffset, boardSize);
         if (!pos) return;
-        const clickable = isMyTurn && hasRolled && !moveInProgress &&
+        const clickable =
+          isMyTurn && hasRolled && !actionInFlight &&
           pIdx === myPlayerIdx && !!diceValue && !!myState &&
           canMoveToken(myState.tokens[tIdx], diceValue);
         tokens.push({ playerIdx: pIdx, tokenIdx: tIdx, x: pos.x, y: pos.y, isClickable: clickable });
       });
     });
     return tokens;
-  }, [players, playerStates, boardSize, isMyTurn, hasRolled, moveInProgress, myPlayerIdx, diceValue, myState, canMoveToken]);
+  }, [players, playerStates, boardSize, isMyTurn, hasRolled, actionInFlight, myPlayerIdx, diceValue, myState]);
 
   return (
     <div ref={boardRef} className="w-full max-w-[360px] mx-auto">
-      <svg viewBox={`0 0 ${boardSize} ${boardSize}`} className="w-full rounded-2xl shadow-xl overflow-hidden" style={{ border: '3px solid hsl(var(--border))' }}>
-        {/* Board background */}
+      <svg viewBox={`0 0 ${boardSize} ${boardSize}`} className="w-full rounded-2xl shadow-xl overflow-hidden" style={{ border: "3px solid hsl(var(--border))" }}>
         <rect width={boardSize} height={boardSize} fill="white" />
-        
-        {/* Home bases - large colored squares */}
         <rect x={0} y={0} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[0]} rx={cellSize * 0.3} />
         <rect x={cellSize * 9} y={0} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[1]} rx={cellSize * 0.3} />
         <rect x={cellSize * 9} y={cellSize * 9} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[2]} rx={cellSize * 0.3} />
         <rect x={0} y={cellSize * 9} width={cellSize * 6} height={cellSize * 6} fill={PLAYER_COLORS.bg[3]} rx={cellSize * 0.3} />
-
-        {/* Inner white areas for token homes */}
         {[
-          [cellSize * 0.8, cellSize * 0.8],
-          [cellSize * 9.8, cellSize * 0.8],
-          [cellSize * 9.8, cellSize * 9.8],
-          [cellSize * 0.8, cellSize * 9.8],
+          [cellSize * 0.8, cellSize * 0.8], [cellSize * 9.8, cellSize * 0.8],
+          [cellSize * 9.8, cellSize * 9.8], [cellSize * 0.8, cellSize * 9.8],
         ].map(([x, y], i) => (
-          <rect key={`home-inner-${i}`} x={x} y={y} width={cellSize * 4.4} height={cellSize * 4.4} fill="white" rx={cellSize * 0.2} />
+          <rect key={`hi-${i}`} x={x} y={y} width={cellSize * 4.4} height={cellSize * 4.4} fill="white" rx={cellSize * 0.2} />
         ))}
-
-        {/* Home token circles (outlines for empty slots) */}
         {HOME_TOKEN_POS.map((positions, pIdx) =>
           positions.map(([r, c], tIdx) => (
-            <circle
-              key={`home-slot-${pIdx}-${tIdx}`}
-              cx={c * cellSize + cellSize / 2}
-              cy={r * cellSize + cellSize / 2}
-              r={cellSize * 0.45}
-              fill={PLAYER_COLORS.light[pIdx]}
-              stroke={PLAYER_COLORS.bg[pIdx]}
-              strokeWidth={1.5}
-            />
+            <circle key={`hs-${pIdx}-${tIdx}`} cx={c * cellSize + cellSize / 2} cy={r * cellSize + cellSize / 2}
+              r={cellSize * 0.45} fill={PLAYER_COLORS.light[pIdx]} stroke={PLAYER_COLORS.bg[pIdx]} strokeWidth={1.5} />
           ))
         )}
-
-        {/* Path cells */}
         {PATH_GRID.map(([r, c], i) => {
           const absPos = i + 1;
           const startPlayer = START_ABS.indexOf(absPos);
           const isSafe = STAR_POSITIONS.has(absPos);
-          const x = c * cellSize;
-          const y = r * cellSize;
-          
+          const x = c * cellSize, y = r * cellSize;
           return (
-            <g key={`path-${i}`}>
-              <rect
-                x={x + 0.5} y={y + 0.5}
-                width={cellSize - 1} height={cellSize - 1}
-                fill={startPlayer >= 0 ? PLAYER_COLORS.mid[startPlayer] : "white"}
-                stroke="#e0e0e0"
-                strokeWidth={0.5}
-                rx={1}
-              />
-              {isSafe && (
-                <text
-                  x={x + cellSize / 2} y={y + cellSize / 2 + 1}
-                  textAnchor="middle" dominantBaseline="central"
-                  fontSize={cellSize * 0.5} fill="#FFB300"
-                >★</text>
-              )}
-              {startPlayer >= 0 && (
-                <text
-                  x={x + cellSize / 2} y={y + cellSize / 2 + 1}
-                  textAnchor="middle" dominantBaseline="central"
-                  fontSize={cellSize * 0.35} fill={PLAYER_COLORS.dark[startPlayer]}
-                  fontWeight="bold"
-                >▶</text>
-              )}
+            <g key={`p-${i}`}>
+              <rect x={x + 0.5} y={y + 0.5} width={cellSize - 1} height={cellSize - 1}
+                fill={startPlayer >= 0 ? PLAYER_COLORS.mid[startPlayer] : "white"} stroke="#e0e0e0" strokeWidth={0.5} rx={1} />
+              {isSafe && (<text x={x + cellSize / 2} y={y + cellSize / 2 + 1} textAnchor="middle" dominantBaseline="central" fontSize={cellSize * 0.5} fill="#FFB300">★</text>)}
+              {startPlayer >= 0 && (<text x={x + cellSize / 2} y={y + cellSize / 2 + 1} textAnchor="middle" dominantBaseline="central" fontSize={cellSize * 0.35} fill={PLAYER_COLORS.dark[startPlayer]} fontWeight="bold">▶</text>)}
             </g>
           );
         })}
-
-        {/* Home stretch cells */}
         {HOME_STRETCH_GRID.map((positions, pIdx) =>
           positions.map(([r, c], sIdx) => (
-            <rect
-              key={`stretch-${pIdx}-${sIdx}`}
-              x={c * cellSize + 0.5} y={r * cellSize + 0.5}
-              width={cellSize - 1} height={cellSize - 1}
-              fill={PLAYER_COLORS.light[pIdx]}
-              stroke={PLAYER_COLORS.mid[pIdx]}
-              strokeWidth={0.5}
-              rx={1}
-            />
+            <rect key={`st-${pIdx}-${sIdx}`} x={c * cellSize + 0.5} y={r * cellSize + 0.5}
+              width={cellSize - 1} height={cellSize - 1} fill={PLAYER_COLORS.light[pIdx]} stroke={PLAYER_COLORS.mid[pIdx]} strokeWidth={0.5} rx={1} />
           ))
         )}
-
-        {/* Center triangle area */}
-        <polygon
-          points={`${7.5 * cellSize},${6 * cellSize} ${9 * cellSize},${7.5 * cellSize} ${7.5 * cellSize},${9 * cellSize} ${6 * cellSize},${7.5 * cellSize}`}
-          fill="white" stroke="#e0e0e0" strokeWidth={0.5}
-        />
-        {/* Four colored triangles pointing to center */}
+        <polygon points={`${7.5 * cellSize},${6 * cellSize} ${9 * cellSize},${7.5 * cellSize} ${7.5 * cellSize},${9 * cellSize} ${6 * cellSize},${7.5 * cellSize}`} fill="white" stroke="#e0e0e0" strokeWidth={0.5} />
         <polygon points={`${6 * cellSize},${6 * cellSize} ${9 * cellSize},${6 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[1]} opacity={0.8} />
         <polygon points={`${9 * cellSize},${6 * cellSize} ${9 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[2]} opacity={0.8} />
         <polygon points={`${6 * cellSize},${9 * cellSize} ${9 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[3]} opacity={0.8} />
         <polygon points={`${6 * cellSize},${6 * cellSize} ${6 * cellSize},${9 * cellSize} ${7.5 * cellSize},${7.5 * cellSize}`} fill={PLAYER_COLORS.bg[0]} opacity={0.8} />
-
-        {/* Tokens */}
-        {allTokens.map((t, i) => {
+        {allTokens.map((t) => {
           const r = cellSize * 0.38;
           return (
-            <g
-              key={`token-${t.playerIdx}-${t.tokenIdx}`}
-              onClick={t.isClickable ? () => onTokenClick(t.tokenIdx) : undefined}
-              style={{ cursor: t.isClickable ? 'pointer' : 'default' }}
-            >
-              {/* Shadow */}
+            <g key={`tk-${t.playerIdx}-${t.tokenIdx}`} onClick={t.isClickable ? () => onTokenClick(t.tokenIdx) : undefined} style={{ cursor: t.isClickable ? "pointer" : "default" }}>
               <circle cx={t.x + 1} cy={t.y + 2} r={r} fill="rgba(0,0,0,0.15)" />
-              {/* Token body */}
               <circle cx={t.x} cy={t.y} r={r} fill={PLAYER_COLORS.token[t.playerIdx]} stroke="white" strokeWidth={2} />
-              {/* Glossy highlight */}
               <circle cx={t.x - r * 0.2} cy={t.y - r * 0.25} r={r * 0.35} fill={PLAYER_COLORS.tokenLight[t.playerIdx]} opacity={0.5} />
-              {/* Token number */}
-              <text
-                x={t.x} y={t.y + 1}
-                textAnchor="middle" dominantBaseline="central"
-                fontSize={r * 0.9} fontWeight="bold" fill="white"
-              >{t.tokenIdx + 1}</text>
-              {/* Clickable pulse ring */}
+              <text x={t.x} y={t.y + 1} textAnchor="middle" dominantBaseline="central" fontSize={r * 0.9} fontWeight="bold" fill="white">{t.tokenIdx + 1}</text>
               {t.isClickable && (
                 <circle cx={t.x} cy={t.y} r={r + 3} fill="none" stroke={PLAYER_COLORS.bg[t.playerIdx]} strokeWidth={2} opacity={0.7}>
                   <animate attributeName="r" values={`${r + 2};${r + 6};${r + 2}`} dur="1s" repeatCount="indefinite" />
@@ -289,323 +225,341 @@ const LudoBoard = ({
   );
 };
 
-// Dice component with 3D look
 const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
   const dots: { [key: number]: [number, number][] } = {
-    1: [[50,50]],
-    2: [[25,25],[75,75]],
-    3: [[25,25],[50,50],[75,75]],
-    4: [[25,25],[75,25],[25,75],[75,75]],
-    5: [[25,25],[75,25],[50,50],[25,75],[75,75]],
+    1: [[50,50]], 2: [[25,25],[75,75]], 3: [[25,25],[50,50],[75,75]],
+    4: [[25,25],[75,25],[25,75],[75,75]], 5: [[25,25],[75,25],[50,50],[25,75],[75,75]],
     6: [[25,25],[75,25],[25,50],[75,50],[25,75],[75,75]],
   };
   const positions = dots[value] || [];
-
   return (
-    <div className={cn(
-      "w-16 h-16 rounded-xl bg-white shadow-lg border-2 border-border flex items-center justify-center relative",
-      rolling && "animate-spin"
-    )} style={{ background: 'linear-gradient(145deg, #fff, #f0f0f0)' }}>
+    <div className={cn("w-16 h-16 rounded-xl bg-white shadow-lg border-2 border-border flex items-center justify-center", rolling && "animate-spin")} style={{ background: "linear-gradient(145deg, #fff, #f0f0f0)" }}>
       <svg viewBox="0 0 100 100" className="w-12 h-12">
-        {positions.map(([cx, cy], i) => (
-          <circle key={i} cx={cx} cy={cy} r={10} fill="#333" />
-        ))}
+        {positions.map(([cx, cy], i) => (<circle key={i} cx={cx} cy={cy} r={10} fill="#333" />))}
       </svg>
     </div>
   );
 };
 
-// ─── Main Game Component ───────────────────────────────
+// ─── Main Component ────────────────────────────────────────────────────────
 export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   const { user } = useAuth();
   const { saveGameResult } = useGameStats();
   const { lobby, players, isHost, isMyTurn } = gameLobby;
 
-  const [diceValue, setDiceValue] = useState<number | null>(null);
+  // Local UI-only state
   const [rolling, setRolling] = useState(false);
-  const [winner, setWinner] = useState<string | null>(null);
-  const [playerStates, setPlayerStates] = useState<Record<string, LudoPlayerState>>({});
-  const [hasRolled, setHasRolled] = useState(false);
-  const [message, setMessage] = useState("");
-  const rollingRef = useRef(false);
-  const playerStatesRef = useRef<Record<string, LudoPlayerState>>({});
-  const winnerRef = useRef<string | null>(null);
-  const diceValueRef = useRef<number | null>(null);
-  const moveInProgressRef = useRef(false);
+  const [diceDisplay, setDiceDisplay] = useState<number | null>(null);
+  const actionInFlightRef = useRef(false);
 
-  const updateGameStateRef = useRef(gameLobby.updateGameState);
-  const playersRef = useRef(players);
-  const userRef = useRef(user);
-  const lobbyRef = useRef(lobby);
-  useEffect(() => { updateGameStateRef.current = gameLobby.updateGameState; }, [gameLobby.updateGameState]);
-  useEffect(() => { playersRef.current = players; }, [players]);
-  useEffect(() => { userRef.current = user; }, [user]);
-  useEffect(() => { lobbyRef.current = lobby; }, [lobby]);
+  // Server state is the source of truth
+  const gameState: LudoGameState = {
+    playerStates: lobby?.game_state?.playerStates || {},
+    winner: lobby?.game_state?.winner || null,
+    lastDice: lobby?.game_state?.lastDice || null,
+    hasRolled: !!lobby?.game_state?.hasRolled,
+    message: lobby?.game_state?.message || "",
+    movesCount: lobby?.game_state?.movesCount || {},
+  };
 
   useEffect(() => {
-    if (lobby?.game_state) {
-      if (lobby.game_state.playerStates) {
-        setPlayerStates(lobby.game_state.playerStates);
-        playerStatesRef.current = lobby.game_state.playerStates;
-      }
-      if (lobby.game_state.winner !== undefined) {
-        setWinner(lobby.game_state.winner);
-        winnerRef.current = lobby.game_state.winner;
-      }
-      if (lobby.game_state.lastDice) {
-        setDiceValue(lobby.game_state.lastDice);
-        diceValueRef.current = lobby.game_state.lastDice;
-      }
-      if (lobby.game_state.message !== undefined) setMessage(lobby.game_state.message);
-      setHasRolled(lobby.game_state.hasRolled || false);
-      moveInProgressRef.current = false;
-    }
-  }, [lobby?.game_state]);
+    if (gameState.lastDice && !rolling) setDiceDisplay(gameState.lastDice);
+  }, [gameState.lastDice, rolling]);
 
-  const handleCreateGame = async () => { await gameLobby.createLobby("ludo", 4); };
+  // When server state updates (turn switched), release in-flight lock
+  useEffect(() => {
+    actionInFlightRef.current = false;
+  }, [lobby?.current_turn_user_id, lobby?.game_state]);
 
-  const handleStartGame = async () => {
-    const startOffsets = [0, 13, 26, 39];
+  const handleCreateGame = useCallback(async () => {
+    await gameLobby.createLobby("ludo", 4);
+  }, [gameLobby]);
+
+  const handleStartGame = useCallback(async () => {
     const initialStates: Record<string, LudoPlayerState> = {};
+    const initialMoves: Record<string, number> = {};
     players.forEach((p, i) => {
       initialStates[p.user_id] = {
         tokens: Array(4).fill(null).map(() => ({ position: 0, isFinished: false })),
-        startOffset: startOffsets[i],
+        startOffset: START_OFFSETS[i] ?? 0,
       };
+      initialMoves[p.user_id] = 0;
     });
-    await gameLobby.startGame({ playerStates: initialStates, winner: null, lastDice: null, message: "", hasRolled: false });
-  };
+    await gameLobby.startGame({
+      playerStates: initialStates,
+      winner: null,
+      lastDice: null,
+      hasRolled: false,
+      message: "Game started! Roll the dice.",
+      movesCount: initialMoves,
+    } satisfies LudoGameState);
+  }, [gameLobby, players]);
 
-  const canMoveToken = useCallback((token: LudoToken, dice: number): boolean => {
-    if (token.isFinished) return false;
-    if (token.position === 0) return dice === 6;
-    const newPos = token.position + dice;
-    if (newPos > BOARD_SIZE + HOME_STRETCH) return false;
-    return true;
-  }, []);
+  const getNextPlayerId = useCallback((): string | null => {
+    if (!user) return null;
+    const idx = players.findIndex((p) => p.user_id === user.id);
+    if (idx < 0) return players[0]?.user_id ?? null;
+    return players[(idx + 1) % players.length]?.user_id ?? null;
+  }, [players, user]);
 
-  const getNextPlayer = useCallback((): string | null => {
-    const currentUser = userRef.current;
-    const currentPlayers = playersRef.current;
-    if (!currentUser || currentPlayers.length === 0) return null;
-    const idx = currentPlayers.findIndex((p) => p.user_id === currentUser.id);
-    if (idx < 0) return currentPlayers[0].user_id;
-    return currentPlayers[(idx + 1) % currentPlayers.length].user_id;
-  }, []);
-
-  const rollDice = useCallback(() => {
-    if (!isMyTurn || rollingRef.current || winnerRef.current || hasRolled || moveInProgressRef.current) return;
-    rollingRef.current = true;
-    moveInProgressRef.current = true;
+  const handleRollDice = useCallback(async () => {
+    if (!isMyTurn || actionInFlightRef.current || gameState.winner || gameState.hasRolled || rolling || !user) return;
+    actionInFlightRef.current = true;
     setRolling(true);
 
-    const dice = Math.floor(Math.random() * 6) + 1;
-    let count = 0;
+    const finalDice = Math.floor(Math.random() * 6) + 1;
+    let frames = 0;
     const interval = setInterval(() => {
-      setDiceValue(Math.floor(Math.random() * 6) + 1);
-      count++;
-      if (count >= 8) {
+      setDiceDisplay(Math.floor(Math.random() * 6) + 1);
+      frames++;
+      if (frames >= 6) {
         clearInterval(interval);
-        setDiceValue(dice);
-        diceValueRef.current = dice;
+        setDiceDisplay(finalDice);
         setRolling(false);
-        rollingRef.current = false;
-        handleDiceResult(dice);
+        void afterRoll(finalDice);
       }
-    }, 100);
-  }, [isMyTurn, hasRolled]);
+    }, 80);
+  }, [isMyTurn, gameState.winner, gameState.hasRolled, rolling, user]);
 
-  const handleDiceResult = async (dice: number) => {
-    const currentUser = userRef.current;
-    const currentLobby = lobbyRef.current;
-    if (!currentUser || !currentLobby || playersRef.current.length === 0) { moveInProgressRef.current = false; return; }
+  const afterRoll = async (dice: number) => {
+    if (!user) { actionInFlightRef.current = false; return; }
+    const myState = gameState.playerStates[user.id];
+    if (!myState) { actionInFlightRef.current = false; return; }
 
-    const myState = playerStatesRef.current[currentUser.id];
-    if (!myState) { moveInProgressRef.current = false; return; }
-
-    const canMove = myState.tokens.some((t) => canMoveToken(t, dice));
-
+    const canMove = hasAnyValidMove(myState, dice);
     if (!canMove) {
-      const nextPlayer = getNextPlayer();
-      if (!nextPlayer) { moveInProgressRef.current = false; return; }
-      await updateGameStateRef.current(
-        { playerStates: playerStatesRef.current, winner: winnerRef.current, lastDice: dice, hasRolled: false, message: `No valid moves. Turn passed.` },
-        nextPlayer
+      // No valid move — pass turn (extra turn rule still applies for 6)
+      const nextPlayer = dice === 6 ? user.id : getNextPlayerId();
+      const success = await gameLobby.updateGameState(
+        {
+          ...gameState,
+          lastDice: dice,
+          hasRolled: false,
+          message: dice === 6 ? "Rolled 6 but no token can move. Roll again!" : "No valid move. Turn passed.",
+        } satisfies LudoGameState,
+        nextPlayer ?? undefined
       );
+      if (!success) actionInFlightRef.current = false;
       return;
     }
 
-    setHasRolled(true);
-    setMessage(`Rolled ${dice}! Tap a token to move.`);
-    moveInProgressRef.current = false;
-    await updateGameStateRef.current({
-      playerStates: playerStatesRef.current,
-      winner: winnerRef.current,
+    // Player has moves — let them tap a token
+    const success = await gameLobby.updateGameState({
+      ...gameState,
       lastDice: dice,
       hasRolled: true,
-      message: `Rolled ${dice}! Choose a token.`,
-    });
+      message: `Rolled ${dice}! Tap a token to move.`,
+    } satisfies LudoGameState);
+    if (success) actionInFlightRef.current = false; // allow token clicks
+    else actionInFlightRef.current = false;
   };
 
-  const handleTokenClick = async (tokenIndex: number) => {
-    if (!isMyTurn || !hasRolled || !user || !lobby || !diceValue || moveInProgressRef.current) return;
-    moveInProgressRef.current = true;
-
-    const currentStates = playerStatesRef.current;
-    const myState = currentStates[user.id];
-    if (!myState) { moveInProgressRef.current = false; return; }
-
-    const token = myState.tokens[tokenIndex];
-    if (!canMoveToken(token, diceValue)) {
+  const handleTokenClick = async (tokenIdx: number) => {
+    if (!isMyTurn || !gameState.hasRolled || !user || !gameState.lastDice || actionInFlightRef.current) return;
+    const myState = gameState.playerStates[user.id];
+    if (!myState) return;
+    const token = myState.tokens[tokenIdx];
+    if (!canMoveToken(token, gameState.lastDice)) {
       toast.error("Can't move this token!");
-      moveInProgressRef.current = false;
       return;
     }
 
-    const newStates = JSON.parse(JSON.stringify(currentStates)) as Record<string, LudoPlayerState>;
-    playerStatesRef.current = newStates;
+    actionInFlightRef.current = true;
+
+    const dice = gameState.lastDice;
+    const newStates: Record<string, LudoPlayerState> = JSON.parse(JSON.stringify(gameState.playerStates));
     const newTokens = newStates[user.id].tokens;
 
-    if (token.position === 0 && diceValue === 6) {
-      newTokens[tokenIndex].position = 1;
+    if (token.position === 0 && dice === 6) {
+      newTokens[tokenIdx].position = 1;
     } else {
-      const newPos = token.position + diceValue;
+      const newPos = token.position + dice;
       if (newPos >= BOARD_SIZE + HOME_STRETCH) {
-        newTokens[tokenIndex].position = BOARD_SIZE + HOME_STRETCH;
-        newTokens[tokenIndex].isFinished = true;
+        newTokens[tokenIdx].position = BOARD_SIZE + HOME_STRETCH;
+        newTokens[tokenIdx].isFinished = true;
       } else {
-        newTokens[tokenIndex].position = newPos;
+        newTokens[tokenIdx].position = newPos;
       }
     }
 
-    // Check captures
-    const myAbsPos = getAbsolutePosition(newTokens[tokenIndex].position, myState.startOffset);
-    if (myAbsPos > 0 && myAbsPos <= BOARD_SIZE && !SAFE_SQUARES.includes(myAbsPos) && !newTokens[tokenIndex].isFinished) {
+    // Captures (knock opponent tokens on shared squares — not safe)
+    const myAbs = getAbsolutePosition(newTokens[tokenIdx].position, myState.startOffset);
+    if (myAbs > 0 && myAbs <= BOARD_SIZE && !SAFE_SQUARES.includes(myAbs) && !newTokens[tokenIdx].isFinished) {
       Object.entries(newStates).forEach(([uid, state]) => {
         if (uid === user.id) return;
         state.tokens.forEach((t) => {
           if (!t.isFinished && t.position > 0 && t.position <= BOARD_SIZE) {
-            const otherAbsPos = getAbsolutePosition(t.position, state.startOffset);
-            if (otherAbsPos === myAbsPos) { t.position = 0; toast.success("Captured! 💥"); }
+            const otherAbs = getAbsolutePosition(t.position, state.startOffset);
+            if (otherAbs === myAbs) {
+              t.position = 0;
+              toast.success("Captured! 💥");
+            }
           }
         });
       });
     }
 
     const allFinished = newTokens.every((t) => t.isFinished);
-    let nextPlayer: string | undefined;
-    let msg = "";
+    const newMoves = { ...gameState.movesCount, [user.id]: (gameState.movesCount[user.id] || 0) + 1 };
 
+    let nextPlayer: string | null = null;
+    let msg = "";
     if (allFinished) {
-      setWinner(user.id);
-      winnerRef.current = user.id;
-      msg = `🎉 ${players.find((p) => p.user_id === user.id)?.display_name} wins!`;
-      await gameLobby.endGame(user.id);
-      saveGameResult({ gameType: "ludo", winnerId: user.id, playerIds: players.map((p) => p.user_id), result: "completed" });
-      toast.success("You won! 🎉");
-    } else if (diceValue === 6) {
+      msg = "🏆 Winner!";
+    } else if (dice === 6) {
       nextPlayer = user.id;
-      msg = "Rolled 6 — extra turn!";
+      msg = "Rolled 6 — extra turn! Roll again.";
     } else {
-      nextPlayer = getNextPlayer() ?? undefined;
+      nextPlayer = getNextPlayerId();
       msg = "";
     }
 
-    await gameLobby.updateGameState(
-      { playerStates: newStates, winner: allFinished ? user.id : null, lastDice: diceValue, hasRolled: false, message: msg },
-      nextPlayer
+    const success = await gameLobby.updateGameState(
+      {
+        playerStates: newStates,
+        winner: allFinished ? user.id : null,
+        lastDice: dice,
+        hasRolled: false,
+        message: msg,
+        movesCount: newMoves,
+      } satisfies LudoGameState,
+      nextPlayer ?? undefined
     );
+
+    if (success && allFinished) {
+      await gameLobby.endGame(user.id);
+      saveGameResult({
+        gameType: "ludo",
+        winnerId: user.id,
+        playerIds: players.map((p) => p.user_id),
+        result: "completed",
+        score: { moves: newMoves[user.id] },
+      });
+      toast.success("🏆 You won!");
+    }
+
+    if (!success) actionInFlightRef.current = false;
   };
 
   const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);
 
-  // Pre-lobby screens
+  // ─── Pre-lobby ───
   if (!lobby) {
     return (
       <div className="space-y-4">
         <div className="text-center">
           <h2 className="text-xl font-bold mb-2">🎲 Ludo</h2>
-          <p className="text-sm text-muted-foreground">2-4 players • Classic Indian board game</p>
+          <p className="text-sm text-muted-foreground">2-4 players • Turn-based</p>
         </div>
         <div className="space-y-3">
-          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>Create Game</Button>
-          <JoinInput onJoin={(code) => gameLobby.joinLobby(code)} isLoading={gameLobby.isLoading} />
-          <Button variant="outline" onClick={onBack} className="w-full"><ArrowLeft className="h-4 w-4 mr-2" /> Back</Button>
+          <Button onClick={handleCreateGame} className="w-full gradient-primary" disabled={gameLobby.isLoading}>
+            Create Game
+          </Button>
+          <JoinInput onJoin={(c) => gameLobby.joinLobby(c)} isLoading={gameLobby.isLoading} />
+          <Button variant="outline" onClick={onBack} className="w-full">
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+          </Button>
         </div>
       </div>
     );
   }
 
+  // ─── Waiting ───
   if (lobby.status === "waiting") {
-    return <GameLobbyComponent lobby={lobby} players={players} isHost={isHost} isLoading={gameLobby.isLoading} maxPlayers={4} gameName="🎲 Ludo" minPlayers={2} onReady={(r) => gameLobby.setReady(r)} onStart={handleStartGame} onLeave={gameLobby.leaveLobby} />;
+    return (
+      <GameLobbyComponent
+        lobby={lobby}
+        players={players}
+        isHost={isHost}
+        isLoading={gameLobby.isLoading}
+        maxPlayers={4}
+        gameName="🎲 Ludo"
+        minPlayers={2}
+        onReady={(r) => gameLobby.setReady(r)}
+        onStart={handleStartGame}
+        onLeave={gameLobby.leaveLobby}
+      />
+    );
   }
 
+  // ─── Finished ───
+  if (gameState.winner || lobby.status === "finished") {
+    const winner = players.find((p) => p.user_id === gameState.winner);
+    const ranking = [...players].sort((a, b) => {
+      const aFin = gameState.playerStates[a.user_id]?.tokens.filter((t) => t.isFinished).length || 0;
+      const bFin = gameState.playerStates[b.user_id]?.tokens.filter((t) => t.isFinished).length || 0;
+      return bFin - aFin;
+    });
+    return (
+      <div className="space-y-4 text-center py-4">
+        <Trophy className="h-16 w-16 mx-auto text-yellow-500" />
+        <h2 className="text-2xl font-bold">🏆 {winner?.display_name || "Player"} wins!</h2>
+        <div className="space-y-2 max-w-xs mx-auto">
+          <h3 className="text-sm font-semibold text-muted-foreground">Final Ranking</h3>
+          {ranking.map((p, i) => {
+            const finished = gameState.playerStates[p.user_id]?.tokens.filter((t) => t.isFinished).length || 0;
+            return (
+              <div key={p.user_id} className={cn("flex justify-between items-center px-3 py-2 rounded-lg border", i === 0 ? "bg-yellow-500/10 border-yellow-500/30" : "bg-muted/30")}>
+                <span className="text-sm font-medium">{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`} {p.display_name}</span>
+                <Badge variant="outline">{finished}/4 home • {gameState.movesCount[p.user_id] || 0} moves</Badge>
+              </div>
+            );
+          })}
+        </div>
+        <Button onClick={gameLobby.leaveLobby} className="w-full gradient-primary">
+          <RotateCcw className="h-4 w-4 mr-2" /> Back to Menu
+        </Button>
+      </div>
+    );
+  }
+
+  // ─── Playing ───
   return (
     <div className="space-y-3">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold">🎲 Ludo</h2>
-        {winner ? (
-          <Badge className="bg-yellow-500 text-black">
-            <Trophy className="h-3 w-3 mr-1" />{players.find((p) => p.user_id === winner)?.display_name} wins!
-          </Badge>
-        ) : (
-          <Badge variant={isMyTurn ? "default" : "secondary"} className={cn(isMyTurn && "animate-pulse")}>
-            {isMyTurn ? "Your turn!" : `${currentTurnPlayer?.display_name}'s turn`}
-          </Badge>
-        )}
+        <Badge variant={isMyTurn ? "default" : "secondary"} className={cn(isMyTurn && "animate-pulse")}>
+          {isMyTurn ? "Your turn!" : `${currentTurnPlayer?.display_name || "..."}'s turn`}
+        </Badge>
       </div>
 
-      {/* Player indicators */}
       <div className="flex gap-2 justify-center flex-wrap">
         {players.map((p, idx) => (
-          <div
-            key={p.user_id}
-            className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all",
-              lobby.current_turn_user_id === p.user_id && "ring-2 ring-offset-1 scale-105"
-            )}
-            style={{
-              backgroundColor: PLAYER_COLORS.light[idx],
-              color: PLAYER_COLORS.dark[idx],
-              ...(lobby.current_turn_user_id === p.user_id ? { ringColor: PLAYER_COLORS.bg[idx] } : {}),
-            }}
-          >
+          <div key={p.user_id} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all",
+              lobby.current_turn_user_id === p.user_id && "ring-2 ring-offset-1 scale-105")}
+            style={{ backgroundColor: PLAYER_COLORS.light[idx], color: PLAYER_COLORS.dark[idx] }}>
             <span>{PLAYER_EMOJIS[idx]}</span>
             <span>{p.display_name.slice(0, 8)}</span>
           </div>
         ))}
       </div>
 
-      {/* Visual Board */}
       <LudoBoard
         players={players}
-        playerStates={playerStates}
+        playerStates={gameState.playerStates}
         currentUserId={user?.id}
         isMyTurn={isMyTurn}
-        hasRolled={hasRolled}
-        diceValue={diceValue}
-        canMoveToken={canMoveToken}
+        hasRolled={gameState.hasRolled}
+        diceValue={gameState.lastDice}
         onTokenClick={handleTokenClick}
-        moveInProgress={moveInProgressRef.current}
+        actionInFlight={actionInFlightRef.current}
       />
 
-      {/* Message */}
-      {message && (
-        <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">{message}</div>
+      {gameState.message && (
+        <div className="text-center text-sm text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">{gameState.message}</div>
       )}
 
-      {/* Controls */}
       <div className="flex items-center gap-3">
-        {diceValue && <DiceFace value={diceValue} rolling={rolling} />}
+        {diceDisplay && <DiceFace value={diceDisplay} rolling={rolling} />}
         <div className="flex-1 space-y-2">
-          {!winner && (
-            <Button onClick={rollDice} disabled={!isMyTurn || rolling || hasRolled || moveInProgressRef.current} className="w-full gradient-primary h-12 text-base">
-              <Dices className="h-5 w-5 mr-2" />
-              {rolling ? "Rolling..." : hasRolled ? "Tap a token..." : isMyTurn ? "Roll Dice" : "Wait your turn"}
-            </Button>
-          )}
-          {winner && <Button onClick={gameLobby.leaveLobby} className="w-full"><RotateCcw className="h-4 w-4 mr-2" /> Back to Menu</Button>}
+          <Button
+            onClick={handleRollDice}
+            disabled={!isMyTurn || rolling || gameState.hasRolled || actionInFlightRef.current}
+            className="w-full gradient-primary h-12 text-base"
+          >
+            <Dices className="h-5 w-5 mr-2" />
+            {rolling ? "Rolling..." : gameState.hasRolled ? "Tap a token..." : isMyTurn ? "Roll Dice" : "Wait your turn"}
+          </Button>
           <Button variant="outline" onClick={gameLobby.leaveLobby} size="sm" className="w-full">Leave Game</Button>
         </div>
       </div>
