@@ -12,6 +12,7 @@ import { ResetPassword } from "./pages/ResetPassword";
 import { RoomSetup } from "./pages/RoomSetup";
 import { RoomSettings } from "./pages/RoomSettings";
 import { Expenses } from "./pages/Expenses";
+import RecurringBills from "./pages/RecurringBills";
 import { Tasks } from "./pages/Tasks";
 import { Storage } from "./pages/Storage";
 import { Chat } from "./pages/Chat";
@@ -103,6 +104,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Expenses />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/recurring-bills"
+              element={
+                <ProtectedRoute>
+                  <RecurringBills />
                 </ProtectedRoute>
               }
             />

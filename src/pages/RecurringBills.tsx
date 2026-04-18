@@ -86,7 +86,7 @@ const RecurringBills = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <TopBar />
+      <TopBar title="Recurring Bills" />
       <div className="px-4 py-4 max-w-2xl mx-auto">
         <div className="flex items-center gap-2 mb-4">
           <Button variant="ghost" size="icon" onClick={() => navigate("/expenses")}>
@@ -149,7 +149,13 @@ const RecurringBills = () => {
       </div>
 
       <CreateRecurringBillDialog open={showCreate} onOpenChange={setShowCreate} onCreated={fetchBills} />
-      <BottomNav />
+      <BottomNav activeTab="expenses" onTabChange={(tab) => {
+        if (tab === 'home') navigate('/');
+        else if (tab === 'tasks') navigate('/tasks');
+        else if (tab === 'expenses') navigate('/expenses');
+        else if (tab === 'chat') navigate('/chat');
+        else if (tab === 'storage') navigate('/storage');
+      }} />
     </div>
   );
 };
