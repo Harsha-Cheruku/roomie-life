@@ -639,6 +639,130 @@ export type Database = {
         }
         Relationships: []
       }
+      recurring_bill_runs: {
+        Row: {
+          created_at: string
+          expense_id: string | null
+          id: string
+          recurring_bill_id: string
+          run_date: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id?: string | null
+          id?: string
+          recurring_bill_id: string
+          run_date: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string | null
+          id?: string
+          recurring_bill_id?: string
+          run_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_bill_runs_recurring_bill_id_fkey"
+            columns: ["recurring_bill_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_bill_splits: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          recurring_bill_id: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          recurring_bill_id: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          recurring_bill_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_bill_splits_recurring_bill_id_fkey"
+            columns: ["recurring_bill_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_bills"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recurring_bills: {
+        Row: {
+          category: string | null
+          created_at: string
+          created_by: string
+          day_of_month: number | null
+          day_of_week: number | null
+          frequency: string
+          id: string
+          is_active: boolean
+          last_run_date: string | null
+          next_run_date: string
+          notes: string | null
+          paid_by: string
+          room_id: string
+          split_type: string
+          title: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          created_by: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          frequency: string
+          id?: string
+          is_active?: boolean
+          last_run_date?: string | null
+          next_run_date: string
+          notes?: string | null
+          paid_by: string
+          room_id: string
+          split_type?: string
+          title: string
+          total_amount: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          created_by?: string
+          day_of_month?: number | null
+          day_of_week?: number | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          last_run_date?: string | null
+          next_run_date?: string
+          notes?: string | null
+          paid_by?: string
+          room_id?: string
+          split_type?: string
+          title?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reminders: {
         Row: {
           allowed_completers: string[] | null
