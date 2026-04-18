@@ -117,7 +117,29 @@ export const useGameLobby = () => {
         return [];
       }
 
-      const result = (data || []).map(parsePlayer);
+      const dedupedPlayers = new Map<string, LobbyPlayer>();
+      for (const rawPlayer of data || []) {
+        const parsedPlayer = parsePlayer(rawPlayer);
+        const existing = dedupedPlayers.get(parsedPlayer.user_id);
+        if (!existing) {
+          dedupedPlayers.set(parsedPlayer.user_id, parsedPlayer);
+          continue;
+        }
+
+        const existingTime = new Date(existing.joined_at).getTime();
+        const parsedTime = new Date(parsedPlayer.joined_at).getTime();
+        if (
+          parsedPlayer.player_order < existing.player_order ||
+          (parsedPlayer.player_order === existing.player_order && parsedTime < existingTime)
+        ) {
+          dedupedPlayers.set(parsedPlayer.user_id, parsedPlayer);
+        }
+      }
+
+      const result = Array.from(dedupedPlayers.values()).sort((a, b) => {
+        if (a.player_order !== b.player_order) return a.player_order - b.player_order;
+        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+      });
       setPlayers(result);
       return result;
     } catch (err) {
@@ -562,7 +584,7 @@ export const useGameLobby = () => {
               ? confirmedLobby.game_state
               : initialState,
         });
-        setPlayers(readyPlayers);
+        setPlayers(orderedPlayers);
 
         toast.success("Game started! 🎮");
         return true;

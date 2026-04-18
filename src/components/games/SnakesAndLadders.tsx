@@ -58,7 +58,11 @@ interface GameState {
 export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   const { user } = useAuth();
   const { saveGameResult } = useGameStats();
-  const { lobby, players, isHost, isMyTurn } = gameLobby;
+  const { lobby, players } = gameLobby;
+  const activeLobby = lobby?.game_type === "snakes_and_ladders" ? lobby : null;
+  const activePlayers = activeLobby ? players : [];
+  const isHost = activeLobby?.host_id === user?.id;
+  const isMyTurn = activeLobby?.current_turn_user_id === user?.id;
 
   // Local UI state
   const [rolling, setRolling] = useState(false);
@@ -67,17 +71,21 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
 
   // Server-derived state (single source of truth)
   const gameState: GameState = {
-    positions: lobby?.game_state?.positions || {},
-    winner: lobby?.game_state?.winner || null,
-    lastDice: lobby?.game_state?.lastDice || null,
-    message: lobby?.game_state?.message || "",
-    movesCount: lobby?.game_state?.movesCount || {},
+    positions: activeLobby?.game_state?.positions || {},
+    winner: activeLobby?.game_state?.winner || null,
+    lastDice: activeLobby?.game_state?.lastDice || null,
+    message: activeLobby?.game_state?.message || "",
+    movesCount: activeLobby?.game_state?.movesCount || {},
   };
 
   // Sync dice display when server updates
   useEffect(() => {
     if (gameState.lastDice && !rolling) setDiceDisplay(gameState.lastDice);
   }, [gameState.lastDice, rolling]);
+
+  useEffect(() => {
+    actionInFlightRef.current = false;
+  }, [activeLobby?.current_turn_user_id, activeLobby?.game_state]);
 
   const handleCreateGame = useCallback(async () => {
     await gameLobby.createLobby("snakes_and_ladders", 6);
@@ -102,7 +110,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   const handleRollDice = useCallback(async () => {
     // Triple-guard: turn check, in-flight, winner
     if (!isMyTurn || actionInFlightRef.current || gameState.winner || rolling || !user) return;
-    if (!lobby) return;
+    if (!activeLobby) return;
 
     actionInFlightRef.current = true;
     setRolling(true);
@@ -120,10 +128,10 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
         void commitMove(finalDice);
       }
     }, 80);
-  }, [isMyTurn, gameState.winner, rolling, user, lobby]);
+  }, [activeLobby, isMyTurn, gameState.winner, rolling, user]);
 
   const commitMove = async (dice: number) => {
-    if (!user || !lobby) {
+    if (!user || !activeLobby) {
       actionInFlightRef.current = false;
       return;
     }
@@ -135,8 +143,8 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     const newMoves = { ...gameState.movesCount, [user.id]: (gameState.movesCount[user.id] || 0) + 1 };
 
     // Determine next player
-    const myIdx = players.findIndex((p) => p.user_id === user.id);
-    const nextPlayer = players[(myIdx + 1) % players.length]?.user_id;
+    const myIdx = activePlayers.findIndex((p) => p.user_id === user.id);
+    const nextPlayer = myIdx >= 0 ? activePlayers[(myIdx + 1) % activePlayers.length]?.user_id : null;
 
     const newState: GameState = {
       positions: newPositions,
@@ -153,7 +161,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
       saveGameResult({
         gameType: "snakes_and_ladders",
         winnerId: user.id,
-        playerIds: players.map((p) => p.user_id),
+        playerIds: activePlayers.map((p) => p.user_id),
         result: "completed",
         score: { final_position: 100, moves: newMoves[user.id] },
       });
@@ -169,12 +177,12 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     return r % 2 === 0 ? r * 10 + col + 1 : r * 10 + (9 - col) + 1;
   };
 
-  const playersAtCell = (n: number) => players.filter((p) => (gameState.positions[p.user_id] || 0) === n);
+  const playersAtCell = (n: number) => activePlayers.filter((p) => (gameState.positions[p.user_id] || 0) === n);
   const diceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
-  const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);
+  const currentTurnPlayer = activePlayers.find((p) => p.user_id === activeLobby?.current_turn_user_id);
 
   // ─── Pre-lobby ───
-  if (!lobby) {
+  if (!activeLobby) {
     return (
       <div className="space-y-4">
         <div className="text-center">
@@ -195,11 +203,11 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   }
 
   // ─── Lobby waiting ───
-  if (lobby.status === "waiting") {
+  if (activeLobby.status === "waiting") {
     return (
       <GameLobbyComponent
-        lobby={lobby}
-        players={players}
+        lobby={activeLobby}
+        players={activePlayers}
         isHost={isHost}
         isLoading={gameLobby.isLoading}
         maxPlayers={6}
@@ -213,9 +221,9 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   }
 
   // ─── Finished — Result screen ───
-  if (gameState.winner || lobby.status === "finished") {
-    const winner = players.find((p) => p.user_id === gameState.winner);
-    const ranking = [...players].sort(
+  if (gameState.winner || activeLobby.status === "finished") {
+    const winner = activePlayers.find((p) => p.user_id === gameState.winner);
+    const ranking = [...activePlayers].sort(
       (a, b) => (gameState.positions[b.user_id] || 0) - (gameState.positions[a.user_id] || 0)
     );
     return (
@@ -288,8 +296,8 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                   {here.length > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center z-20">
                       <div className="flex flex-wrap justify-center gap-[1px]">
-                        {here.map((p) => {
-                          const idx = players.indexOf(p);
+                         {here.map((p) => {
+                           const idx = activePlayers.indexOf(p);
                           return (
                             <div
                               key={p.user_id}
@@ -315,13 +323,13 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
 
       {/* Player chips */}
       <div className="flex flex-wrap gap-2">
-        {players.map((p, i) => (
+        {activePlayers.map((p, i) => (
           <Badge
             key={p.user_id}
             variant="outline"
             className={cn(
               "text-xs gap-1 py-1",
-              lobby.current_turn_user_id === p.user_id && "ring-2 ring-primary shadow-md"
+               activeLobby.current_turn_user_id === p.user_id && "ring-2 ring-primary shadow-md"
             )}
           >
             <div className="w-3 h-3 rounded-full border border-white/50" style={{ backgroundColor: PLAYER_COLORS[i] }} />

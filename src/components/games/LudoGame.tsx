@@ -128,6 +128,19 @@ const LudoBoard = ({
   useEffect(() => {
     const el = boardRef.current;
     if (!el) return;
+
+    const syncBoardSize = () => {
+      const width = el.getBoundingClientRect().width || el.clientWidth;
+      if (width) setBoardSize(width);
+    };
+
+    syncBoardSize();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", syncBoardSize);
+      return () => window.removeEventListener("resize", syncBoardSize);
+    }
+
     const obs = new ResizeObserver((entries) => {
       const w = entries[0]?.contentRect.width;
       if (w) setBoardSize(w);
@@ -245,7 +258,11 @@ const DiceFace = ({ value, rolling }: { value: number; rolling: boolean }) => {
 export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   const { user } = useAuth();
   const { saveGameResult } = useGameStats();
-  const { lobby, players, isHost, isMyTurn } = gameLobby;
+  const { lobby, players } = gameLobby;
+  const activeLobby = lobby?.game_type === "ludo" ? lobby : null;
+  const activePlayers = activeLobby ? players : [];
+  const isHost = activeLobby?.host_id === user?.id;
+  const isMyTurn = activeLobby?.current_turn_user_id === user?.id;
 
   // Local UI-only state
   const [rolling, setRolling] = useState(false);
@@ -254,12 +271,12 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
 
   // Server state is the source of truth
   const gameState: LudoGameState = {
-    playerStates: lobby?.game_state?.playerStates || {},
-    winner: lobby?.game_state?.winner || null,
-    lastDice: lobby?.game_state?.lastDice || null,
-    hasRolled: !!lobby?.game_state?.hasRolled,
-    message: lobby?.game_state?.message || "",
-    movesCount: lobby?.game_state?.movesCount || {},
+    playerStates: activeLobby?.game_state?.playerStates || {},
+    winner: activeLobby?.game_state?.winner || null,
+    lastDice: activeLobby?.game_state?.lastDice || null,
+    hasRolled: !!activeLobby?.game_state?.hasRolled,
+    message: activeLobby?.game_state?.message || "",
+    movesCount: activeLobby?.game_state?.movesCount || {},
   };
 
   useEffect(() => {
@@ -269,7 +286,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   // When server state updates (turn switched), release in-flight lock
   useEffect(() => {
     actionInFlightRef.current = false;
-  }, [lobby?.current_turn_user_id, lobby?.game_state]);
+  }, [activeLobby?.current_turn_user_id, activeLobby?.game_state]);
 
   const handleCreateGame = useCallback(async () => {
     await gameLobby.createLobby("ludo", 4);
@@ -278,7 +295,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   const handleStartGame = useCallback(async () => {
     const initialStates: Record<string, LudoPlayerState> = {};
     const initialMoves: Record<string, number> = {};
-    players.forEach((p, i) => {
+    activePlayers.forEach((p, i) => {
       initialStates[p.user_id] = {
         tokens: Array(4).fill(null).map(() => ({ position: 0, isFinished: false })),
         startOffset: START_OFFSETS[i] ?? 0,
@@ -293,14 +310,14 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
       message: "Game started! Roll the dice.",
       movesCount: initialMoves,
     } satisfies LudoGameState);
-  }, [gameLobby, players]);
+  }, [activePlayers, gameLobby]);
 
   const getNextPlayerId = useCallback((): string | null => {
     if (!user) return null;
-    const idx = players.findIndex((p) => p.user_id === user.id);
-    if (idx < 0) return players[0]?.user_id ?? null;
-    return players[(idx + 1) % players.length]?.user_id ?? null;
-  }, [players, user]);
+    const idx = activePlayers.findIndex((p) => p.user_id === user.id);
+    if (idx < 0) return activePlayers[0]?.user_id ?? null;
+    return activePlayers[(idx + 1) % activePlayers.length]?.user_id ?? null;
+  }, [activePlayers, user]);
 
   const handleRollDice = useCallback(async () => {
     if (!isMyTurn || actionInFlightRef.current || gameState.winner || gameState.hasRolled || rolling || !user) return;
@@ -431,7 +448,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
       saveGameResult({
         gameType: "ludo",
         winnerId: user.id,
-        playerIds: players.map((p) => p.user_id),
+        playerIds: activePlayers.map((p) => p.user_id),
         result: "completed",
         score: { moves: newMoves[user.id] },
       });
@@ -441,10 +458,10 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
     if (!success) actionInFlightRef.current = false;
   };
 
-  const currentTurnPlayer = players.find((p) => p.user_id === lobby?.current_turn_user_id);
+  const currentTurnPlayer = activePlayers.find((p) => p.user_id === activeLobby?.current_turn_user_id);
 
   // ─── Pre-lobby ───
-  if (!lobby) {
+  if (!activeLobby) {
     return (
       <div className="space-y-4">
         <div className="text-center">
@@ -465,11 +482,11 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   }
 
   // ─── Waiting ───
-  if (lobby.status === "waiting") {
+  if (activeLobby.status === "waiting") {
     return (
       <GameLobbyComponent
-        lobby={lobby}
-        players={players}
+        lobby={activeLobby}
+        players={activePlayers}
         isHost={isHost}
         isLoading={gameLobby.isLoading}
         maxPlayers={4}
@@ -483,9 +500,9 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
   }
 
   // ─── Finished ───
-  if (gameState.winner || lobby.status === "finished") {
-    const winner = players.find((p) => p.user_id === gameState.winner);
-    const ranking = [...players].sort((a, b) => {
+  if (gameState.winner || activeLobby.status === "finished") {
+    const winner = activePlayers.find((p) => p.user_id === gameState.winner);
+    const ranking = [...activePlayers].sort((a, b) => {
       const aFin = gameState.playerStates[a.user_id]?.tokens.filter((t) => t.isFinished).length || 0;
       const bFin = gameState.playerStates[b.user_id]?.tokens.filter((t) => t.isFinished).length || 0;
       return bFin - aFin;
@@ -524,9 +541,9 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
       </div>
 
       <div className="flex gap-2 justify-center flex-wrap">
-        {players.map((p, idx) => (
+        {activePlayers.map((p, idx) => (
           <div key={p.user_id} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-all",
-              lobby.current_turn_user_id === p.user_id && "ring-2 ring-offset-1 scale-105")}
+              activeLobby.current_turn_user_id === p.user_id && "ring-2 ring-offset-1 scale-105")}
             style={{ backgroundColor: PLAYER_COLORS.light[idx], color: PLAYER_COLORS.dark[idx] }}>
             <span>{PLAYER_EMOJIS[idx]}</span>
             <span>{p.display_name.slice(0, 8)}</span>
@@ -535,7 +552,7 @@ export const LudoGame = ({ onBack, gameLobby }: LudoGameProps) => {
       </div>
 
       <LudoBoard
-        players={players}
+          players={activePlayers}
         playerStates={gameState.playerStates}
         currentUserId={user?.id}
         isMyTurn={isMyTurn}
