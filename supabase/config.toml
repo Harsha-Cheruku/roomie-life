@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.dismiss-alarm]
 verify_jwt = false
+
+[functions.process-recurring-bills]
+verify_jwt = false
