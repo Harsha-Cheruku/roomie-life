@@ -41,11 +41,17 @@ export default function Games() {
 
   // Clear lobby state when switching to a different game or back to menu
   const switchGame = (game: GameType) => {
-    if (game === 'menu' || (gameLobby.lobby && !['snakes', 'ludo', 'chopat', 'kabaddi'].includes(game))) {
-      // Only clear lobby when going to menu or switching to a local game
-      if (game === 'menu' && gameLobby.lobby) {
-        // Don't auto-clear; user might want to come back
-      }
+    const multiplayerGameMap: Partial<Record<GameType, string>> = {
+      snakes: 'snakes_and_ladders',
+      ludo: 'ludo',
+      chopat: 'chopat',
+      kabaddi: 'kabaddi_tap',
+    };
+
+    const expectedLobbyType = multiplayerGameMap[game];
+    if (gameLobby.lobby && expectedLobbyType && gameLobby.lobby.game_type !== expectedLobbyType) {
+      gameLobby.setLobby(null);
+      gameLobby.setPlayers([]);
     }
     setCurrentGame(game);
   };
