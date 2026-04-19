@@ -519,8 +519,15 @@ export const Expenses = () => {
         rightContent={
           <div className="flex items-center gap-1.5">
             <ReminderBellIcon filterType="expense" />
-            <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs" onClick={() => navigate('/recurring-bills')}>
-              🔁 Recurring
+            <Button
+              variant="outline"
+              size="icon"
+              className="press-effect h-8 w-8"
+              onClick={() => navigate('/recurring-bills')}
+              title="Recurring Bills"
+              aria-label="Recurring Bills"
+            >
+              <Repeat className="h-4 w-4" />
             </Button>
             <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs" onClick={() => setShowCreateDialog(true)}>
               <Plus className="w-3.5 h-3.5" />
