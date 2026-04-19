@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
