@@ -30,6 +30,99 @@ export interface GameLobby {
   updated_at: string;
 }
 
+const LUDO_START_OFFSETS = [0, 13, 26, 39] as const;
+
+export const normalizeLobbyPlayers = (players: LobbyPlayer[]): LobbyPlayer[] => {
+  const dedupedPlayers = new Map<string, LobbyPlayer>();
+
+  for (const player of players) {
+    const existing = dedupedPlayers.get(player.user_id);
+    if (!existing) {
+      dedupedPlayers.set(player.user_id, player);
+      continue;
+    }
+
+    const existingTime = new Date(existing.joined_at).getTime();
+    const playerTime = new Date(player.joined_at).getTime();
+    if (
+      player.player_order < existing.player_order ||
+      (player.player_order === existing.player_order && playerTime < existingTime)
+    ) {
+      dedupedPlayers.set(player.user_id, player);
+    }
+  }
+
+  return Array.from(dedupedPlayers.values()).sort((a, b) => {
+    if (a.player_order !== b.player_order) return a.player_order - b.player_order;
+    return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
+  });
+};
+
+export const buildStartGameState = (
+  gameType: string,
+  initialState: Record<string, any>,
+  players: Pick<LobbyPlayer, "user_id" | "player_order">[]
+) => {
+  const orderedPlayers = [...players].sort((a, b) => a.player_order - b.player_order);
+  const state = sanitizeGameState(initialState);
+  const movesCount = { ...(state.movesCount || {}) };
+
+  orderedPlayers.forEach((player) => {
+    if (typeof movesCount[player.user_id] !== "number") {
+      movesCount[player.user_id] = 0;
+    }
+  });
+
+  if (gameType === "snakes_and_ladders") {
+    const positions = { ...(state.positions || {}) };
+    orderedPlayers.forEach((player) => {
+      if (typeof positions[player.user_id] !== "number") {
+        positions[player.user_id] = 0;
+      }
+    });
+
+    return {
+      positions,
+      winner: state.winner ?? null,
+      lastDice: state.lastDice ?? null,
+      message: state.message || "Game started! Roll the dice.",
+      movesCount,
+    };
+  }
+
+  if (gameType === "ludo") {
+    const playerStates = { ...(state.playerStates || {}) };
+    orderedPlayers.forEach((player, index) => {
+      const existing = playerStates[player.user_id];
+      const hasValidTokens = Array.isArray(existing?.tokens) && existing.tokens.length === 4;
+
+      playerStates[player.user_id] = hasValidTokens
+        ? {
+            ...existing,
+            startOffset:
+              typeof existing.startOffset === "number"
+                ? existing.startOffset
+                : (LUDO_START_OFFSETS[index] ?? 0),
+          }
+        : {
+            tokens: Array.from({ length: 4 }, () => ({ position: 0, isFinished: false })),
+            startOffset: LUDO_START_OFFSETS[index] ?? 0,
+          };
+    });
+
+    return {
+      playerStates,
+      winner: state.winner ?? null,
+      lastDice: state.lastDice ?? null,
+      hasRolled: !!state.hasRolled,
+      message: state.message || "Game started! Roll the dice.",
+      movesCount,
+    };
+  }
+
+  return Object.keys(movesCount).length > 0 ? { ...state, movesCount } : state;
+};
+
 const getErrorMessage = (error: any, fallback: string): string => {
   const code = typeof error?.code === "string" ? error.code : "";
   const message = typeof error?.message === "string" ? error.message : "";
@@ -120,29 +213,7 @@ export const useGameLobby = () => {
         return [];
       }
 
-      const dedupedPlayers = new Map<string, LobbyPlayer>();
-      for (const rawPlayer of data || []) {
-        const parsedPlayer = parsePlayer(rawPlayer);
-        const existing = dedupedPlayers.get(parsedPlayer.user_id);
-        if (!existing) {
-          dedupedPlayers.set(parsedPlayer.user_id, parsedPlayer);
-          continue;
-        }
-
-        const existingTime = new Date(existing.joined_at).getTime();
-        const parsedTime = new Date(parsedPlayer.joined_at).getTime();
-        if (
-          parsedPlayer.player_order < existing.player_order ||
-          (parsedPlayer.player_order === existing.player_order && parsedTime < existingTime)
-        ) {
-          dedupedPlayers.set(parsedPlayer.user_id, parsedPlayer);
-        }
-      }
-
-      const result = Array.from(dedupedPlayers.values()).sort((a, b) => {
-        if (a.player_order !== b.player_order) return a.player_order - b.player_order;
-        return new Date(a.joined_at).getTime() - new Date(b.joined_at).getTime();
-      });
+      const result = normalizeLobbyPlayers((data || []).map(parsePlayer));
       setPlayers(result);
       return result;
     } catch (err) {
@@ -410,18 +481,31 @@ export const useGameLobby = () => {
 
         const foundLobby = parseLobby(lobbies[0]);
 
-        const { data: alreadyIn } = await supabase
+        const { data: existingMemberships, error: membershipError } = await supabase
           .from("game_lobby_players")
-          .select("id")
+          .select("id, joined_at")
           .eq("lobby_id", foundLobby.id)
           .eq("user_id", user.id)
-          .maybeSingle();
+          .order("joined_at", { ascending: true });
 
-        if (alreadyIn) {
+        if (membershipError) throw membershipError;
+
+        if (existingMemberships?.length) {
+          const staleMembershipIds = existingMemberships.slice(1).map((row) => row.id);
+          if (staleMembershipIds.length) {
+            await supabase.from("game_lobby_players").delete().in("id", staleMembershipIds);
+          }
+
           setLobby(foundLobby);
           await fetchPlayers(foundLobby.id);
           return foundLobby;
         }
+
+        await supabase
+          .from("game_lobby_players")
+          .delete()
+          .eq("user_id", user.id)
+          .neq("lobby_id", foundLobby.id);
 
         const { data: existingPlayers } = await supabase
           .from("game_lobby_players")
@@ -521,7 +605,7 @@ export const useGameLobby = () => {
           return false;
         }
 
-        const readyPlayers = await fetchPlayers(lobby.id);
+        const readyPlayers = normalizeLobbyPlayers(await fetchPlayers(lobby.id));
         console.info("[Games] startGame validation", {
           room_id: freshLobby.room_id,
           lobby_id: freshLobby.id,
@@ -581,7 +665,7 @@ export const useGameLobby = () => {
         // Suppress polling for 3 seconds so it doesn't overwrite our optimistic state
         suppressPollUntilRef.current = Date.now() + 3000;
 
-        const sanitizedState = sanitizeGameState(initialState);
+        const hydratedState = buildStartGameState(freshLobby.game_type, initialState, orderedPlayers);
         let updatedRows: any[] | null = null;
 
         for (let attempt = 0; attempt < 2; attempt++) {
@@ -590,7 +674,7 @@ export const useGameLobby = () => {
             .update({
               status: "playing" as string,
               current_turn_user_id: firstPlayerId,
-              game_state: sanitizedState as any,
+              game_state: hydratedState as any,
               updated_at: new Date().toISOString(),
             })
             .eq("id", freshLobby.id)
@@ -652,7 +736,7 @@ export const useGameLobby = () => {
           game_state:
             Object.keys(confirmedLobby.game_state || {}).length > 0
               ? confirmedLobby.game_state
-                : sanitizedState,
+                : hydratedState,
         });
         setPlayers(orderedPlayers);
 
