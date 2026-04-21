@@ -17,31 +17,48 @@ const SNAKES: Record<number, number> = {
 const LADDERS: Record<number, number> = {
   1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100,
 };
-const PLAYER_COLORS = ["#EF4444", "#3B82F6", "#22C55E", "#A855F7", "#F97316", "#EC4899"];
+const PLAYER_COLORS = [
+  "hsl(var(--secondary))",
+  "hsl(var(--primary))",
+  "hsl(var(--mint))",
+  "hsl(var(--lavender))",
+  "hsl(var(--peach))",
+  "hsl(var(--accent))",
+];
+const JUMP_CELLS = new Set([...Object.keys(SNAKES), ...Object.keys(LADDERS), ...Object.values(SNAKES), ...Object.values(LADDERS)].map(Number));
 
 interface MoveResult {
   newPosition: number;
   message: string;
   won: boolean;
   skipTurn: boolean; // true if can't move (e.g. overshoot)
+  extraTurn: boolean;
 }
 
-function applyMove(currentPos: number, dice: number): MoveResult {
+export function applyMove(currentPos: number, dice: number): MoveResult {
   const target = currentPos + dice;
   // Need exact roll to land on 100
   if (target > 100) {
-    return { newPosition: currentPos, message: `Rolled ${dice} — overshot! Need exact roll.`, won: false, skipTurn: true };
+    return { newPosition: currentPos, message: `Rolled ${dice} — overshot! Need exact roll.`, won: false, skipTurn: true, extraTurn: false };
   }
+
+  const snakeEnd = SNAKES[target];
+  const ladderEnd = LADDERS[target];
+  const finalPosition = snakeEnd ?? ladderEnd ?? target;
+  const won = finalPosition === 100;
+  const extraTurn = dice === 6 && !won;
+  const bonus = extraTurn ? " Roll 6 again!" : "";
+
   if (target === 100) {
-    return { newPosition: 100, message: `🎉 Reached 100! WIN!`, won: true, skipTurn: false };
+    return { newPosition: 100, message: `🎉 Reached 100! WIN!`, won: true, skipTurn: false, extraTurn: false };
   }
-  if (SNAKES[target]) {
-    return { newPosition: SNAKES[target], message: `🐍 Snake at ${target} → slid to ${SNAKES[target]}`, won: false, skipTurn: false };
+  if (snakeEnd) {
+    return { newPosition: snakeEnd, message: `🐍 Snake at ${target} → slid to ${snakeEnd}.${bonus}`, won: false, skipTurn: false, extraTurn };
   }
-  if (LADDERS[target]) {
-    return { newPosition: LADDERS[target], message: `🪜 Ladder at ${target} → climbed to ${LADDERS[target]}`, won: false, skipTurn: false };
+  if (ladderEnd) {
+    return { newPosition: ladderEnd, message: won ? `🪜 Ladder at ${target} → 100! WIN!` : `🪜 Ladder at ${target} → climbed to ${ladderEnd}.${bonus}`, won, skipTurn: false, extraTurn };
   }
-  return { newPosition: target, message: `Moved to ${target}`, won: false, skipTurn: false };
+  return { newPosition: target, message: `Moved to ${target}.${bonus}`, won: false, skipTurn: false, extraTurn };
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
@@ -142,9 +159,13 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     const newPositions = { ...gameState.positions, [user.id]: result.newPosition };
     const newMoves = { ...gameState.movesCount, [user.id]: (gameState.movesCount[user.id] || 0) + 1 };
 
-    // Determine next player
+    // Determine next player. Official flow: rolling a 6 earns another turn unless the roll wins.
     const myIdx = activePlayers.findIndex((p) => p.user_id === user.id);
-    const nextPlayer = myIdx >= 0 ? activePlayers[(myIdx + 1) % activePlayers.length]?.user_id : null;
+    const nextPlayer = result.extraTurn
+      ? user.id
+      : myIdx >= 0
+        ? activePlayers[(myIdx + 1) % activePlayers.length]?.user_id
+        : null;
 
     const newState: GameState = {
       positions: newPositions,
@@ -180,6 +201,20 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   const playersAtCell = (n: number) => activePlayers.filter((p) => (gameState.positions[p.user_id] || 0) === n);
   const diceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
   const currentTurnPlayer = activePlayers.find((p) => p.user_id === activeLobby?.current_turn_user_id);
+  const getCellCenter = (n: number) => {
+    const zeroBased = n - 1;
+    const rowFromBottom = Math.floor(zeroBased / 10);
+    const colInRow = zeroBased % 10;
+    const col = rowFromBottom % 2 === 0 ? colInRow : 9 - colInRow;
+    return { x: col * 10 + 5, y: (9 - rowFromBottom) * 10 + 5 };
+  };
+  const snakePaths = Object.entries(SNAKES).map(([from, to]) => {
+    const start = getCellCenter(Number(from));
+    const end = getCellCenter(to);
+    const midY = (start.y + end.y) / 2;
+    return { from: Number(from), to, path: `M ${start.x} ${start.y} C ${start.x - 8} ${midY - 8}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}` };
+  });
+  const ladderLines = Object.entries(LADDERS).map(([from, to]) => ({ from: Number(from), to, start: getCellCenter(Number(from)), end: getCellCenter(to) }));
 
   // ─── Pre-lobby ───
   if (!activeLobby) {
@@ -228,7 +263,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     );
     return (
       <div className="space-y-4 text-center py-4">
-        <Trophy className="h-16 w-16 mx-auto text-yellow-500" />
+        <Trophy className="h-16 w-16 mx-auto text-accent" />
         <h2 className="text-2xl font-bold">🏆 {winner?.display_name || "Player"} wins!</h2>
         <div className="space-y-2 max-w-xs mx-auto">
           <h3 className="text-sm font-semibold text-muted-foreground">Final Ranking</h3>
@@ -237,7 +272,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
               key={p.user_id}
               className={cn(
                 "flex justify-between items-center px-3 py-2 rounded-lg border",
-                i === 0 ? "bg-yellow-500/10 border-yellow-500/30" : "bg-muted/30"
+                i === 0 ? "bg-accent/15 border-accent/35" : "bg-muted/30"
               )}
             >
               <span className="text-sm font-medium">
@@ -267,32 +302,35 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
       </div>
 
       {/* Board */}
-      <div className="rounded-xl overflow-hidden border-4 border-amber-700 shadow-xl bg-amber-300">
-        <div className="bg-amber-600 text-center py-1">
-          <span className="text-white font-bold text-xs tracking-wider">SNAKES & LADDERS</span>
+      <div className="rounded-xl overflow-hidden border-4 border-accent shadow-xl bg-accent/20">
+        <div className="bg-accent text-center py-1">
+          <span className="text-accent-foreground font-bold text-xs tracking-wider">SNAKES & LADDERS</span>
         </div>
-        <div className="grid grid-cols-10 gap-0">
+        <div className="relative aspect-square bg-card">
+          <div className="absolute inset-0 grid grid-cols-10 gap-0">
           {Array.from({ length: 10 }).map((_, row) =>
             Array.from({ length: 10 }).map((_, col) => {
               const n = getCellNumber(row, col);
               const isSnake = SNAKES[n] !== undefined;
               const isLadder = LADDERS[n] !== undefined;
+              const isJumpTarget = JUMP_CELLS.has(n) && !isSnake && !isLadder;
               const here = playersAtCell(n);
               const even = (row + col) % 2 === 0;
               return (
                 <div
                   key={n}
                   className={cn(
-                    "aspect-square flex flex-col items-center justify-center relative border border-amber-500/30",
-                    even ? "bg-amber-200" : "bg-amber-400",
-                    n === 100 && "bg-yellow-300 ring-2 ring-yellow-500 ring-inset",
-                    n === 1 && "bg-green-300"
+                    "aspect-square relative border border-foreground/10",
+                    even ? "bg-accent/15" : "bg-accent/35",
+                    n === 100 && "bg-yellow/70 ring-2 ring-accent ring-inset",
+                    n === 1 && "bg-mint/45",
+                    isJumpTarget && "bg-card/80"
                   )}
                 >
-                  <span className="font-bold text-[8px] text-amber-800/60 leading-none z-10">{n}</span>
-                  {isSnake && <span className="text-[11px] leading-none z-10">🐍</span>}
-                  {isLadder && <span className="text-[11px] leading-none z-10">🪜</span>}
-                  {n === 100 && <span className="text-[10px]">⭐</span>}
+                  <span className="absolute left-0.5 top-0.5 font-black text-[10px] leading-none text-foreground/70 z-10">{n}</span>
+                  {isSnake && <span className="absolute bottom-0.5 right-0.5 text-[10px] leading-none z-10">🐍</span>}
+                  {isLadder && <span className="absolute bottom-0.5 right-0.5 text-[10px] leading-none z-10">🪜</span>}
+                  {n === 100 && <span className="absolute bottom-0.5 right-0.5 text-[10px] z-10">⭐</span>}
                   {here.length > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center z-20">
                       <div className="flex flex-wrap justify-center gap-[1px]">
@@ -301,11 +339,11 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                           return (
                             <div
                               key={p.user_id}
-                              className="w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white/50"
-                              style={{ backgroundColor: PLAYER_COLORS[idx] || "#999" }}
+                              className="w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-card"
+                              style={{ backgroundColor: PLAYER_COLORS[idx] || "hsl(var(--muted-foreground))" }}
                               title={p.display_name}
                             >
-                              <span className="text-[6px] text-white font-bold">
+                              <span className="text-[6px] text-primary-foreground font-bold">
                                 {p.display_name?.charAt(0)?.toUpperCase()}
                               </span>
                             </div>
@@ -318,6 +356,35 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
               );
             })
           )}
+          </div>
+          <svg className="absolute inset-0 h-full w-full pointer-events-none z-10" viewBox="0 0 100 100" aria-hidden="true">
+            {ladderLines.map(({ from, to, start, end }) => {
+              const dx = end.x - start.x;
+              const dy = end.y - start.y;
+              const length = Math.hypot(dx, dy) || 1;
+              const offsetX = (-dy / length) * 1.15;
+              const offsetY = (dx / length) * 1.15;
+              return (
+                <g key={`ladder-${from}-${to}`} stroke="hsl(var(--primary))" strokeLinecap="round">
+                  <line x1={start.x + offsetX} y1={start.y + offsetY} x2={end.x + offsetX} y2={end.y + offsetY} strokeWidth="0.7" />
+                  <line x1={start.x - offsetX} y1={start.y - offsetY} x2={end.x - offsetX} y2={end.y - offsetY} strokeWidth="0.7" />
+                  {Array.from({ length: 6 }).map((_, i) => {
+                    const t = (i + 1) / 7;
+                    const x = start.x + dx * t;
+                    const y = start.y + dy * t;
+                    return <line key={i} x1={x + offsetX} y1={y + offsetY} x2={x - offsetX} y2={y - offsetY} strokeWidth="0.55" />;
+                  })}
+                </g>
+              );
+            })}
+            {snakePaths.map(({ from, to, path }) => (
+              <g key={`snake-${from}-${to}`}>
+                <path d={path} fill="none" stroke="hsl(var(--mint))" strokeWidth="2.6" strokeLinecap="round" opacity="0.95" />
+                <path d={path} fill="none" stroke="hsl(var(--foreground))" strokeWidth="0.55" strokeLinecap="round" strokeDasharray="1 3" opacity="0.45" />
+                <circle cx={getCellCenter(from).x} cy={getCellCenter(from).y} r="1.6" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.35" />
+              </g>
+            ))}
+          </svg>
         </div>
       </div>
 
@@ -332,7 +399,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                activeLobby.current_turn_user_id === p.user_id && "ring-2 ring-primary shadow-md"
             )}
           >
-            <div className="w-3 h-3 rounded-full border border-white/50" style={{ backgroundColor: PLAYER_COLORS[i] }} />
+            <div className="w-3 h-3 rounded-full border border-card" style={{ backgroundColor: PLAYER_COLORS[i] }} />
             <span>
               {p.display_name}: <strong>{gameState.positions[p.user_id] || 0}</strong>
             </span>

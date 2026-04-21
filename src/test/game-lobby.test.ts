@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { applyMove } from "@/components/games/SnakesAndLadders";
 import { buildStartGameState, normalizeLobbyPlayers, type LobbyPlayer } from "@/hooks/useGameLobby";
 
 const makePlayer = (overrides: Partial<LobbyPlayer>): LobbyPlayer => ({
@@ -50,5 +51,11 @@ describe("game lobby helpers", () => {
     expect(state.playerStates.u3.startOffset).toBe(26);
     expect(state.playerStates.u1.tokens).toHaveLength(4);
     expect(state.movesCount).toEqual({ u1: 0, u2: 0, u3: 0 });
+  });
+
+  it("applies snakes rules with exact finish, ladder-to-100 win, and six bonus turns", () => {
+    expect(applyMove(97, 4)).toMatchObject({ newPosition: 97, won: false, skipTurn: true, extraTurn: false });
+    expect(applyMove(79, 1)).toMatchObject({ newPosition: 100, won: true, skipTurn: false, extraTurn: false });
+    expect(applyMove(10, 6)).toMatchObject({ newPosition: 6, won: false, skipTurn: false, extraTurn: true });
   });
 });
