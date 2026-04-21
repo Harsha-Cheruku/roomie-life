@@ -263,7 +263,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     );
     return (
       <div className="space-y-4 text-center py-4">
-        <Trophy className="h-16 w-16 mx-auto text-yellow-500" />
+        <Trophy className="h-16 w-16 mx-auto text-accent" />
         <h2 className="text-2xl font-bold">🏆 {winner?.display_name || "Player"} wins!</h2>
         <div className="space-y-2 max-w-xs mx-auto">
           <h3 className="text-sm font-semibold text-muted-foreground">Final Ranking</h3>
@@ -272,7 +272,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
               key={p.user_id}
               className={cn(
                 "flex justify-between items-center px-3 py-2 rounded-lg border",
-                i === 0 ? "bg-yellow-500/10 border-yellow-500/30" : "bg-muted/30"
+                i === 0 ? "bg-accent/15 border-accent/35" : "bg-muted/30"
               )}
             >
               <span className="text-sm font-medium">
@@ -339,11 +339,11 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                           return (
                             <div
                               key={p.user_id}
-                              className="w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-white/50"
-                              style={{ backgroundColor: PLAYER_COLORS[idx] || "#999" }}
+                              className="w-4 h-4 rounded-full flex items-center justify-center shadow-md border border-card"
+                              style={{ backgroundColor: PLAYER_COLORS[idx] || "hsl(var(--muted-foreground))" }}
                               title={p.display_name}
                             >
-                              <span className="text-[6px] text-white font-bold">
+                              <span className="text-[6px] text-primary-foreground font-bold">
                                 {p.display_name?.charAt(0)?.toUpperCase()}
                               </span>
                             </div>
@@ -399,7 +399,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                activeLobby.current_turn_user_id === p.user_id && "ring-2 ring-primary shadow-md"
             )}
           >
-            <div className="w-3 h-3 rounded-full border border-white/50" style={{ backgroundColor: PLAYER_COLORS[i] }} />
+            <div className="w-3 h-3 rounded-full border border-card" style={{ backgroundColor: PLAYER_COLORS[i] }} />
             <span>
               {p.display_name}: <strong>{gameState.positions[p.user_id] || 0}</strong>
             </span>
