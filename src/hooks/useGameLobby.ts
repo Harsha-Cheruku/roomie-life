@@ -666,40 +666,33 @@ export const useGameLobby = () => {
         suppressPollUntilRef.current = Date.now() + 3000;
 
         const hydratedState = buildStartGameState(freshLobby.game_type, initialState, orderedPlayers);
-        let updatedRows: any[] | null = null;
 
+        // Use server-side RPC to atomically transition waiting -> playing.
+        // This avoids client-side RLS / race issues where direct UPDATEs
+        // sometimes returned 0 rows and left lobbies stuck in "waiting".
+        let updatedRow: any = null;
+        let lastError: any = null;
         for (let attempt = 0; attempt < 2; attempt++) {
-          const { data, error } = await supabase
-            .from("game_lobbies")
-            .update({
-              status: "playing" as string,
-              current_turn_user_id: firstPlayerId,
-              game_state: hydratedState as any,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", freshLobby.id)
-            .eq("host_id", user.id)
-            .eq("status", "waiting")
-            .select("*");
+          const { data, error } = await (supabase.rpc as any)("start_game_lobby", {
+            _lobby_id: freshLobby.id,
+            _state: hydratedState,
+            _first_turn_user_id: firstPlayerId,
+          });
 
-          if (error) {
-            console.error("[Games] start game DB error", {
-              error,
-              room_id: freshLobby.room_id,
-              lobby_id: freshLobby.id,
-              ready_count: readyPlayers.length,
-              player_ids: readyPlayers.map((player) => player.user_id),
-            });
-            if (attempt === 1) {
-              toast.error("Couldn't start the game room. Please try again.");
-              return false;
-            }
-            continue;
+          if (!error && data) {
+            updatedRow = Array.isArray(data) ? data[0] : data;
+            break;
           }
 
-          updatedRows = data ?? null;
-          if (updatedRows?.length) break;
+          lastError = error;
+          console.error("[Games] start_game_lobby RPC error", {
+            attempt,
+            error,
+            lobby_id: freshLobby.id,
+            first_turn_user_id: firstPlayerId,
+          });
 
+          // If RPC failed, double-check whether the lobby actually transitioned
           const latestLobby = await fetchLobbyState(freshLobby.id);
           if (latestLobby?.status === "playing") {
             setLobby(latestLobby);
@@ -709,19 +702,10 @@ export const useGameLobby = () => {
           }
 
           if (attempt === 1) {
-            console.error("[Games] start game produced no updated row", {
-              room_id: freshLobby.room_id,
-              lobby_id: freshLobby.id,
-              game_status: latestLobby?.status,
-              current_turn_user_id: latestLobby?.current_turn_user_id,
-              game_state: latestLobby?.game_state,
-            });
-            toast.error("Game state not initialized. Please try again.");
+            toast.error(getErrorMessage(lastError, "Couldn't start the game room. Please try again."));
             return false;
           }
         }
-
-        const updatedRow = updatedRows?.[0] ?? null;
 
         if (!updatedRow) {
           toast.error("Game state not initialized. Please try again.");
