@@ -159,9 +159,13 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     const newPositions = { ...gameState.positions, [user.id]: result.newPosition };
     const newMoves = { ...gameState.movesCount, [user.id]: (gameState.movesCount[user.id] || 0) + 1 };
 
-    // Determine next player
+    // Determine next player. Official flow: rolling a 6 earns another turn unless the roll wins.
     const myIdx = activePlayers.findIndex((p) => p.user_id === user.id);
-    const nextPlayer = myIdx >= 0 ? activePlayers[(myIdx + 1) % activePlayers.length]?.user_id : null;
+    const nextPlayer = result.extraTurn
+      ? user.id
+      : myIdx >= 0
+        ? activePlayers[(myIdx + 1) % activePlayers.length]?.user_id
+        : null;
 
     const newState: GameState = {
       positions: newPositions,
@@ -197,6 +201,20 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
   const playersAtCell = (n: number) => activePlayers.filter((p) => (gameState.positions[p.user_id] || 0) === n);
   const diceEmoji = (v: number) => ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][v - 1];
   const currentTurnPlayer = activePlayers.find((p) => p.user_id === activeLobby?.current_turn_user_id);
+  const getCellCenter = (n: number) => {
+    const zeroBased = n - 1;
+    const rowFromBottom = Math.floor(zeroBased / 10);
+    const colInRow = zeroBased % 10;
+    const col = rowFromBottom % 2 === 0 ? colInRow : 9 - colInRow;
+    return { x: col * 10 + 5, y: (9 - rowFromBottom) * 10 + 5 };
+  };
+  const snakePaths = Object.entries(SNAKES).map(([from, to]) => {
+    const start = getCellCenter(Number(from));
+    const end = getCellCenter(to);
+    const midY = (start.y + end.y) / 2;
+    return { from: Number(from), to, path: `M ${start.x} ${start.y} C ${start.x - 8} ${midY - 8}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}` };
+  });
+  const ladderLines = Object.entries(LADDERS).map(([from, to]) => ({ from: Number(from), to, start: getCellCenter(Number(from)), end: getCellCenter(to) }));
 
   // ─── Pre-lobby ───
   if (!activeLobby) {
