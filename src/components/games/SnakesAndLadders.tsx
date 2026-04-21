@@ -17,31 +17,48 @@ const SNAKES: Record<number, number> = {
 const LADDERS: Record<number, number> = {
   1: 38, 4: 14, 9: 31, 21: 42, 28: 84, 36: 44, 51: 67, 71: 91, 80: 100,
 };
-const PLAYER_COLORS = ["#EF4444", "#3B82F6", "#22C55E", "#A855F7", "#F97316", "#EC4899"];
+const PLAYER_COLORS = [
+  "hsl(var(--secondary))",
+  "hsl(var(--primary))",
+  "hsl(var(--mint))",
+  "hsl(var(--lavender))",
+  "hsl(var(--peach))",
+  "hsl(var(--accent))",
+];
+const JUMP_CELLS = new Set([...Object.keys(SNAKES), ...Object.keys(LADDERS), ...Object.values(SNAKES), ...Object.values(LADDERS)].map(Number));
 
 interface MoveResult {
   newPosition: number;
   message: string;
   won: boolean;
   skipTurn: boolean; // true if can't move (e.g. overshoot)
+  extraTurn: boolean;
 }
 
-function applyMove(currentPos: number, dice: number): MoveResult {
+export function applyMove(currentPos: number, dice: number): MoveResult {
   const target = currentPos + dice;
   // Need exact roll to land on 100
   if (target > 100) {
-    return { newPosition: currentPos, message: `Rolled ${dice} — overshot! Need exact roll.`, won: false, skipTurn: true };
+    return { newPosition: currentPos, message: `Rolled ${dice} — overshot! Need exact roll.`, won: false, skipTurn: true, extraTurn: false };
   }
+
+  const snakeEnd = SNAKES[target];
+  const ladderEnd = LADDERS[target];
+  const finalPosition = snakeEnd ?? ladderEnd ?? target;
+  const won = finalPosition === 100;
+  const extraTurn = dice === 6 && !won;
+  const bonus = extraTurn ? " Roll 6 again!" : "";
+
   if (target === 100) {
-    return { newPosition: 100, message: `🎉 Reached 100! WIN!`, won: true, skipTurn: false };
+    return { newPosition: 100, message: `🎉 Reached 100! WIN!`, won: true, skipTurn: false, extraTurn: false };
   }
-  if (SNAKES[target]) {
-    return { newPosition: SNAKES[target], message: `🐍 Snake at ${target} → slid to ${SNAKES[target]}`, won: false, skipTurn: false };
+  if (snakeEnd) {
+    return { newPosition: snakeEnd, message: `🐍 Snake at ${target} → slid to ${snakeEnd}.${bonus}`, won: false, skipTurn: false, extraTurn };
   }
-  if (LADDERS[target]) {
-    return { newPosition: LADDERS[target], message: `🪜 Ladder at ${target} → climbed to ${LADDERS[target]}`, won: false, skipTurn: false };
+  if (ladderEnd) {
+    return { newPosition: ladderEnd, message: won ? `🪜 Ladder at ${target} → 100! WIN!` : `🪜 Ladder at ${target} → climbed to ${ladderEnd}.${bonus}`, won, skipTurn: false, extraTurn };
   }
-  return { newPosition: target, message: `Moved to ${target}`, won: false, skipTurn: false };
+  return { newPosition: target, message: `Moved to ${target}.${bonus}`, won: false, skipTurn: false, extraTurn };
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
