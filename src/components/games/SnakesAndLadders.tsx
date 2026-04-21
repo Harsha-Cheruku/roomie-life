@@ -302,32 +302,35 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
       </div>
 
       {/* Board */}
-      <div className="rounded-xl overflow-hidden border-4 border-amber-700 shadow-xl bg-amber-300">
-        <div className="bg-amber-600 text-center py-1">
-          <span className="text-white font-bold text-xs tracking-wider">SNAKES & LADDERS</span>
+      <div className="rounded-xl overflow-hidden border-4 border-accent shadow-xl bg-accent/20">
+        <div className="bg-accent text-center py-1">
+          <span className="text-accent-foreground font-bold text-xs tracking-wider">SNAKES & LADDERS</span>
         </div>
-        <div className="grid grid-cols-10 gap-0">
+        <div className="relative aspect-square bg-card">
+          <div className="absolute inset-0 grid grid-cols-10 gap-0">
           {Array.from({ length: 10 }).map((_, row) =>
             Array.from({ length: 10 }).map((_, col) => {
               const n = getCellNumber(row, col);
               const isSnake = SNAKES[n] !== undefined;
               const isLadder = LADDERS[n] !== undefined;
+              const isJumpTarget = JUMP_CELLS.has(n) && !isSnake && !isLadder;
               const here = playersAtCell(n);
               const even = (row + col) % 2 === 0;
               return (
                 <div
                   key={n}
                   className={cn(
-                    "aspect-square flex flex-col items-center justify-center relative border border-amber-500/30",
-                    even ? "bg-amber-200" : "bg-amber-400",
-                    n === 100 && "bg-yellow-300 ring-2 ring-yellow-500 ring-inset",
-                    n === 1 && "bg-green-300"
+                    "aspect-square relative border border-foreground/10",
+                    even ? "bg-accent/15" : "bg-accent/35",
+                    n === 100 && "bg-yellow/70 ring-2 ring-accent ring-inset",
+                    n === 1 && "bg-mint/45",
+                    isJumpTarget && "bg-card/80"
                   )}
                 >
-                  <span className="font-bold text-[8px] text-amber-800/60 leading-none z-10">{n}</span>
-                  {isSnake && <span className="text-[11px] leading-none z-10">🐍</span>}
-                  {isLadder && <span className="text-[11px] leading-none z-10">🪜</span>}
-                  {n === 100 && <span className="text-[10px]">⭐</span>}
+                  <span className="absolute left-0.5 top-0.5 font-black text-[10px] leading-none text-foreground/70 z-10">{n}</span>
+                  {isSnake && <span className="absolute bottom-0.5 right-0.5 text-[10px] leading-none z-10">🐍</span>}
+                  {isLadder && <span className="absolute bottom-0.5 right-0.5 text-[10px] leading-none z-10">🪜</span>}
+                  {n === 100 && <span className="absolute bottom-0.5 right-0.5 text-[10px] z-10">⭐</span>}
                   {here.length > 0 && (
                     <div className="absolute inset-0 flex items-center justify-center z-20">
                       <div className="flex flex-wrap justify-center gap-[1px]">
@@ -353,6 +356,35 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
               );
             })
           )}
+          </div>
+          <svg className="absolute inset-0 h-full w-full pointer-events-none z-10" viewBox="0 0 100 100" aria-hidden="true">
+            {ladderLines.map(({ from, to, start, end }) => {
+              const dx = end.x - start.x;
+              const dy = end.y - start.y;
+              const length = Math.hypot(dx, dy) || 1;
+              const offsetX = (-dy / length) * 1.15;
+              const offsetY = (dx / length) * 1.15;
+              return (
+                <g key={`ladder-${from}-${to}`} stroke="hsl(var(--primary))" strokeLinecap="round">
+                  <line x1={start.x + offsetX} y1={start.y + offsetY} x2={end.x + offsetX} y2={end.y + offsetY} strokeWidth="0.7" />
+                  <line x1={start.x - offsetX} y1={start.y - offsetY} x2={end.x - offsetX} y2={end.y - offsetY} strokeWidth="0.7" />
+                  {Array.from({ length: 6 }).map((_, i) => {
+                    const t = (i + 1) / 7;
+                    const x = start.x + dx * t;
+                    const y = start.y + dy * t;
+                    return <line key={i} x1={x + offsetX} y1={y + offsetY} x2={x - offsetX} y2={y - offsetY} strokeWidth="0.55" />;
+                  })}
+                </g>
+              );
+            })}
+            {snakePaths.map(({ from, to, path }) => (
+              <g key={`snake-${from}-${to}`}>
+                <path d={path} fill="none" stroke="hsl(var(--mint))" strokeWidth="2.6" strokeLinecap="round" opacity="0.95" />
+                <path d={path} fill="none" stroke="hsl(var(--foreground))" strokeWidth="0.55" strokeLinecap="round" strokeDasharray="1 3" opacity="0.45" />
+                <circle cx={getCellCenter(from).x} cy={getCellCenter(from).y} r="1.6" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.35" />
+              </g>
+            ))}
+          </svg>
         </div>
       </div>
 
