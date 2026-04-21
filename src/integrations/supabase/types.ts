@@ -981,6 +981,28 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      start_game_lobby: {
+        Args: { _first_turn_user_id: string; _lobby_id: string; _state: Json }
+        Returns: {
+          created_at: string
+          current_turn_user_id: string | null
+          game_state: Json | null
+          game_type: string
+          host_id: string
+          id: string
+          join_code: string
+          max_players: number
+          room_id: string
+          status: string
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "game_lobbies"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       update_game_lobby_state: {
         Args: {
           _expected_turn_user_id?: string
