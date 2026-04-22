@@ -517,23 +517,23 @@ export const Expenses = () => {
         onBack={() => navigate('/')}
         hint="Split bills fairly with your roommates 💰"
         rightContent={
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 max-w-[56vw] overflow-x-auto overflow-y-hidden pb-1 pr-1 no-scrollbar">
             <ReminderBellIcon filterType="expense" />
             <Button
               variant="outline"
               size="icon"
-              className="press-effect h-8 w-8"
+              className="press-effect h-8 w-8 shrink-0"
               onClick={() => navigate('/recurring-bills')}
               title="Recurring Bills"
               aria-label="Recurring Bills"
             >
               <Repeat className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs" onClick={() => setShowCreateDialog(true)}>
+            <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs shrink-0" onClick={() => setShowCreateDialog(true)}>
               <Plus className="w-3.5 h-3.5" />
               Add
             </Button>
-            <Button size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs bg-primary" onClick={() => setShowScanner(true)}>
+            <Button size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs bg-primary shrink-0" onClick={() => setShowScanner(true)}>
               <Camera className="w-3.5 h-3.5" />
               Scan
             </Button>
@@ -566,7 +566,7 @@ export const Expenses = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-1.5 mb-3">
+          <div className="grid grid-cols-1 gap-2 mb-3 xs:grid-cols-3">
             {[
               { icon: TrendingUp, label: 'Paid', value: stats.youPaid },
               { icon: TrendingDown, label: 'Will Pay', value: stats.youOwe },
@@ -577,7 +577,7 @@ export const Expenses = () => {
                   <item.icon className="w-3 h-3 text-primary-foreground/70 shrink-0" />
                   <span className="text-[10px] text-primary-foreground/70 truncate">{item.label}</span>
                 </div>
-                <p className="text-sm font-bold text-primary-foreground leading-tight break-all">
+                <p className="text-sm font-bold text-primary-foreground leading-tight break-words [overflow-wrap:anywhere]">
                   ₹{item.value.toLocaleString()}
                 </p>
               </div>
@@ -812,13 +812,13 @@ export const Expenses = () => {
 
       {/* Tabs */}
       <div className="px-4 mb-4">
-        <div className="flex gap-2">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {(["all", "pending", "settled"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-4 py-2 rounded-xl text-sm font-medium transition-all",
+                "px-4 py-2 rounded-xl text-sm font-medium transition-all whitespace-nowrap shrink-0",
                 activeTab === tab
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:bg-muted/80"
