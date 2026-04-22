@@ -377,13 +377,36 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                 </g>
               );
             })}
-            {snakePaths.map(({ from, to, path }) => (
-              <g key={`snake-${from}-${to}`}>
-                <path d={path} fill="none" stroke="hsl(var(--mint))" strokeWidth="2.6" strokeLinecap="round" opacity="0.95" />
-                <path d={path} fill="none" stroke="hsl(var(--foreground))" strokeWidth="0.55" strokeLinecap="round" strokeDasharray="1 3" opacity="0.45" />
-                <circle cx={getCellCenter(from).x} cy={getCellCenter(from).y} r="1.6" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.35" />
-              </g>
-            ))}
+            {snakePaths.map(({ from, to, path }) => {
+              const head = getCellCenter(from);
+              const tail = getCellCenter(to);
+              return (
+                <g key={`snake-${from}-${to}`}>
+                  {/* Snake body */}
+                  <path d={path} fill="none" stroke="hsl(var(--mint))" strokeWidth="2.6" strokeLinecap="round" opacity="0.95" />
+                  <path d={path} fill="none" stroke="hsl(var(--foreground))" strokeWidth="0.55" strokeLinecap="round" strokeDasharray="1 3" opacity="0.45" />
+                  {/* Tail tip */}
+                  <circle cx={tail.x} cy={tail.y} r="0.9" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.25" />
+                  {/* Snake head — clearly visible */}
+                  <g>
+                    <circle cx={head.x} cy={head.y} r="2.4" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.5" />
+                    {/* Eyes */}
+                    <circle cx={head.x - 0.8} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
+                    <circle cx={head.x + 0.8} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
+                    <circle cx={head.x - 0.8} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
+                    <circle cx={head.x + 0.8} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
+                    {/* Forked tongue */}
+                    <path
+                      d={`M ${head.x} ${head.y + 1.2} L ${head.x - 0.4} ${head.y + 2.2} M ${head.x} ${head.y + 1.2} L ${head.x + 0.4} ${head.y + 2.2}`}
+                      stroke="hsl(var(--destructive))"
+                      strokeWidth="0.3"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </g>
+                </g>
+              );
+            })}
           </svg>
         </div>
       </div>
