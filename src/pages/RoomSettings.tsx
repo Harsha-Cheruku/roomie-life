@@ -329,6 +329,38 @@ export const RoomSettings = () => {
             </div>
 
             <div>
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Your Nickname for this Room
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  value={nicknameDraft}
+                  onChange={(e) => setNicknameDraft(e.target.value)}
+                  placeholder={currentRoom.name}
+                  className="flex-1"
+                  maxLength={50}
+                />
+                <Button
+                  onClick={() => {
+                    setNickname(nicknameDraft);
+                    toast({
+                      title: nicknameDraft.trim() ? "Nickname saved" : "Nickname cleared",
+                      description: "Only you see this name. Others still see the original room name.",
+                    });
+                  }}
+                  disabled={nicknameDraft.trim() === nickname.trim()}
+                  variant="default"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Personal label — only visible to you. Leave empty to use the room's real name.
+              </p>
+            </div>
+
+            <div>
               <label className="text-sm text-muted-foreground mb-2 block">Invite Code</label>
               <div className="flex items-center gap-3 bg-muted rounded-xl p-3">
                 <span className="font-display text-2xl font-bold text-primary tracking-widest flex-1">
