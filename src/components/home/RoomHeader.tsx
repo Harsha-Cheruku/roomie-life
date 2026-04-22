@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
+import { useRoomNickname, getRoomNickname } from "@/hooks/useRoomNickname";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -24,6 +25,10 @@ export const RoomHeader = () => {
   const navigate = useNavigate();
   const { unreadCount } = useNotificationBell();
   const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
+  const { displayName: currentRoomDisplayName } = useRoomNickname(
+    currentRoom?.id,
+    currentRoom?.name || "Room"
+  );
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
@@ -222,7 +227,7 @@ export const RoomHeader = () => {
             onClick={() => setShowRoomSwitcher(!showRoomSwitcher)}
             className="font-display text-2xl font-bold text-foreground flex items-center gap-2 hover:text-primary transition-colors relative"
           >
-            {currentRoom?.name || "Room"}
+            {currentRoomDisplayName}
             <RefreshCw className="w-4 h-4 text-muted-foreground" />
             {/* Dot when other rooms have unread notifications */}
             {Object.values(roomUnreadCounts).some(c => c > 0) && (
@@ -342,7 +347,9 @@ export const RoomHeader = () => {
               )}
             >
               <span className="text-lg">🏠</span>
-              <span className="text-sm font-medium flex-1">{room.name}</span>
+              <span className="text-sm font-medium flex-1">
+                {getRoomNickname(user?.id, room.id) || room.name}
+              </span>
               {room.id === currentRoom?.id && <Check className="w-4 h-4 ml-auto" />}
               {room.id !== currentRoom?.id && (roomUnreadCounts[room.id] || 0) > 0 && (
                 <span className="ml-auto w-5 h-5 bg-coral rounded-full text-[10px] font-bold text-primary-foreground flex items-center justify-center">

@@ -9,6 +9,7 @@ import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus,
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { useRoomNickname } from "@/hooks/useRoomNickname";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -31,6 +32,13 @@ export const RoomSettings = () => {
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+
+  const { nickname, setNickname } = useRoomNickname(currentRoom?.id, currentRoom?.name || "");
+  const [nicknameDraft, setNicknameDraft] = useState(nickname);
+
+  useEffect(() => {
+    setNicknameDraft(nickname);
+  }, [nickname, currentRoom?.id]);
 
   useEffect(() => {
     if (!currentRoom) {
@@ -318,6 +326,38 @@ export const RoomSettings = () => {
               {!isAdmin && (
                 <p className="text-xs text-muted-foreground mt-1">Only admins can rename the room</p>
               )}
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Your Nickname for this Room
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  value={nicknameDraft}
+                  onChange={(e) => setNicknameDraft(e.target.value)}
+                  placeholder={currentRoom.name}
+                  className="flex-1"
+                  maxLength={50}
+                />
+                <Button
+                  onClick={() => {
+                    setNickname(nicknameDraft);
+                    toast({
+                      title: nicknameDraft.trim() ? "Nickname saved" : "Nickname cleared",
+                      description: "Only you see this name. Others still see the original room name.",
+                    });
+                  }}
+                  disabled={nicknameDraft.trim() === nickname.trim()}
+                  variant="default"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Save
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Personal label — only visible to you. Leave empty to use the room's real name.
+              </p>
             </div>
 
             <div>
