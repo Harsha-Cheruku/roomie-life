@@ -566,7 +566,7 @@ export const Expenses = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 mb-3 xs:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 mb-3 sm:grid-cols-3">
             {[
               { icon: TrendingUp, label: 'Paid', value: stats.youPaid },
               { icon: TrendingDown, label: 'Will Pay', value: stats.youOwe },
@@ -577,7 +577,7 @@ export const Expenses = () => {
                   <item.icon className="w-3 h-3 text-primary-foreground/70 shrink-0" />
                   <span className="text-[10px] text-primary-foreground/70 truncate">{item.label}</span>
                 </div>
-                <p className="text-sm font-bold text-primary-foreground leading-tight break-words [overflow-wrap:anywhere]">
+                <p className="text-sm font-bold text-primary-foreground leading-tight break-all">
                   ₹{item.value.toLocaleString()}
                 </p>
               </div>
