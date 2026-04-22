@@ -9,6 +9,7 @@ import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus,
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { useRoomNickname } from "@/hooks/useRoomNickname";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -31,6 +32,13 @@ export const RoomSettings = () => {
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+
+  const { nickname, setNickname } = useRoomNickname(currentRoom?.id, currentRoom?.name || "");
+  const [nicknameDraft, setNicknameDraft] = useState(nickname);
+
+  useEffect(() => {
+    setNicknameDraft(nickname);
+  }, [nickname, currentRoom?.id]);
 
   useEffect(() => {
     if (!currentRoom) {
