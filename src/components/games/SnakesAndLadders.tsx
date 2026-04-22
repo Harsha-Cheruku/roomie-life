@@ -212,7 +212,21 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     const start = getCellCenter(Number(from));
     const end = getCellCenter(to);
     const midY = (start.y + end.y) / 2;
-    return { from: Number(from), to, path: `M ${start.x} ${start.y} C ${start.x - 8} ${midY - 8}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}` };
+    // First control point of the cubic Bézier — used to derive the body's initial tangent at `start`.
+    const c1 = { x: start.x - 8, y: midY - 8 };
+    const dx = c1.x - start.x;
+    const dy = c1.y - start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Tangent points away from the head, into the body. Rotate head so its "down" (tongue) faces this direction.
+    const tangent = { x: dx / len, y: dy / len };
+    // SVG rotation in degrees so the head's local +Y axis aligns with the body tangent.
+    const headAngle = (Math.atan2(tangent.y, tangent.x) - Math.PI / 2) * (180 / Math.PI);
+    return {
+      from: Number(from),
+      to,
+      path: `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}`,
+      headAngle,
+    };
   });
   const ladderLines = Object.entries(LADDERS).map(([from, to]) => ({ from: Number(from), to, start: getCellCenter(Number(from)), end: getCellCenter(to) }));
 
