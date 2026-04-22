@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useNotificationBell } from "@/hooks/useNotificationBell";
+import { useRoomNickname, getRoomNickname } from "@/hooks/useRoomNickname";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -24,6 +25,10 @@ export const RoomHeader = () => {
   const navigate = useNavigate();
   const { unreadCount } = useNotificationBell();
   const [members, setMembers] = useState<RoomMemberWithProfile[]>([]);
+  const { displayName: currentRoomDisplayName } = useRoomNickname(
+    currentRoom?.id,
+    currentRoom?.name || "Room"
+  );
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
