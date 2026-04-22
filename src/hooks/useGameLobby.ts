@@ -666,39 +666,20 @@ export const useGameLobby = () => {
         suppressPollUntilRef.current = Date.now() + 3000;
 
         const hydratedState = buildStartGameState(freshLobby.game_type, initialState, orderedPlayers);
-        let updatedRows: any[] | null = null;
+        const { data: startedLobbyData, error: startError } = await supabase.rpc("start_game_lobby", {
+          _lobby_id: freshLobby.id,
+          _state: hydratedState as any,
+          _first_turn_user_id: firstPlayerId,
+        });
 
-        for (let attempt = 0; attempt < 2; attempt++) {
-          const { data, error } = await supabase
-            .from("game_lobbies")
-            .update({
-              status: "playing" as string,
-              current_turn_user_id: firstPlayerId,
-              game_state: hydratedState as any,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", freshLobby.id)
-            .eq("host_id", user.id)
-            .eq("status", "waiting")
-            .select("*");
-
-          if (error) {
-            console.error("[Games] start game DB error", {
-              error,
-              room_id: freshLobby.room_id,
-              lobby_id: freshLobby.id,
-              ready_count: readyPlayers.length,
-              player_ids: readyPlayers.map((player) => player.user_id),
-            });
-            if (attempt === 1) {
-              toast.error("Couldn't start the game room. Please try again.");
-              return false;
-            }
-            continue;
-          }
-
-          updatedRows = data ?? null;
-          if (updatedRows?.length) break;
+        if (startError) {
+          console.error("[Games] start game RPC error", {
+            error: startError,
+            room_id: freshLobby.room_id,
+            lobby_id: freshLobby.id,
+            ready_count: readyPlayers.length,
+            player_ids: readyPlayers.map((player) => player.user_id),
+          });
 
           const latestLobby = await fetchLobbyState(freshLobby.id);
           if (latestLobby?.status === "playing") {
@@ -708,22 +689,18 @@ export const useGameLobby = () => {
             return true;
           }
 
-          if (attempt === 1) {
-            console.error("[Games] start game produced no updated row", {
-              room_id: freshLobby.room_id,
-              lobby_id: freshLobby.id,
-              game_status: latestLobby?.status,
-              current_turn_user_id: latestLobby?.current_turn_user_id,
-              game_state: latestLobby?.game_state,
-            });
-            toast.error("Game state not initialized. Please try again.");
-            return false;
-          }
+          toast.error(getErrorMessage(startError, "Couldn't start the game room. Please try again."));
+          return false;
         }
 
-        const updatedRow = updatedRows?.[0] ?? null;
+        const updatedRow = startedLobbyData ?? (await fetchLobbyState(freshLobby.id));
 
         if (!updatedRow) {
+          console.error("[Games] start game returned no lobby", {
+            room_id: freshLobby.room_id,
+            lobby_id: freshLobby.id,
+            first_turn_user_id: firstPlayerId,
+          });
           toast.error("Game state not initialized. Please try again.");
           return false;
         }

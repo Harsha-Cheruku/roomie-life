@@ -33,8 +33,8 @@ export const TopBar = ({
 
   return (
     <header className={cn("px-4 pt-6 pb-4", className)}>
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
           {showBack && (
             <button
               onClick={handleBack}
@@ -44,12 +44,12 @@ export const TopBar = ({
               <ArrowLeft className="w-5 h-5 text-foreground" />
             </button>
           )}
-          <div>
-            <h1 className="font-display text-2xl font-bold text-foreground">{title}</h1>
+          <div className="min-w-0">
+            <h1 className="truncate font-display text-2xl font-bold text-foreground">{title}</h1>
           </div>
         </div>
         {rightContent && (
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {rightContent}
           </div>
         )}
