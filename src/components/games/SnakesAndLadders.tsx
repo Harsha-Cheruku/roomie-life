@@ -212,7 +212,21 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
     const start = getCellCenter(Number(from));
     const end = getCellCenter(to);
     const midY = (start.y + end.y) / 2;
-    return { from: Number(from), to, path: `M ${start.x} ${start.y} C ${start.x - 8} ${midY - 8}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}` };
+    // First control point of the cubic Bézier — used to derive the body's initial tangent at `start`.
+    const c1 = { x: start.x - 8, y: midY - 8 };
+    const dx = c1.x - start.x;
+    const dy = c1.y - start.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Tangent points away from the head, into the body. Rotate head so its "down" (tongue) faces this direction.
+    const tangent = { x: dx / len, y: dy / len };
+    // SVG rotation in degrees so the head's local +Y axis aligns with the body tangent.
+    const headAngle = (Math.atan2(tangent.y, tangent.x) - Math.PI / 2) * (180 / Math.PI);
+    return {
+      from: Number(from),
+      to,
+      path: `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${end.x + 8} ${midY + 8}, ${end.x} ${end.y}`,
+      headAngle,
+    };
   });
   const ladderLines = Object.entries(LADDERS).map(([from, to]) => ({ from: Number(from), to, start: getCellCenter(Number(from)), end: getCellCenter(to) }));
 
@@ -377,7 +391,7 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                 </g>
               );
             })}
-            {snakePaths.map(({ from, to, path }) => {
+            {snakePaths.map(({ from, to, path, headAngle }) => {
               const head = getCellCenter(from);
               const tail = getCellCenter(to);
               return (
@@ -387,17 +401,18 @@ export const SnakesAndLadders = ({ onBack, gameLobby }: Props) => {
                   <path d={path} fill="none" stroke="hsl(var(--foreground))" strokeWidth="0.55" strokeLinecap="round" strokeDasharray="1 3" opacity="0.45" />
                   {/* Tail tip */}
                   <circle cx={tail.x} cy={tail.y} r="0.9" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.25" />
-                  {/* Snake head — clearly visible */}
-                  <g>
-                    <circle cx={head.x} cy={head.y} r="2.4" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.5" />
+                  {/* Snake head — anchored at the from-cell center, rotated to face away from body */}
+                  <g transform={`rotate(${headAngle} ${head.x} ${head.y})`}>
+                    {/* Head shape (slightly oval, anchored on cell center) */}
+                    <ellipse cx={head.x} cy={head.y} rx="2.2" ry="2.6" fill="hsl(var(--mint))" stroke="hsl(var(--foreground))" strokeWidth="0.5" />
                     {/* Eyes */}
-                    <circle cx={head.x - 0.8} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
-                    <circle cx={head.x + 0.8} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
-                    <circle cx={head.x - 0.8} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
-                    <circle cx={head.x + 0.8} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
-                    {/* Forked tongue */}
+                    <circle cx={head.x - 0.9} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
+                    <circle cx={head.x + 0.9} cy={head.y - 0.6} r="0.45" fill="hsl(var(--foreground))" />
+                    <circle cx={head.x - 0.9} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
+                    <circle cx={head.x + 0.9} cy={head.y - 0.7} r="0.18" fill="hsl(var(--card))" />
+                    {/* Forked tongue extending out the front of the head (away from body) */}
                     <path
-                      d={`M ${head.x} ${head.y + 1.2} L ${head.x - 0.4} ${head.y + 2.2} M ${head.x} ${head.y + 1.2} L ${head.x + 0.4} ${head.y + 2.2}`}
+                      d={`M ${head.x} ${head.y - 2.4} L ${head.x - 0.4} ${head.y - 3.4} M ${head.x} ${head.y - 2.4} L ${head.x + 0.4} ${head.y - 3.4}`}
                       stroke="hsl(var(--destructive))"
                       strokeWidth="0.3"
                       strokeLinecap="round"
