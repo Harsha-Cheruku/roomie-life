@@ -311,6 +311,27 @@ export const Chat = () => {
           setMessageViews((prev) => mergeSeenReceipts(prev, [receipt as SeenReceipt]));
         }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' },
+        (payload) => {
+          const r = payload.new as Reaction;
+          if (!messageIdsRef.current.has(r.message_id)) return;
+          setReactions((prev) => {
+            const list = prev[r.message_id] || [];
+            if (list.some((x) => x.user_id === r.user_id && x.emoji === r.emoji)) return prev;
+            return { ...prev, [r.message_id]: [...list, r] };
+          });
+        }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' },
+        (payload) => {
+          const r = payload.old as Reaction;
+          if (!r.message_id) return;
+          setReactions((prev) => ({
+            ...prev,
+            [r.message_id]: (prev[r.message_id] || []).filter((x) => !(x.user_id === r.user_id && x.emoji === r.emoji)),
+          }));
+        }
+      )
       .subscribe();
 
     channelRef.current = channel;
