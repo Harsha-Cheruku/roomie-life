@@ -45,6 +45,12 @@ interface SeenReceipt {
   seen_at: string;
 }
 
+interface Reaction {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+}
+
 const sortSeenReceipts = (receipts: SeenReceipt[]) =>
   [...receipts].sort((a, b) => new Date(b.seen_at).getTime() - new Date(a.seen_at).getTime());
 
@@ -96,6 +102,8 @@ export const Chat = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [seenDialogMessageId, setSeenDialogMessageId] = useState<string | null>(null);
   const [messageViews, setMessageViews] = useState<Record<string, SeenReceipt[]>>({});
+  const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -127,6 +135,46 @@ export const Chat = () => {
 
     setMessageViews(mergeSeenReceipts({}, (data || []) as SeenReceipt[]));
   }, []);
+
+  const fetchReactions = useCallback(async (messageList: Message[]) => {
+    if (messageList.length === 0) { setReactions({}); return; }
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .select('message_id, user_id, emoji')
+      .in('message_id', messageList.map((m) => m.id));
+    if (error) { console.error('Error fetching reactions:', error); return; }
+    const grouped: Record<string, Reaction[]> = {};
+    (data || []).forEach((r) => {
+      const key = r.message_id;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(r as Reaction);
+    });
+    setReactions(grouped);
+  }, []);
+
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    if (!user) return;
+    const existing = (reactions[messageId] || []).find((r) => r.user_id === user.id && r.emoji === emoji);
+    setSelectedMessageId(null);
+    if (existing) {
+      setReactions((prev) => ({
+        ...prev,
+        [messageId]: (prev[messageId] || []).filter((r) => !(r.user_id === user.id && r.emoji === emoji)),
+      }));
+      await supabase.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', user.id).eq('emoji', emoji);
+    } else {
+      const optimistic: Reaction = { message_id: messageId, user_id: user.id, emoji };
+      setReactions((prev) => ({ ...prev, [messageId]: [...(prev[messageId] || []), optimistic] }));
+      const { error } = await supabase.from('message_reactions').insert({ message_id: messageId, user_id: user.id, emoji });
+      if (error && error.code !== '23505') {
+        toast.error('Failed to react');
+        setReactions((prev) => ({
+          ...prev,
+          [messageId]: (prev[messageId] || []).filter((r) => !(r.user_id === user.id && r.emoji === emoji)),
+        }));
+      }
+    }
+  }, [reactions, user]);
 
   const fetchRoomMembers = useCallback(async () => {
     if (!currentRoom) return;
@@ -178,12 +226,13 @@ export const Chat = () => {
       const nextMessages = data || [];
       setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
       await fetchMessageViews(nextMessages);
+      await fetchReactions(nextMessages);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
       if (!options?.silent) setIsLoading(false);
     }
-  }, [currentRoom, fetchMessageViews]);
+  }, [currentRoom, fetchMessageViews, fetchReactions]);
 
   useEffect(() => {
     if (!currentRoom) {
@@ -262,6 +311,27 @@ export const Chat = () => {
           setMessageViews((prev) => mergeSeenReceipts(prev, [receipt as SeenReceipt]));
         }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' },
+        (payload) => {
+          const r = payload.new as Reaction;
+          if (!messageIdsRef.current.has(r.message_id)) return;
+          setReactions((prev) => {
+            const list = prev[r.message_id] || [];
+            if (list.some((x) => x.user_id === r.user_id && x.emoji === r.emoji)) return prev;
+            return { ...prev, [r.message_id]: [...list, r] };
+          });
+        }
+      )
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' },
+        (payload) => {
+          const r = payload.old as Reaction;
+          if (!r.message_id) return;
+          setReactions((prev) => ({
+            ...prev,
+            [r.message_id]: (prev[r.message_id] || []).filter((x) => !(x.user_id === r.user_id && x.emoji === r.emoji)),
+          }));
+        }
+      )
       .subscribe();
 
     channelRef.current = channel;
@@ -283,6 +353,14 @@ export const Chat = () => {
   }, [currentRoom, fetchMessages]);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+
+  // Click outside to deselect
+  useEffect(() => {
+    if (!selectedMessageId) return;
+    const handler = () => setSelectedMessageId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [selectedMessageId]);
 
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
@@ -492,7 +570,7 @@ export const Chat = () => {
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
+      <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
         {isLoading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
@@ -525,6 +603,9 @@ export const Chat = () => {
                         isOwnMessage={isOwnMessage}
                         messageContent={message.content}
                         messageType={message.message_type}
+                        selected={selectedMessageId === message.id}
+                        onSelect={() => setSelectedMessageId((prev) => prev === message.id ? null : message.id)}
+                        onReact={(emoji) => toggleReaction(message.id, emoji)}
                         onEdit={() => {
                           if (message.message_type === 'text' && !message.deleted_at) {
                             setEditingMessageId(message.id);
@@ -556,6 +637,32 @@ export const Chat = () => {
                           )}
                         </div>
                       </MessageActionsMenu>
+
+                      {(reactions[message.id]?.length ?? 0) > 0 && (
+                        <div className={cn('flex flex-wrap gap-1', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                          {Object.entries(
+                            (reactions[message.id] || []).reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
+                              if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
+                              acc[r.emoji].count += 1;
+                              if (r.user_id === user?.id) acc[r.emoji].mine = true;
+                              return acc;
+                            }, {})
+                          ).map(([emoji, info]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleReaction(message.id, emoji); }}
+                              className={cn(
+                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors',
+                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted'
+                              )}
+                            >
+                              <span className="text-sm leading-none">{emoji}</span>
+                              <span className="text-[10px] font-medium">{info.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       {isOwnMessage && !message.deleted_at && isLastOwnInStack && (
                         hasSeen ? (
