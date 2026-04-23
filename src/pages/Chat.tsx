@@ -45,6 +45,12 @@ interface SeenReceipt {
   seen_at: string;
 }
 
+interface Reaction {
+  message_id: string;
+  user_id: string;
+  emoji: string;
+}
+
 const sortSeenReceipts = (receipts: SeenReceipt[]) =>
   [...receipts].sort((a, b) => new Date(b.seen_at).getTime() - new Date(a.seen_at).getTime());
 
@@ -96,6 +102,8 @@ export const Chat = () => {
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [seenDialogMessageId, setSeenDialogMessageId] = useState<string | null>(null);
   const [messageViews, setMessageViews] = useState<Record<string, SeenReceipt[]>>({});
+  const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
+  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
