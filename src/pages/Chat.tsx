@@ -603,6 +603,9 @@ export const Chat = () => {
                         isOwnMessage={isOwnMessage}
                         messageContent={message.content}
                         messageType={message.message_type}
+                        selected={selectedMessageId === message.id}
+                        onSelect={() => setSelectedMessageId((prev) => prev === message.id ? null : message.id)}
+                        onReact={(emoji) => toggleReaction(message.id, emoji)}
                         onEdit={() => {
                           if (message.message_type === 'text' && !message.deleted_at) {
                             setEditingMessageId(message.id);
