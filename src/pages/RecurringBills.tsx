@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Loader2, Repeat, ArrowLeft } from "lucide-react";
 import { CreateRecurringBillDialog } from "@/components/expenses/CreateRecurringBillDialog";
 import { format } from "date-fns";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RecurringBill {
   id: string;
@@ -25,16 +26,24 @@ interface RecurringBill {
   last_run_date: string | null;
   is_active: boolean;
   created_by: string;
+  paid_by: string;
+}
+
+interface PayerProfile {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const RecurringBills = () => {
   const navigate = useNavigate();
-  const { currentRoom, user } = useAuth();
+  const { currentRoom, user, isSoloMode } = useAuth();
   const [bills, setBills] = useState<RecurringBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [payerProfiles, setPayerProfiles] = useState<Map<string, PayerProfile>>(new Map());
 
   const fetchBills = useCallback(async () => {
     if (!currentRoom) return;
@@ -47,10 +56,27 @@ const RecurringBills = () => {
     if (error) {
       toast.error("Failed to load recurring bills");
     } else {
-      setBills(data || []);
+      const list = (data || []) as RecurringBill[];
+      setBills(list);
+      const userIds = Array.from(new Set(list.flatMap((b) => [b.paid_by, b.created_by]).filter(Boolean)));
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, display_name, avatar")
+          .in("user_id", userIds);
+        const map = new Map<string, PayerProfile>();
+        (profs || []).forEach((p: any) => map.set(p.user_id, p));
+        setPayerProfiles(map);
+      }
     }
     setLoading(false);
   }, [currentRoom]);
+
+  // Solo mode: only show bills the user created or pays
+  const visibleBills = bills.filter((b) => {
+    if (!isSoloMode) return true;
+    return b.created_by === user?.id || b.paid_by === user?.id;
+  });
 
   useEffect(() => {
     fetchBills();
