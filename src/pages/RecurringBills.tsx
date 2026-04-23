@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { Plus, Trash2, Loader2, Repeat, ArrowLeft } from "lucide-react";
 import { CreateRecurringBillDialog } from "@/components/expenses/CreateRecurringBillDialog";
 import { format } from "date-fns";
+import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface RecurringBill {
   id: string;
@@ -25,16 +26,24 @@ interface RecurringBill {
   last_run_date: string | null;
   is_active: boolean;
   created_by: string;
+  paid_by: string;
+}
+
+interface PayerProfile {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
 }
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const RecurringBills = () => {
   const navigate = useNavigate();
-  const { currentRoom, user } = useAuth();
+  const { currentRoom, user, isSoloMode } = useAuth();
   const [bills, setBills] = useState<RecurringBill[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [payerProfiles, setPayerProfiles] = useState<Map<string, PayerProfile>>(new Map());
 
   const fetchBills = useCallback(async () => {
     if (!currentRoom) return;
@@ -47,10 +56,27 @@ const RecurringBills = () => {
     if (error) {
       toast.error("Failed to load recurring bills");
     } else {
-      setBills(data || []);
+      const list = (data || []) as RecurringBill[];
+      setBills(list);
+      const userIds = Array.from(new Set(list.flatMap((b) => [b.paid_by, b.created_by]).filter(Boolean)));
+      if (userIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("user_id, display_name, avatar")
+          .in("user_id", userIds);
+        const map = new Map<string, PayerProfile>();
+        (profs || []).forEach((p: any) => map.set(p.user_id, p));
+        setPayerProfiles(map);
+      }
     }
     setLoading(false);
   }, [currentRoom]);
+
+  // Solo mode: only show bills the user created or pays
+  const visibleBills = bills.filter((b) => {
+    if (!isSoloMode) return true;
+    return b.created_by === user?.id || b.paid_by === user?.id;
+  });
 
   useEffect(() => {
     fetchBills();
@@ -107,7 +133,7 @@ const RecurringBills = () => {
           <div className="flex justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : bills.length === 0 ? (
+        ) : visibleBills.length === 0 ? (
           <Card className="p-8 text-center">
             <Repeat className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
             <p className="font-medium">No recurring bills yet</p>
@@ -118,7 +144,10 @@ const RecurringBills = () => {
           </Card>
         ) : (
           <div className="space-y-3">
-            {bills.map((b) => (
+            {visibleBills.map((b) => {
+              const payer = payerProfiles.get(b.paid_by);
+              const payerName = payer?.user_id === user?.id ? "You" : (payer?.display_name || "Roommate");
+              return (
               <Card key={b.id} className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
@@ -127,6 +156,12 @@ const RecurringBills = () => {
                       {!b.is_active && <Badge variant="secondary">Paused</Badge>}
                     </div>
                     <p className="text-2xl font-bold mt-1">₹{b.total_amount}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <ProfileAvatar avatar={payer?.avatar || "😊"} size="xs" />
+                      <span className="text-xs text-muted-foreground">
+                        Paid by <span className="font-medium text-foreground">{payerName}</span>
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground mt-1">{scheduleLabel(b)}</p>
                     <p className="text-xs text-muted-foreground">
                       Next: {format(new Date(b.next_run_date), "PP")}
@@ -143,7 +178,8 @@ const RecurringBills = () => {
                   </div>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

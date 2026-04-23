@@ -300,11 +300,15 @@ export const useGameLobby = () => {
   useEffect(() => {
     if (!lobby?.id) return;
 
+    // Realtime is the primary channel — polling is only a safety net for missed events.
+    // Lower frequency = less main-thread churn = snappier dice/animation.
     const interval = window.setInterval(() => {
       if (Date.now() < suppressPollUntilRef.current) return;
+      // Skip when tab is hidden — saves battery & avoids stale UI work.
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void fetchLobbyState(lobby.id);
       void fetchPlayers(lobby.id);
-    }, lobby.status === "waiting" ? 2000 : 3000);
+    }, lobby.status === "waiting" ? 4000 : 6000);
 
     return () => window.clearInterval(interval);
   }, [fetchLobbyState, fetchPlayers, lobby?.id, lobby?.status]);

@@ -131,17 +131,28 @@ export const Tasks = () => {
   useEffect(() => {
     if (currentRoom) {
       fetchTasks();
-      
+
+      // Debounce realtime refetches so rapid status updates don't thrash the UI
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          fetchTasks();
+          timer = null;
+        }, 250);
+      };
+
       const channel = supabase
-        .channel('tasks-changes')
+        .channel(`tasks-changes-${currentRoom.id}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'tasks', filter: `room_id=eq.${currentRoom.id}` },
-          () => fetchTasks()
+          schedule
         )
         .subscribe();
 
       return () => {
+        if (timer) clearTimeout(timer);
         supabase.removeChannel(channel);
       };
     }

@@ -32,16 +32,32 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   useEffect(() => {
     if (currentRoom) {
       fetchExpenseData();
-      
+
+      // Debounce + scope realtime to reduce lag on home dashboard
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          fetchExpenseData();
+          timer = null;
+        }, 300);
+      };
       const channel = supabase
-        .channel('expense-overview-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, () => fetchExpenseData())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, () => fetchExpenseData())
+        .channel(`expense-overview-${currentRoom.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, schedule)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'expense_splits', filter: user ? `user_id=eq.${user.id}` : undefined },
+          schedule
+        )
         .subscribe();
 
-      return () => { supabase.removeChannel(channel); };
+      return () => {
+        if (timer) clearTimeout(timer);
+        supabase.removeChannel(channel);
+      };
     }
-  }, [currentRoom]);
+  }, [currentRoom, user]);
 
   const fetchExpenseData = async () => {
     if (!currentRoom || !user) return;

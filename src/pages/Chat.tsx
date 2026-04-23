@@ -268,14 +268,18 @@ export const Chat = () => {
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
   }, [currentRoom, profilesMap, user?.id, toastHook]);
 
+  // Realtime + reconnect-only refresh. Removed 3.5s polling that caused message-list churn / lag.
   useEffect(() => {
     if (!currentRoom) return;
-
-    const interval = window.setInterval(() => {
-      void fetchMessages({ silent: true });
-    }, 3500);
-
-    return () => window.clearInterval(interval);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void fetchMessages({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onVisible);
+    };
   }, [currentRoom, fetchMessages]);
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);

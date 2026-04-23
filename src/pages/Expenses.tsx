@@ -257,26 +257,36 @@ export const Expenses = () => {
     if (currentRoom) {
       fetchExpenses();
       
-      // Subscribe to realtime updates for instant KPI refresh
+      // Debounced realtime refresh — coalesce bursts of split/expense changes into one refetch.
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      const schedule = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          fetchExpenses();
+          timer = null;
+        }, 250);
+      };
       const channel = supabase
-        .channel('expenses-changes')
+        .channel(`expenses-changes-${currentRoom.id}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` },
-          () => fetchExpenses()
+          schedule
         )
+        // Only react to splits where current user is involved → far less traffic
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'expense_splits' },
-          () => fetchExpenses()
+          { event: '*', schema: 'public', table: 'expense_splits', filter: user ? `user_id=eq.${user.id}` : undefined },
+          schedule
         )
         .subscribe();
 
       return () => {
+        if (timer) clearTimeout(timer);
         supabase.removeChannel(channel);
       };
     }
-  }, [currentRoom, activeTab, fetchExpenses]);
+  }, [currentRoom, activeTab, fetchExpenses, user]);
 
   const calculateBalances = async (expenseData: any[]) => {
     if (!currentRoom || !user) return;

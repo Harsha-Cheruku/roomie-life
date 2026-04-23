@@ -3,11 +3,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 
 export const usePendingExpenseCount = () => {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const [pendingExpenseCount, setPendingExpenseCount] = useState(0);
 
   const fetchPendingExpenseCount = useCallback(async () => {
     if (!user?.id || !currentRoom?.id) {
+      setPendingExpenseCount(0);
+      return;
+    }
+    // Solo mode: no shared bills can be pending for the user
+    if (isSoloMode) {
       setPendingExpenseCount(0);
       return;
     }
@@ -23,10 +28,14 @@ export const usePendingExpenseCount = () => {
     if (!error) {
       setPendingExpenseCount(count || 0);
     }
-  }, [currentRoom?.id, user?.id]);
+  }, [currentRoom?.id, user?.id, isSoloMode]);
 
   useEffect(() => {
     if (!user?.id || !currentRoom?.id) {
+      setPendingExpenseCount(0);
+      return;
+    }
+    if (isSoloMode) {
       setPendingExpenseCount(0);
       return;
     }
@@ -35,9 +44,14 @@ export const usePendingExpenseCount = () => {
 
     const channel = supabase
       .channel(`pending-expense-count-${user.id}-${currentRoom.id}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expense_splits" }, () => {
-        void fetchPendingExpenseCount();
-      })
+      // Filter to only this user's splits to drastically reduce realtime traffic
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "expense_splits", filter: `user_id=eq.${user.id}` },
+        () => {
+          void fetchPendingExpenseCount();
+        }
+      )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "expenses", filter: `room_id=eq.${currentRoom.id}` },
@@ -50,7 +64,7 @@ export const usePendingExpenseCount = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentRoom?.id, fetchPendingExpenseCount, user?.id]);
+  }, [currentRoom?.id, fetchPendingExpenseCount, user?.id, isSoloMode]);
 
   return pendingExpenseCount;
 };
