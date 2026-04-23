@@ -354,6 +354,14 @@ export const Chat = () => {
 
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
 
+  // Click outside to deselect
+  useEffect(() => {
+    if (!selectedMessageId) return;
+    const handler = () => setSelectedMessageId(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [selectedMessageId]);
+
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
     setIsSending(true);
