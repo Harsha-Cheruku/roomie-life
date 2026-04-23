@@ -136,6 +136,46 @@ export const Chat = () => {
     setMessageViews(mergeSeenReceipts({}, (data || []) as SeenReceipt[]));
   }, []);
 
+  const fetchReactions = useCallback(async (messageList: Message[]) => {
+    if (messageList.length === 0) { setReactions({}); return; }
+    const { data, error } = await supabase
+      .from('message_reactions')
+      .select('message_id, user_id, emoji')
+      .in('message_id', messageList.map((m) => m.id));
+    if (error) { console.error('Error fetching reactions:', error); return; }
+    const grouped: Record<string, Reaction[]> = {};
+    (data || []).forEach((r) => {
+      const key = r.message_id;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(r as Reaction);
+    });
+    setReactions(grouped);
+  }, []);
+
+  const toggleReaction = useCallback(async (messageId: string, emoji: string) => {
+    if (!user) return;
+    const existing = (reactions[messageId] || []).find((r) => r.user_id === user.id && r.emoji === emoji);
+    setSelectedMessageId(null);
+    if (existing) {
+      setReactions((prev) => ({
+        ...prev,
+        [messageId]: (prev[messageId] || []).filter((r) => !(r.user_id === user.id && r.emoji === emoji)),
+      }));
+      await supabase.from('message_reactions').delete().eq('message_id', messageId).eq('user_id', user.id).eq('emoji', emoji);
+    } else {
+      const optimistic: Reaction = { message_id: messageId, user_id: user.id, emoji };
+      setReactions((prev) => ({ ...prev, [messageId]: [...(prev[messageId] || []), optimistic] }));
+      const { error } = await supabase.from('message_reactions').insert({ message_id: messageId, user_id: user.id, emoji });
+      if (error && error.code !== '23505') {
+        toast.error('Failed to react');
+        setReactions((prev) => ({
+          ...prev,
+          [messageId]: (prev[messageId] || []).filter((r) => !(r.user_id === user.id && r.emoji === emoji)),
+        }));
+      }
+    }
+  }, [reactions, user]);
+
   const fetchRoomMembers = useCallback(async () => {
     if (!currentRoom) return;
 
@@ -186,12 +226,13 @@ export const Chat = () => {
       const nextMessages = data || [];
       setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
       await fetchMessageViews(nextMessages);
+      await fetchReactions(nextMessages);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
       if (!options?.silent) setIsLoading(false);
     }
-  }, [currentRoom, fetchMessageViews]);
+  }, [currentRoom, fetchMessageViews, fetchReactions]);
 
   useEffect(() => {
     if (!currentRoom) {
