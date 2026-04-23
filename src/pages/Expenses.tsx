@@ -155,12 +155,19 @@ export const Expenses = () => {
 
       const profileMap = new Map(profiles?.map(p => [p.user_id, p]) || []);
 
-      const expensesWithProfiles = expenseData?.map(expense => ({
+      const isPersonalSoloExpense = (expense: any) =>
+        expense.created_by === user.id &&
+        expense.paid_by === user.id &&
+        (expense.expense_splits || []).every((split: any) => split.user_id === user.id);
+
+      const visibleExpenseData = (expenseData || []).filter(expense => !isSoloMode || isPersonalSoloExpense(expense));
+
+      const expensesWithProfiles = visibleExpenseData.map(expense => ({
         ...expense,
         creator_profile: profileMap.get(expense.created_by),
         payer_profile: profileMap.get(expense.paid_by),
         splits: expense.expense_splits,
-      })) || [];
+      }));
 
       setExpenses(expensesWithProfiles);
 
@@ -183,6 +190,8 @@ export const Expenses = () => {
         `)
         .eq('room_id', currentRoom.id);
 
+      const visibleAllExpenses = (allExpenses || []).filter(expense => !isSoloMode || isPersonalSoloExpense(expense));
+
       let totalSpent = 0;
       let youPaid = 0;
       let youOwe = 0;
@@ -194,7 +203,7 @@ export const Expenses = () => {
       let rejectedBills = 0;
       let settledBills = 0;
 
-      allExpenses?.forEach(expense => {
+      visibleAllExpenses.forEach(expense => {
         totalSpent += expense.total_amount;
         
         if (expense.paid_by === user.id) {
@@ -237,7 +246,7 @@ export const Expenses = () => {
         youPaid, 
         youOwe, 
         youAreOwed,
-        totalBills: allExpenses?.length || 0,
+        totalBills: visibleAllExpenses.length,
         pendingBills,
         acceptedBills,
         rejectedBills,
@@ -245,13 +254,13 @@ export const Expenses = () => {
       });
 
       // Calculate balances with other users
-      await calculateBalances(allExpenses || []);
+      await calculateBalances(visibleAllExpenses);
     } catch (error) {
       console.error('Error fetching expenses:', error);
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoom, user, activeTab]);
+  }, [currentRoom, user, activeTab, isSoloMode]);
 
   useEffect(() => {
     if (currentRoom) {
@@ -297,7 +306,7 @@ export const Expenses = () => {
       .select('user_id')
       .eq('room_id', currentRoom.id);
 
-    const allMemberIds = allMembers?.map(m => m.user_id) || [];
+    const allMemberIds = isSoloMode ? [user.id] : (allMembers?.map(m => m.user_id) || []);
     
     const { data: profilesData } = await supabase
       .from('profiles')
@@ -336,7 +345,7 @@ export const Expenses = () => {
       owes: balanceMap.get(member.user_id) || 0,
     })) || [];
 
-    setBalances(balanceList.filter(b => b.owes !== 0));
+    setBalances(isSoloMode ? [] : balanceList.filter(b => b.owes !== 0));
   };
 
   const handleScanComplete = (result: ScanResult, image: string) => {

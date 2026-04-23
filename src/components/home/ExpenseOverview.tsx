@@ -30,7 +30,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (currentRoom) {
+    if (currentRoom && user) {
       fetchExpenseData();
 
       // Debounce + scope realtime to reduce lag on home dashboard
@@ -45,11 +45,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const channel = supabase
         .channel(`expense-overview-${currentRoom.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, schedule)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'expense_splits', filter: user ? `user_id=eq.${user.id}` : undefined },
-          schedule
-        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, schedule)
         .subscribe();
 
       return () => {
@@ -57,7 +53,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         supabase.removeChannel(channel);
       };
     }
-  }, [currentRoom, user]);
+  }, [currentRoom, user, isSoloMode]);
 
   const fetchExpenseData = async () => {
     if (!currentRoom || !user) return;
@@ -70,8 +66,17 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
 
       if (error) throw error;
 
+      const isPersonalSoloExpense = (expense: any) =>
+        expense.created_by === user.id &&
+        expense.paid_by === user.id &&
+        (!(expense.expense_splits?.length) || expense.expense_splits.every((split: any) => split.user_id === user.id));
+
+      const visibleExpenses = (expenses || []).filter((expense: any) => !isSoloMode || isPersonalSoloExpense(expense));
+
       const { data: roomMembers } = await supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id);
-      const memberUserIds = roomMembers?.map((m: any) => m.user_id) || [];
+      const memberUserIds = isSoloMode
+        ? [user.id]
+        : (roomMembers?.map((m: any) => m.user_id) || []);
       const { data: profilesData } = await supabase.from('profiles').select('user_id, display_name, avatar').in('user_id', memberUserIds);
 
       const profileMap = new Map((profilesData || []).map((p: any) => [p.user_id, p]));
@@ -81,14 +86,18 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const memberAmounts = new Map<string, number>();
       const today = new Date().toDateString();
 
-      expenses?.forEach((expense: any) => {
-        if (isSoloMode && expense.created_by !== user?.id) return;
+      visibleExpenses.forEach((expense: any) => {
         total += expense.total_amount;
         if (expense.created_at) {
           const expenseDate = new Date(expense.created_at).toDateString();
           if (expenseDate === today) todaySpending += expense.total_amount;
         }
+
+        const payerId = expense.paid_by || expense.created_by;
+        memberAmounts.set(payerId, (memberAmounts.get(payerId) || 0) + expense.total_amount);
+
         expense.expense_splits?.forEach((split: any) => {
+          if (isSoloMode) return;
           if (split.status === 'accepted' && !split.is_paid) {
             pending += split.amount;
             if (split.user_id === user?.id) willPay += split.amount;
@@ -96,8 +105,6 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
           } else if (split.is_paid) {
             settled += split.amount;
           }
-          const current = memberAmounts.get(expense.created_by) || 0;
-          memberAmounts.set(expense.created_by, current + expense.total_amount);
         });
       });
 
@@ -180,7 +187,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       {/* Per User Breakdown - clickable */}
       {data.members.length > 0 && (
         <button onClick={() => navigate('/expenses')} className="w-full text-left bg-card rounded-2xl p-4 shadow-card press-effect hover:shadow-lg transition-shadow">
-          <p className="text-sm font-medium text-muted-foreground mb-3">Per Roommate (Paid)</p>
+          <p className="text-sm font-medium text-muted-foreground mb-3">{isSoloMode ? 'Your spending' : 'Per Roommate (Paid)'}</p>
           <div className="space-y-3">
             {data.members.map((member, index) => (
               <div key={member.name} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
@@ -191,7 +198,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
                     <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: data.total > 0 ? `${(member.amount / data.total) * 100}%` : '0%' }} />
                   </div>
                 </div>
-                <p className="text-sm font-semibold text-foreground">₹{member.amount.toLocaleString()}</p>
+                <p className="text-sm font-semibold text-foreground">₹{formatAmount(member.amount)}</p>
               </div>
             ))}
           </div>
