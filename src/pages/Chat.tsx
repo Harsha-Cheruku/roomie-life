@@ -638,6 +638,32 @@ export const Chat = () => {
                         </div>
                       </MessageActionsMenu>
 
+                      {(reactions[message.id]?.length ?? 0) > 0 && (
+                        <div className={cn('flex flex-wrap gap-1', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                          {Object.entries(
+                            (reactions[message.id] || []).reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
+                              if (!acc[r.emoji]) acc[r.emoji] = { count: 0, mine: false };
+                              acc[r.emoji].count += 1;
+                              if (r.user_id === user?.id) acc[r.emoji].mine = true;
+                              return acc;
+                            }, {})
+                          ).map(([emoji, info]) => (
+                            <button
+                              key={emoji}
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleReaction(message.id, emoji); }}
+                              className={cn(
+                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors',
+                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted'
+                              )}
+                            >
+                              <span className="text-sm leading-none">{emoji}</span>
+                              <span className="text-[10px] font-medium">{info.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
                       {isOwnMessage && !message.deleted_at && isLastOwnInStack && (
                         hasSeen ? (
                           <button
