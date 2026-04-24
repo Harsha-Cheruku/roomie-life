@@ -365,15 +365,38 @@ export const Chat = () => {
     };
   }, [currentRoom, fetchMessages]);
 
-  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+  useEffect(() => {
+    if (!messages.length) return;
+
+    if (autoScrollRef.current) {
+      scrollToBottom(isLoading ? 'auto' : 'smooth');
+    }
+  }, [isLoading, messages, scrollToBottom]);
 
   // Click outside to deselect
   useEffect(() => {
     if (!selectedMessageId) return;
-    const handler = () => setSelectedMessageId(null);
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    const handler = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-message-actions-root="true"]')) return;
+      setSelectedMessageId(null);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
   }, [selectedMessageId]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      autoScrollRef.current = isNearBottom();
+    };
+
+    handleScroll();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isNearBottom]);
 
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
