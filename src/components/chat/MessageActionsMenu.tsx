@@ -29,7 +29,7 @@ export const MessageActionsMenu = ({
   };
 
   return (
-    <div className={cn("relative flex flex-col", selected && "pt-11", isOwnMessage ? "items-end" : "items-start")}>
+    <div data-message-actions-root="true" className={cn("relative flex flex-col", selected && "pt-11", isOwnMessage ? "items-end" : "items-start")}>
       {selected && (
         <div
           className={cn(
