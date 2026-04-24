@@ -403,7 +403,7 @@ export const Chat = () => {
     if (!selectedMessageId) return;
     const handler = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-message-actions-root="true"]')) return;
+      if (target?.closest('[data-message-actions-root="true"]') || target?.closest('[data-message-actions-dropdown="true"]')) return;
       setSelectedMessageId(null);
     };
     document.addEventListener('pointerdown', handler);
@@ -652,7 +652,7 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} className={cn('flex gap-2', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div key={message.id} data-message-id={message.id} className={cn('flex gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
