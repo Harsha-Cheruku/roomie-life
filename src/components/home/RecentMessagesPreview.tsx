@@ -20,6 +20,12 @@ export const RecentMessagesPreview = () => {
   const { currentRoom, user } = useAuth();
   const [recentMessages, setRecentMessages] = useState<RecentMessage[]>([]);
 
+  const openChatAtMessage = (messageId?: string) => {
+    navigate("/chat", {
+      state: messageId ? { focusMessageId: messageId } : undefined,
+    });
+  };
+
   useEffect(() => {
     if (!currentRoom?.id) return;
     
@@ -27,7 +33,7 @@ export const RecentMessagesPreview = () => {
 
     const channel = supabase
       .channel('home-messages-preview')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` }, () => fetchRecentMessages())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` }, () => fetchRecentMessages())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -85,7 +91,7 @@ export const RecentMessagesPreview = () => {
           Chats
         </h3>
         <button
-          onClick={() => navigate("/chat")}
+          onClick={() => openChatAtMessage()}
           className="text-xs text-primary font-medium"
         >
           Open Chat →
@@ -95,7 +101,7 @@ export const RecentMessagesPreview = () => {
         {recentMessages.map((msg) => (
           <button
             key={msg.id}
-            onClick={() => navigate("/chat")}
+            onClick={() => openChatAtMessage(msg.id)}
             className="flex flex-col items-center gap-1.5 min-w-[64px] max-w-[80px] group"
           >
             <div className="relative flex-shrink-0 group-hover:ring-2 ring-primary/30 transition-all rounded-full">
