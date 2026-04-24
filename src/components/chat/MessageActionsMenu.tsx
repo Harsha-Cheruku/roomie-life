@@ -29,7 +29,7 @@ export const MessageActionsMenu = ({
   };
 
   return (
-    <div className={cn("relative flex flex-col pt-11", isOwnMessage ? "items-end" : "items-start")}>
+    <div className={cn("relative flex flex-col", selected && "pt-11", isOwnMessage ? "items-end" : "items-start")}>
       {selected && (
         <div
           className={cn(
@@ -43,6 +43,7 @@ export const MessageActionsMenu = ({
               key={emoji}
               type="button"
               onClick={(e) => { e.stopPropagation(); onReact(emoji); }}
+              aria-pressed={false}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none transition-transform hover:scale-110 hover:bg-muted active:scale-95"
             >
               {emoji}
