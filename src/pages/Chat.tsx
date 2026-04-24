@@ -659,7 +659,7 @@ export const Chat = () => {
                       </div>
                     )}
 
-                    <div className={cn('flex min-w-0 max-w-[78%] flex-col gap-1 sm:max-w-[72%]', isOwnMessage ? 'items-end' : 'items-start')}>
+                    <div className={cn('flex min-w-0 max-w-[86%] flex-col gap-1 sm:max-w-[72%]', isOwnMessage ? 'items-end' : 'items-start')}>
                       <MessageActionsMenu
                         isOwnMessage={isOwnMessage}
                         messageContent={message.content}
