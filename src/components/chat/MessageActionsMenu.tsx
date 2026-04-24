@@ -94,7 +94,7 @@ export const MessageActionsMenu = ({
                   <MoreVertical className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align={isOwnMessage ? "end" : "start"} className="w-40">
+              <DropdownMenuContent align={isOwnMessage ? "end" : "start"} className="w-40" data-message-actions-dropdown="true">
                 {messageType === "text" && (
                   <DropdownMenuItem onClick={handleCopy}>
                     <Copy className="w-4 h-4 mr-2" /> Copy
@@ -135,7 +135,6 @@ export const MessageActionsMenu = ({
         onPointerUp={clearPressTimer}
         onPointerLeave={clearPressTimer}
         onPointerCancel={clearPressTimer}
-        onPointerMove={clearPressTimer}
       >
         {children}
       </div>
