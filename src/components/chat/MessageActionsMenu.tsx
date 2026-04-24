@@ -29,19 +29,21 @@ export const MessageActionsMenu = ({
   };
 
   return (
-    <div className={cn("relative flex flex-col", isOwnMessage ? "items-end" : "items-start")}>
+    <div className={cn("relative flex flex-col pt-11", isOwnMessage ? "items-end" : "items-start")}>
       {selected && (
         <div
           className={cn(
-            "z-20 mb-1.5 flex items-center gap-1 rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95",
+            "absolute top-0 z-30 flex max-w-[min(92vw,22rem)] items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95",
+            isOwnMessage ? "right-0" : "left-0",
           )}
+          onClick={(e) => e.stopPropagation()}
         >
           {QUICK_REACTIONS.map((emoji) => (
             <button
               key={emoji}
               type="button"
               onClick={(e) => { e.stopPropagation(); onReact(emoji); }}
-              className="text-lg leading-none transition-transform hover:scale-125 active:scale-110"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none transition-transform hover:scale-110 hover:bg-muted active:scale-95"
             >
               {emoji}
             </button>
@@ -83,7 +85,7 @@ export const MessageActionsMenu = ({
         </div>
       )}
       <div
-        className={cn("cursor-pointer transition-all", selected && "ring-2 ring-primary/40 rounded-[1.6rem]")}
+        className={cn("cursor-pointer rounded-[1.6rem] transition-all", selected && "ring-2 ring-primary/40")}
         onClick={(e) => { e.stopPropagation(); onSelect(); }}
       >
         {children}
