@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
@@ -92,6 +92,7 @@ export const Chat = () => {
   const { user, currentRoom } = useAuth();
   const { toast: toastHook } = useToast();
   const navigate = useNavigate();
+  const location = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -109,6 +110,7 @@ export const Chat = () => {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const autoScrollRef = useRef(true);
+  const focusMessageIdRef = useRef<string | null>(((location.state as { focusMessageId?: string } | null)?.focusMessageId) ?? null);
 
   const isNearBottom = useCallback(() => {
     const container = scrollRef.current;
@@ -123,6 +125,20 @@ export const Chat = () => {
     requestAnimationFrame(() => {
       container.scrollTo({ top: container.scrollHeight, behavior });
     });
+  }, []);
+
+  const focusMessage = useCallback((messageId: string, behavior: ScrollBehavior = 'smooth') => {
+    const messageElement = document.querySelector<HTMLElement>(`[data-message-id="${messageId}"]`);
+    if (!messageElement) return false;
+
+    messageElement.scrollIntoView({ behavior, block: 'center' });
+    setSelectedMessageId(messageId);
+
+    window.setTimeout(() => {
+      setSelectedMessageId((current) => (current === messageId ? null : current));
+    }, 1800);
+
+    return true;
   }, []);
 
   useEffect(() => {
@@ -368,17 +384,26 @@ export const Chat = () => {
   useEffect(() => {
     if (!messages.length) return;
 
+    if (focusMessageIdRef.current) {
+      const didFocus = focusMessage(focusMessageIdRef.current, isLoading ? 'auto' : 'smooth');
+      if (didFocus) {
+        focusMessageIdRef.current = null;
+        navigate(location.pathname, { replace: true, state: null });
+        return;
+      }
+    }
+
     if (autoScrollRef.current) {
       scrollToBottom(isLoading ? 'auto' : 'smooth');
     }
-  }, [isLoading, messages, scrollToBottom]);
+  }, [focusMessage, isLoading, location.pathname, messages, navigate, scrollToBottom]);
 
   // Click outside to deselect
   useEffect(() => {
     if (!selectedMessageId) return;
     const handler = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
-      if (target?.closest('[data-message-actions-root="true"]')) return;
+      if (target?.closest('[data-message-actions-root="true"]') || target?.closest('[data-message-actions-dropdown="true"]')) return;
       setSelectedMessageId(null);
     };
     document.addEventListener('pointerdown', handler);
@@ -627,7 +652,7 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} className={cn('flex gap-2', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div key={message.id} data-message-id={message.id} className={cn('flex gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
