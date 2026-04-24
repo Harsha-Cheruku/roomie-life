@@ -659,7 +659,7 @@ export const Chat = () => {
                       </div>
                     )}
 
-                    <div className={cn('flex min-w-0 max-w-[78%] flex-col gap-1 sm:max-w-[72%]', isOwnMessage ? 'items-end' : 'items-start')}>
+                    <div className={cn('flex min-w-0 max-w-[86%] flex-col gap-1 sm:max-w-[72%]', isOwnMessage ? 'items-end' : 'items-start')}>
                       <MessageActionsMenu
                         isOwnMessage={isOwnMessage}
                         messageContent={message.content}
@@ -669,13 +669,20 @@ export const Chat = () => {
                         onReact={(emoji) => toggleReaction(message.id, emoji)}
                         onEdit={() => {
                           if (message.message_type === 'text' && !message.deleted_at) {
+                            setSelectedMessageId(null);
                             setEditingMessageId(message.id);
                             setNewMessage(message.content);
                             inputRef.current?.focus();
                           }
                         }}
-                        onDelete={() => handleDeleteMessage(message.id)}
-                        onViewSeen={() => setSeenDialogMessageId(message.id)}
+                        onDelete={() => {
+                          setSelectedMessageId(null);
+                          void handleDeleteMessage(message.id);
+                        }}
+                        onViewSeen={() => {
+                          setSelectedMessageId(null);
+                          setSeenDialogMessageId(message.id);
+                        }}
                       >
                         <div className={cn(
                           'max-w-full rounded-[1.6rem] px-4 py-3 shadow-card transition-all',

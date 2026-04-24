@@ -67,6 +67,7 @@ export function SecureAttachment({ filePath, type, fileName, isOwnMessage }: Sec
       <img
         src={signedUrl}
         alt="Image"
+        data-message-interactive="true"
         className="max-w-[250px] max-h-[200px] rounded-lg object-cover cursor-pointer"
         onClick={() => window.open(signedUrl, '_blank')}
         onError={() => setError(true)}
@@ -76,7 +77,7 @@ export function SecureAttachment({ filePath, type, fileName, isOwnMessage }: Sec
 
   if (type === 'voice') {
     return (
-      <audio controls src={signedUrl} className="max-w-[200px]" />
+      <audio controls src={signedUrl} className="max-w-[200px]" data-message-interactive="true" />
     );
   }
 
@@ -86,6 +87,7 @@ export function SecureAttachment({ filePath, type, fileName, isOwnMessage }: Sec
         href={signedUrl}
         target="_blank"
         rel="noopener noreferrer"
+        data-message-interactive="true"
         className={cn(
           "flex items-center gap-2 text-sm hover:underline",
           isOwnMessage ? "text-primary-foreground" : "text-primary"

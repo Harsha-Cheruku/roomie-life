@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const QUICK_REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🔥"];
 const LONG_PRESS_MS = 280;
+const INTERACTIVE_TARGET_SELECTOR = 'button, a, input, textarea, select, [role="button"], [data-message-interactive="true"]';
 
 interface MessageActionsMenuProps {
   isOwnMessage: boolean;
@@ -50,25 +51,38 @@ export const MessageActionsMenu = ({
   };
 
   const handleBubbleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest(INTERACTIVE_TARGET_SELECTOR)) return;
+
     event.stopPropagation();
     if (longPressTriggeredRef.current) {
       longPressTriggeredRef.current = false;
+      return;
     }
+
+    onSelect();
   };
 
   return (
-    <div data-message-actions-root="true" className={cn("relative flex flex-col", selected ? "z-20" : "z-0", isOwnMessage ? "items-end" : "items-start")}>
+    <div
+      data-message-actions-root="true"
+      className={cn(
+        "relative flex flex-col",
+        selected ? "z-20 pt-12" : "z-0",
+        isOwnMessage ? "items-end" : "items-start"
+      )}
+    >
       {selected && (
         <div
           className={cn(
-            "pointer-events-none absolute top-0 z-30 flex w-full",
+            "pointer-events-none absolute inset-x-0 top-0 z-30 flex w-full",
             isOwnMessage ? "right-0" : "left-0",
           )}
           onClick={(e) => e.stopPropagation()}
         >
           <div
             className={cn(
-              "pointer-events-auto flex max-w-[min(92vw,23rem)] -translate-y-[calc(100%+0.35rem)] items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95",
+              "pointer-events-auto flex max-w-[min(92vw,23rem)] items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95",
               isOwnMessage ? "ml-auto" : "mr-auto",
             )}
           >
@@ -78,6 +92,7 @@ export const MessageActionsMenu = ({
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onReact(emoji); }}
                 aria-pressed={false}
+                aria-label={`React with ${emoji}`}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg leading-none transition-transform hover:scale-110 hover:bg-muted active:scale-95"
               >
                 {emoji}
@@ -121,7 +136,7 @@ export const MessageActionsMenu = ({
         </div>
       )}
       <div
-        className={cn("cursor-pointer rounded-[1.6rem] transition-all", selected && "ring-2 ring-primary/40")}
+        className={cn("cursor-pointer rounded-[1.6rem] transition-all", selected && "ring-2 ring-primary/40 shadow-md")}
         onClick={handleBubbleClick}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -129,6 +144,8 @@ export const MessageActionsMenu = ({
           if (!selected) onSelect();
         }}
         onPointerDown={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest(INTERACTIVE_TARGET_SELECTOR)) return;
           if (event.pointerType === "mouse" && event.button !== 0) return;
           startSelectionPress();
         }}
