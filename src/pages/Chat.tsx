@@ -108,9 +108,21 @@ export const Chat = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
+  const autoScrollRef = useRef(true);
 
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const isNearBottom = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior });
+    });
   }, []);
 
   useEffect(() => {
@@ -225,8 +237,7 @@ export const Chat = () => {
 
       const nextMessages = data || [];
       setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
-      await fetchMessageViews(nextMessages);
-      await fetchReactions(nextMessages);
+      await Promise.all([fetchMessageViews(nextMessages), fetchReactions(nextMessages)]);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -242,6 +253,8 @@ export const Chat = () => {
       return;
     }
 
+    autoScrollRef.current = true;
+    setSelectedMessageId(null);
     void fetchRoomMembers();
     void fetchMessages();
   }, [currentRoom, fetchMessages, fetchRoomMembers]);
