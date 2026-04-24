@@ -669,13 +669,20 @@ export const Chat = () => {
                         onReact={(emoji) => toggleReaction(message.id, emoji)}
                         onEdit={() => {
                           if (message.message_type === 'text' && !message.deleted_at) {
+                            setSelectedMessageId(null);
                             setEditingMessageId(message.id);
                             setNewMessage(message.content);
                             inputRef.current?.focus();
                           }
                         }}
-                        onDelete={() => handleDeleteMessage(message.id)}
-                        onViewSeen={() => setSeenDialogMessageId(message.id)}
+                        onDelete={() => {
+                          setSelectedMessageId(null);
+                          void handleDeleteMessage(message.id);
+                        }}
+                        onViewSeen={() => {
+                          setSelectedMessageId(null);
+                          setSeenDialogMessageId(message.id);
+                        }}
                       >
                         <div className={cn(
                           'max-w-full rounded-[1.6rem] px-4 py-3 shadow-card transition-all',
