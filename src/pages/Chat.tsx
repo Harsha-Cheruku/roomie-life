@@ -108,9 +108,21 @@ export const Chat = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
+  const autoScrollRef = useRef(true);
 
-  const scrollToBottom = useCallback(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  const isNearBottom = useCallback(() => {
+    const container = scrollRef.current;
+    if (!container) return true;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+  }, []);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    requestAnimationFrame(() => {
+      container.scrollTo({ top: container.scrollHeight, behavior });
+    });
   }, []);
 
   useEffect(() => {
@@ -225,8 +237,7 @@ export const Chat = () => {
 
       const nextMessages = data || [];
       setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
-      await fetchMessageViews(nextMessages);
-      await fetchReactions(nextMessages);
+      await Promise.all([fetchMessageViews(nextMessages), fetchReactions(nextMessages)]);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -242,6 +253,8 @@ export const Chat = () => {
       return;
     }
 
+    autoScrollRef.current = true;
+    setSelectedMessageId(null);
     void fetchRoomMembers();
     void fetchMessages();
   }, [currentRoom, fetchMessages, fetchRoomMembers]);
@@ -352,15 +365,38 @@ export const Chat = () => {
     };
   }, [currentRoom, fetchMessages]);
 
-  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+  useEffect(() => {
+    if (!messages.length) return;
+
+    if (autoScrollRef.current) {
+      scrollToBottom(isLoading ? 'auto' : 'smooth');
+    }
+  }, [isLoading, messages, scrollToBottom]);
 
   // Click outside to deselect
   useEffect(() => {
     if (!selectedMessageId) return;
-    const handler = () => setSelectedMessageId(null);
-    document.addEventListener('click', handler);
-    return () => document.removeEventListener('click', handler);
+    const handler = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('[data-message-actions-root="true"]')) return;
+      setSelectedMessageId(null);
+    };
+    document.addEventListener('pointerdown', handler);
+    return () => document.removeEventListener('pointerdown', handler);
   }, [selectedMessageId]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      autoScrollRef.current = isNearBottom();
+    };
+
+    handleScroll();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [isNearBottom]);
 
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
@@ -552,7 +588,7 @@ export const Chat = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
-      <header className="sticky top-0 z-10 border-b border-border/60 bg-card/95 px-4 py-3 backdrop-blur-md">
+      <header className="sticky top-0 z-10 border-b border-border/60 bg-card px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
           <ArrowLeft className="w-5 h-5 text-foreground" />
@@ -712,7 +748,7 @@ export const Chat = () => {
         </div>
       )}
 
-      <form onSubmit={sendMessage} className="sticky bottom-20 left-0 right-0 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur-md">
+      <form onSubmit={sendMessage} className="sticky bottom-20 left-0 right-0 border-t border-border/60 bg-background px-4 py-3 shadow-[0_-4px_12px_hsl(var(--foreground)/0.04)]">
         <div className="flex items-center gap-2 rounded-[1.75rem] border border-border/60 bg-card px-3 py-2 shadow-card">
           <StickerPicker onStickerSelect={handleStickerSelect} disabled={isSending} />
           <AttachmentPicker userId={user?.id || ''} onAttachmentUploaded={handleAttachmentUploaded} disabled={isSending} />
