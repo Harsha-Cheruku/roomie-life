@@ -94,7 +94,7 @@ export const TaskCalendar = ({ onCreateTask, onTaskClick }: TaskCalendarProps) =
     })) || [];
 
     const filteredTasks = isSoloMode
-      ? tasksWithProfiles.filter(t => t.assigned_to === user?.id || t.created_by === user?.id)
+      ? tasksWithProfiles.filter(t => t.created_by === user?.id)
       : tasksWithProfiles;
 
     setTasks(filteredTasks);

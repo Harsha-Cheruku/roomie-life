@@ -38,7 +38,7 @@ const statusIcons: Record<TaskStatus, React.ElementType> = {
 
 export const TaskPreview = () => {
   const navigate = useNavigate();
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const { toast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,15 +54,19 @@ export const TaskPreview = () => {
         .subscribe();
       return () => { supabase.removeChannel(channel); };
     }
-  }, [currentRoom]);
+  }, [currentRoom, isSoloMode, user?.id]);
 
   const fetchTasks = async () => {
     if (!currentRoom) return;
     try {
-      const { data: tasksData, error } = await supabase.from('tasks').select('*').eq('room_id', currentRoom.id).neq('status', 'rejected').order('created_at', { ascending: false }).limit(5);
+      let query = supabase.from('tasks').select('*').eq('room_id', currentRoom.id).neq('status', 'rejected');
+      if (isSoloMode && user) query = query.eq('created_by', user.id);
+      const { data: tasksData, error } = await query.order('created_at', { ascending: false }).limit(5);
       if (error) throw error;
 
-      const { data: allTasks } = await supabase.from('tasks').select('status').eq('room_id', currentRoom.id).neq('status', 'rejected');
+      let countQuery = supabase.from('tasks').select('status').eq('room_id', currentRoom.id).neq('status', 'rejected');
+      if (isSoloMode && user) countQuery = countQuery.eq('created_by', user.id);
+      const { data: allTasks } = await countQuery;
       setStatusCounts({
         pending: allTasks?.filter(t => t.status === 'pending' || t.status === 'accepted').length || 0,
         in_progress: allTasks?.filter(t => t.status === 'in_progress').length || 0,

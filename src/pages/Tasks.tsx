@@ -76,11 +76,9 @@ export const Tasks = () => {
 
   // Filter tasks by date and solo mode
   const filteredByDateAndMode = tasks.filter(task => {
-    // Solo mode filter - only show tasks created by or assigned to the user
+    // Solo mode filter - ONLY show tasks the user created themselves
     if (isSoloMode) {
-      if (task.created_by !== user?.id && task.assigned_to !== user?.id) {
-        return false;
-      }
+      if (task.created_by !== user?.id) return false;
     }
     
     // Date filter
