@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck } from 'lucide-react';
+import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -105,6 +105,7 @@ export const Chat = () => {
   const [messageViews, setMessageViews] = useState<Record<string, SeenReceipt[]>>({});
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -124,6 +125,7 @@ export const Chat = () => {
 
     requestAnimationFrame(() => {
       container.scrollTo({ top: container.scrollHeight, behavior });
+      setHasNewMessagesBelow(false);
     });
   }, []);
 
@@ -315,8 +317,24 @@ export const Chat = () => {
           const newMsg = payload.new as Message;
           setMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev;
+            const pendingIndex = prev.findIndex((m) =>
+              m.id.startsWith('temp-') &&
+              m.sender_id === newMsg.sender_id &&
+              m.message_type === newMsg.message_type &&
+              m.content === newMsg.content
+            );
+            if (pendingIndex >= 0) {
+              const next = [...prev];
+              next[pendingIndex] = newMsg;
+              return next;
+            }
             return [...prev, newMsg];
           });
+          if (newMsg.sender_id === user?.id || autoScrollRef.current) {
+            scrollToBottom('smooth');
+          } else {
+            setHasNewMessagesBelow(true);
+          }
           if (newMsg.sender_id !== user?.id) {
             const senderProfile = profilesMap.get(newMsg.sender_id);
             toastHook({ title: senderProfile?.display_name || 'Someone', description: newMsg.message_type === 'text' ? newMsg.content.slice(0, 50) : `Sent a ${newMsg.message_type}` });
@@ -365,7 +383,7 @@ export const Chat = () => {
 
     channelRef.current = channel;
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
-  }, [currentRoom, profilesMap, user?.id, toastHook]);
+  }, [currentRoom, profilesMap, user?.id, toastHook, scrollToBottom]);
 
   // Realtime + reconnect-only refresh. Removed 3.5s polling that caused message-list churn / lag.
   useEffect(() => {
@@ -415,7 +433,9 @@ export const Chat = () => {
     if (!container) return;
 
     const handleScroll = () => {
-      autoScrollRef.current = isNearBottom();
+      const nearBottom = isNearBottom();
+      autoScrollRef.current = nearBottom;
+      if (nearBottom) setHasNewMessagesBelow(false);
     };
 
     handleScroll();
@@ -505,6 +525,31 @@ export const Chat = () => {
     }
   };
 
+  const startEditingSelectedMessage = (message: Message) => {
+    if (message.message_type !== 'text' || message.deleted_at) return;
+    setSelectedMessageId(null);
+    setEditingMessageId(message.id);
+    setNewMessage(message.content);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const forwardSelectedMessage = async (message: Message) => {
+    if (message.deleted_at) return;
+    setSelectedMessageId(null);
+
+    const shareText = message.message_type === 'text' ? message.content : `Forwarded ${message.message_type}: ${message.content}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        toast.success('Message copied to forward');
+      }
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') toast.error('Unable to forward message');
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !currentRoom || isSending) return;
@@ -533,12 +578,18 @@ export const Chat = () => {
           id: `temp-${Date.now()}`, sender_id: user.id, content: messageText,
           message_type: 'text', created_at: new Date().toISOString(),
         } as Message;
+        autoScrollRef.current = true;
         setMessages(prev => [...prev, optimisticMessage]);
+        scrollToBottom('smooth');
         const { data, error } = await supabase.from('messages').insert({
           room_id: currentRoom.id, sender_id: user.id, content: messageText, message_type: 'text',
         }).select().single();
         if (error) throw error;
-        setMessages(prev => prev.map(m => m.id === optimisticMessage.id ? data : m));
+        setMessages(prev => prev.reduce<Message[]>((next, message) => {
+          const resolved = message.id === optimisticMessage.id ? data : message;
+          if (!next.some((existing) => existing.id === resolved.id)) next.push(resolved);
+          return next;
+        }, []));
       }
       inputRef.current?.focus();
     } catch (error) {
@@ -610,28 +661,56 @@ export const Chat = () => {
   };
 
   const messageGroups = groupMessagesByDate(messages);
+  const selectedMessage = selectedMessageId ? messages.find((message) => message.id === selectedMessageId) : null;
+  const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-20">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background pb-20">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-card px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+        {selectedOwnMessage ? (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedMessageId(null)} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80" aria-label="Clear selected message">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex flex-1 items-center gap-1 overflow-x-auto" data-message-actions-root="true">
+              <button type="button" onClick={() => startEditingSelectedMessage(selectedOwnMessage)} disabled={selectedOwnMessage.message_type !== 'text' || !!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-40" aria-label="Edit selected message">
+                <Edit2 className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+              <button type="button" onClick={() => { setSelectedMessageId(null); setSeenDialogMessageId(selectedOwnMessage.id); }} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted" aria-label="View who saw selected message">
+                <Eye className="h-4 w-4" />
+                <span>Seen</span>
+              </button>
+              <button type="button" onClick={() => forwardSelectedMessage(selectedOwnMessage)} disabled={!!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-40" aria-label="Forward selected message">
+                <Forward className="h-4 w-4" />
+                <span>Forward</span>
+              </button>
+              <button type="button" onClick={() => { setSelectedMessageId(null); void handleDeleteMessage(selectedOwnMessage.id); }} disabled={!!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-destructive transition-colors hover:bg-muted disabled:opacity-40" aria-label="Delete selected message">
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </button>
+            </div>
           </div>
-          <div className="flex -space-x-2">
-            {roomMembers.slice(0, 4).map(member => (
-              <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="ring-2 ring-card" />
-            ))}
-            {roomMembers.length > 4 && <Avatar className="w-8 h-8 ring-2 ring-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+        ) : (
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+            </div>
+            <div className="flex -space-x-2">
+              {roomMembers.slice(0, 4).map(member => (
+                <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="ring-2 ring-card" />
+              ))}
+              {roomMembers.length > 4 && <Avatar className="w-8 h-8 ring-2 ring-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
-      <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
+      <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
         {isLoading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
@@ -652,7 +731,7 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} data-message-id={message.id} className={cn('flex gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div key={message.id} data-message-id={message.id} className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
@@ -719,10 +798,11 @@ export const Chat = () => {
                             <button
                               key={emoji}
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); toggleReaction(message.id, emoji); }}
+                              onClick={(e) => { e.stopPropagation(); if (!isOwnMessage) toggleReaction(message.id, emoji); }}
+                              disabled={isOwnMessage}
                               className={cn(
-                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors',
-                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted'
+                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors disabled:cursor-default',
+                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted disabled:hover:bg-card'
                               )}
                             >
                               <span className="text-sm leading-none">{emoji}</span>
@@ -766,6 +846,17 @@ export const Chat = () => {
           ))
         )}
       </div>
+
+      {hasNewMessagesBelow && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom('smooth')}
+          className="fixed bottom-40 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border/60 bg-card px-4 py-2 text-sm font-medium text-foreground shadow-lg transition-all active:scale-95"
+        >
+          <ArrowDown className="h-4 w-4 text-primary" />
+          New message
+        </button>
+      )}
 
       {pendingAttachment && (
         <div className="px-4 py-2 bg-card border-t border-border">

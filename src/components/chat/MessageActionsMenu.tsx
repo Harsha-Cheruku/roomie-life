@@ -1,12 +1,9 @@
 import { useRef } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Copy, Edit2, Trash2, Eye, MoreVertical } from "lucide-react";
-import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const QUICK_REACTIONS = ["❤️", "😂", "👍", "😮", "😢", "🔥"];
-const LONG_PRESS_MS = 280;
 const INTERACTIVE_TARGET_SELECTOR = 'button, a, input, textarea, select, [role="button"], [data-message-interactive="true"]';
+const TAP_MOVE_TOLERANCE = 8;
 
 interface MessageActionsMenuProps {
   isOwnMessage: boolean;
@@ -22,41 +19,18 @@ interface MessageActionsMenuProps {
 }
 
 export const MessageActionsMenu = ({
-  isOwnMessage, messageContent, messageType, selected, onSelect, onEdit, onDelete, onViewSeen, onReact, children,
+  isOwnMessage, selected, onSelect, onReact, children,
 }: MessageActionsMenuProps) => {
-  const pressTimerRef = useRef<number | null>(null);
-  const longPressTriggeredRef = useRef(false);
-
-  const handleCopy = () => {
-    if (messageType === "text") {
-      navigator.clipboard.writeText(messageContent);
-      toast.success("Copied to clipboard");
-    }
-  };
-
-  const clearPressTimer = () => {
-    if (pressTimerRef.current !== null) {
-      window.clearTimeout(pressTimerRef.current);
-      pressTimerRef.current = null;
-    }
-  };
-
-  const startSelectionPress = () => {
-    clearPressTimer();
-    longPressTriggeredRef.current = false;
-    pressTimerRef.current = window.setTimeout(() => {
-      longPressTriggeredRef.current = true;
-      if (!selected) onSelect();
-    }, LONG_PRESS_MS);
-  };
+  const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
 
   const handleBubbleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
     if (target?.closest(INTERACTIVE_TARGET_SELECTOR)) return;
 
     event.stopPropagation();
-    if (longPressTriggeredRef.current) {
-      longPressTriggeredRef.current = false;
+    if (didDragRef.current) {
+      didDragRef.current = false;
       return;
     }
 
@@ -68,24 +42,16 @@ export const MessageActionsMenu = ({
       data-message-actions-root="true"
       className={cn(
         "relative flex flex-col",
-        selected ? "z-20 pt-12" : "z-0",
+        selected && !isOwnMessage ? "z-20 pt-12" : "z-0",
         isOwnMessage ? "items-end" : "items-start"
       )}
     >
-      {selected && (
+      {selected && !isOwnMessage && (
         <div
-          className={cn(
-            "pointer-events-none absolute inset-x-0 top-0 z-30 flex w-full",
-            isOwnMessage ? "right-0" : "left-0",
-          )}
+          className="pointer-events-none absolute left-0 top-0 z-30 flex w-max max-w-[calc(100vw-4rem)]"
           onClick={(e) => e.stopPropagation()}
         >
-          <div
-            className={cn(
-              "pointer-events-auto flex max-w-[min(92vw,23rem)] items-center gap-1 overflow-x-auto rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95",
-              isOwnMessage ? "ml-auto" : "mr-auto",
-            )}
-          >
+          <div className="pointer-events-auto flex items-center gap-1 rounded-full border border-border/60 bg-popover px-2 py-1 shadow-lg animate-in fade-in zoom-in-95">
             {QUICK_REACTIONS.map((emoji) => (
               <button
                 key={emoji}
@@ -98,40 +64,6 @@ export const MessageActionsMenu = ({
                 {emoji}
               </button>
             ))}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  onClick={(e) => e.stopPropagation()}
-                  className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground ring-2 ring-primary/20 transition-colors hover:bg-muted/80"
-                  aria-label="More actions"
-                >
-                  <MoreVertical className="h-4 w-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align={isOwnMessage ? "end" : "start"} className="w-40" data-message-actions-dropdown="true">
-                {messageType === "text" && (
-                  <DropdownMenuItem onClick={handleCopy}>
-                    <Copy className="w-4 h-4 mr-2" /> Copy
-                  </DropdownMenuItem>
-                )}
-                {isOwnMessage && (
-                  <DropdownMenuItem onClick={onViewSeen}>
-                    <Eye className="w-4 h-4 mr-2" /> Seen by
-                  </DropdownMenuItem>
-                )}
-                {isOwnMessage && messageType === "text" && (
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Edit2 className="w-4 h-4 mr-2" /> Edit
-                  </DropdownMenuItem>
-                )}
-                {isOwnMessage && (
-                  <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
       )}
@@ -147,11 +79,18 @@ export const MessageActionsMenu = ({
           const target = event.target as HTMLElement | null;
           if (target?.closest(INTERACTIVE_TARGET_SELECTOR)) return;
           if (event.pointerType === "mouse" && event.button !== 0) return;
-          startSelectionPress();
+          pointerStartRef.current = { x: event.clientX, y: event.clientY };
+          didDragRef.current = false;
         }}
-        onPointerUp={clearPressTimer}
-        onPointerLeave={clearPressTimer}
-        onPointerCancel={clearPressTimer}
+        onPointerMove={(event) => {
+          if (!pointerStartRef.current) return;
+          const dx = Math.abs(event.clientX - pointerStartRef.current.x);
+          const dy = Math.abs(event.clientY - pointerStartRef.current.y);
+          if (dx > TAP_MOVE_TOLERANCE || dy > TAP_MOVE_TOLERANCE) didDragRef.current = true;
+        }}
+        onPointerUp={() => { pointerStartRef.current = null; }}
+        onPointerLeave={() => { pointerStartRef.current = null; }}
+        onPointerCancel={() => { pointerStartRef.current = null; didDragRef.current = true; }}
       >
         {children}
       </div>
