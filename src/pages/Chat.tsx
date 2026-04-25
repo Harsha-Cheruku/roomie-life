@@ -514,6 +514,31 @@ export const Chat = () => {
     }
   };
 
+  const startEditingSelectedMessage = (message: Message) => {
+    if (message.message_type !== 'text' || message.deleted_at) return;
+    setSelectedMessageId(null);
+    setEditingMessageId(message.id);
+    setNewMessage(message.content);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const forwardSelectedMessage = async (message: Message) => {
+    if (message.deleted_at) return;
+    setSelectedMessageId(null);
+
+    const shareText = message.message_type === 'text' ? message.content : `Forwarded ${message.message_type}: ${message.content}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text: shareText });
+      } else {
+        await navigator.clipboard.writeText(shareText);
+        toast.success('Message copied to forward');
+      }
+    } catch (error) {
+      if ((error as Error)?.name !== 'AbortError') toast.error('Unable to forward message');
+    }
+  };
+
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !currentRoom || isSending) return;
@@ -619,6 +644,8 @@ export const Chat = () => {
   };
 
   const messageGroups = groupMessagesByDate(messages);
+  const selectedMessage = selectedMessageId ? messages.find((message) => message.id === selectedMessageId) : null;
+  const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
