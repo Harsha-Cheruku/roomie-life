@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck } from 'lucide-react';
+import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -105,6 +105,7 @@ export const Chat = () => {
   const [messageViews, setMessageViews] = useState<Record<string, SeenReceipt[]>>({});
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+  const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -124,6 +125,7 @@ export const Chat = () => {
 
     requestAnimationFrame(() => {
       container.scrollTo({ top: container.scrollHeight, behavior });
+      setHasNewMessagesBelow(false);
     });
   }, []);
 
