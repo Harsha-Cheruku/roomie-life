@@ -783,10 +783,11 @@ export const Chat = () => {
                             <button
                               key={emoji}
                               type="button"
-                              onClick={(e) => { e.stopPropagation(); toggleReaction(message.id, emoji); }}
+                              onClick={(e) => { e.stopPropagation(); if (!isOwnMessage) toggleReaction(message.id, emoji); }}
+                              disabled={isOwnMessage}
                               className={cn(
-                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors',
-                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted'
+                                'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs shadow-sm transition-colors disabled:cursor-default',
+                                info.mine ? 'border-primary/40 bg-primary/15 text-foreground' : 'border-border/60 bg-card text-foreground hover:bg-muted disabled:hover:bg-card'
                               )}
                             >
                               <span className="text-sm leading-none">{emoji}</span>
