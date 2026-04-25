@@ -567,7 +567,9 @@ export const Chat = () => {
           id: `temp-${Date.now()}`, sender_id: user.id, content: messageText,
           message_type: 'text', created_at: new Date().toISOString(),
         } as Message;
+        autoScrollRef.current = true;
         setMessages(prev => [...prev, optimisticMessage]);
+        scrollToBottom('smooth');
         const { data, error } = await supabase.from('messages').insert({
           room_id: currentRoom.id, sender_id: user.id, content: messageText, message_type: 'text',
         }).select().single();
