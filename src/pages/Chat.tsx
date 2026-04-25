@@ -665,7 +665,7 @@ export const Chat = () => {
   const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background pb-[72px]">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-card px-4 py-3 shadow-sm">
         {selectedOwnMessage ? (
           <div className="flex items-center gap-2">
