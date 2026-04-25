@@ -6,6 +6,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
+interface MemberRow {
+  user_id: string;
+  name: string;
+  avatar: string;
+  amount: number;
+  color: string;
+}
+
 interface ExpenseData {
   total: number;
   pending: number;
@@ -13,7 +21,9 @@ interface ExpenseData {
   willPay: number;
   willGet: number;
   todaySpending: number;
-  members: { name: string; avatar: string; amount: number; color: string }[];
+  members: MemberRow[];
+  willPayPerMember: MemberRow[];
+  willGetPerMember: MemberRow[];
 }
 
 const memberColors = ['bg-primary', 'bg-coral', 'bg-mint', 'bg-lavender', 'bg-accent'];
@@ -26,21 +36,21 @@ const formatAmount = (amount: number) => amount.toLocaleString('en-IN', {
 export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCount?: number }) => {
   const navigate = useNavigate();
   const { user, currentRoom, isSoloMode } = useAuth();
-  const [data, setData] = useState<ExpenseData>({ total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0, members: [] });
+  const [data, setData] = useState<ExpenseData>({
+    total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0,
+    members: [], willPayPerMember: [], willGetPerMember: [],
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
 
   useEffect(() => {
     if (currentRoom && user) {
       fetchExpenseData();
 
-      // Debounce + scope realtime to reduce lag on home dashboard
       let timer: ReturnType<typeof setTimeout> | null = null;
       const schedule = () => {
         if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          fetchExpenseData();
-          timer = null;
-        }, 300);
+        timer = setTimeout(() => { fetchExpenseData(); timer = null; }, 300);
       };
       const channel = supabase
         .channel(`expense-overview-${currentRoom.id}`)
@@ -61,7 +71,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
     try {
       const { data: expenses, error } = await supabase
         .from('expenses')
-        .select(`id, total_amount, created_by, status, created_at, expense_splits (user_id, amount, is_paid, status)`)
+        .select(`id, total_amount, paid_by, created_by, status, created_at, expense_splits (user_id, amount, is_paid, status)`)
         .eq('room_id', currentRoom.id);
 
       if (error) throw error;
@@ -74,16 +84,17 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const visibleExpenses = (expenses || []).filter((expense: any) => !isSoloMode || isPersonalSoloExpense(expense));
 
       const { data: roomMembers } = await supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id);
-      const memberUserIds = isSoloMode
-        ? [user.id]
-        : (roomMembers?.map((m: any) => m.user_id) || []);
+      const memberUserIds = isSoloMode ? [user.id] : (roomMembers?.map((m: any) => m.user_id) || []);
       const { data: profilesData } = await supabase.from('profiles').select('user_id, display_name, avatar').in('user_id', memberUserIds);
 
       const profileMap = new Map((profilesData || []).map((p: any) => [p.user_id, p]));
-      const members = roomMembers?.map((m: any) => ({ user_id: m.user_id, profiles: profileMap.get(m.user_id) || null })) || [];
+      const members = (isSoloMode ? [{ user_id: user.id }] : (roomMembers || []))
+        .map((m: any) => ({ user_id: m.user_id, profiles: profileMap.get(m.user_id) || null }));
 
       let total = 0, pending = 0, settled = 0, willPay = 0, willGet = 0, todaySpending = 0;
       const memberAmounts = new Map<string, number>();
+      const willPayPerUser = new Map<string, number>();
+      const willGetPerUser = new Map<string, number>();
       const today = new Date().toDateString();
 
       visibleExpenses.forEach((expense: any) => {
@@ -100,23 +111,36 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
           if (isSoloMode) return;
           if (split.status === 'accepted' && !split.is_paid) {
             pending += split.amount;
-            if (split.user_id === user?.id) willPay += split.amount;
-            else if (expense.created_by === user?.id) willGet += split.amount;
+            if (split.user_id === user.id && payerId !== user.id) {
+              willPay += split.amount;
+              willPayPerUser.set(payerId, (willPayPerUser.get(payerId) || 0) + split.amount);
+            } else if (payerId === user.id && split.user_id !== user.id) {
+              willGet += split.amount;
+              willGetPerUser.set(split.user_id, (willGetPerUser.get(split.user_id) || 0) + split.amount);
+            }
           } else if (split.is_paid) {
             settled += split.amount;
           }
         });
       });
 
-      const memberData = members?.map((member: any, index) => ({
-        name: member.user_id === user.id ? 'You' : (member.profiles?.display_name || 'Unknown'),
-        avatar: member.profiles?.avatar || '😊',
-        amount: memberAmounts.get(member.user_id) || 0,
-        color: memberColors[index % memberColors.length],
-      })) || [];
+      const buildRows = (amounts: Map<string, number>): MemberRow[] => {
+        const rows = members.map((m: any, index: number) => ({
+          user_id: m.user_id,
+          name: m.user_id === user.id ? 'You' : (m.profiles?.display_name || 'Unknown'),
+          avatar: m.profiles?.avatar || '😊',
+          amount: amounts.get(m.user_id) || 0,
+          color: memberColors[index % memberColors.length],
+        }));
+        return rows.sort((a, b) => b.amount - a.amount);
+      };
 
-      memberData.sort((a, b) => b.amount - a.amount);
-      setData({ total, pending, settled, willPay, willGet, todaySpending, members: memberData });
+      setData({
+        total, pending, settled, willPay, willGet, todaySpending,
+        members: buildRows(memberAmounts),
+        willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
+        willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
+      });
     } catch (error) {
       console.error('Error fetching expense data:', error);
     } finally {
@@ -133,6 +157,21 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       </section>
     );
   }
+
+  const breakdownRows =
+    breakdownMode === 'willPay' ? data.willPayPerMember :
+    breakdownMode === 'willGet' ? data.willGetPerMember :
+    data.members;
+
+  const breakdownTotal =
+    breakdownMode === 'willPay' ? data.willPay :
+    breakdownMode === 'willGet' ? data.willGet :
+    data.total;
+
+  const breakdownLabel =
+    breakdownMode === 'willPay' ? 'You will pay (per roommate)' :
+    breakdownMode === 'willGet' ? 'You will receive (per roommate)' :
+    (isSoloMode ? 'Your spending' : 'Per Roommate (Paid)');
 
   return (
     <section className="px-4">
@@ -160,14 +199,32 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); setBreakdownMode((m) => m === 'willPay' ? 'paid' : 'willPay'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBreakdownMode((m) => m === 'willPay' ? 'paid' : 'willPay'); } }}
+            className={cn(
+              'rounded-2xl p-3 min-w-0 overflow-hidden cursor-pointer transition-all',
+              breakdownMode === 'willPay' ? 'bg-primary-foreground/25 ring-2 ring-primary-foreground/60' : 'bg-primary-foreground/10 hover:bg-primary-foreground/15'
+            )}
+          >
             <div className="flex items-start gap-2 mb-2 min-w-0">
               <ArrowUpCircle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Pay</span>
             </div>
             <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willPay)}</p>
           </div>
-          <div className="bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); setBreakdownMode((m) => m === 'willGet' ? 'paid' : 'willGet'); }}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); setBreakdownMode((m) => m === 'willGet' ? 'paid' : 'willGet'); } }}
+            className={cn(
+              'rounded-2xl p-3 min-w-0 overflow-hidden cursor-pointer transition-all',
+              breakdownMode === 'willGet' ? 'bg-primary-foreground/25 ring-2 ring-primary-foreground/60' : 'bg-primary-foreground/10 hover:bg-primary-foreground/15'
+            )}
+          >
             <div className="flex items-start gap-2 mb-2 min-w-0">
               <ArrowDownCircle className="w-4 h-4 text-mint shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Get</span>
@@ -185,17 +242,30 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       </button>
 
       {/* Per User Breakdown - clickable */}
-      {data.members.length > 0 && (
+      {breakdownRows.length > 0 ? (
         <button onClick={() => navigate('/expenses')} className="w-full text-left bg-card rounded-2xl p-4 shadow-card press-effect hover:shadow-lg transition-shadow">
-          <p className="text-sm font-medium text-muted-foreground mb-3">{isSoloMode ? 'Your spending' : 'Per Roommate (Paid)'}</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium text-muted-foreground">{breakdownLabel}</p>
+            {breakdownMode !== 'paid' && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => { e.stopPropagation(); setBreakdownMode('paid'); }}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setBreakdownMode('paid'); } }}
+                className="text-xs font-medium text-primary cursor-pointer"
+              >
+                Reset
+              </span>
+            )}
+          </div>
           <div className="space-y-3">
-            {data.members.map((member, index) => (
-              <div key={member.name} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+            {breakdownRows.map((member, index) => (
+              <div key={`${member.user_id}-${index}`} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
                 <ProfileAvatar avatar={member.avatar} size="md" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-foreground">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
-                    <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: data.total > 0 ? `${(member.amount / data.total) * 100}%` : '0%' }} />
+                    <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
                   </div>
                 </div>
                 <p className="text-sm font-semibold text-foreground">₹{formatAmount(member.amount)}</p>
@@ -203,7 +273,20 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
             ))}
           </div>
         </button>
-      )}
+      ) : breakdownMode !== 'paid' ? (
+        <div className="bg-card rounded-2xl p-4 shadow-card text-center">
+          <p className="text-sm text-muted-foreground">
+            {breakdownMode === 'willPay' ? 'You don\u2019t owe anyone right now.' : 'No one owes you right now.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => setBreakdownMode('paid')}
+            className="mt-2 text-xs font-medium text-primary"
+          >
+            Show paid breakdown
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 };

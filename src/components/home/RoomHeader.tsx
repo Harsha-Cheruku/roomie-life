@@ -369,7 +369,8 @@ export const RoomHeader = () => {
         </div>
       )}
 
-      {/* Roommates Row with Online Status */}
+      {/* Roommates Row with Online Status — hidden in Solo Mode */}
+      {!isSoloMode && (
       <div className="flex items-center gap-2">
         <div className="flex -space-x-3">
           {members.slice(0, 4).map((member, index) => (
@@ -405,6 +406,14 @@ export const RoomHeader = () => {
           )}
         </Button>
       </div>
+      )}
+      {isSoloMode && (
+        <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-card px-3 py-2">
+          <User className="w-4 h-4 text-primary" />
+          <span className="text-sm font-medium text-foreground">Solo Mode</span>
+          <span className="text-xs text-muted-foreground">· Personal tracking only</span>
+        </div>
+      )}
     </header>
   );
 };
