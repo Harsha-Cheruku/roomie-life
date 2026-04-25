@@ -648,7 +648,7 @@ export const Chat = () => {
   const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-20">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background pb-20">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-card px-4 py-3 shadow-sm">
         {selectedOwnMessage ? (
           <div className="flex items-center gap-2">
@@ -693,7 +693,7 @@ export const Chat = () => {
         )}
       </header>
 
-      <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
+      <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
         {isLoading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>
         ) : messages.length === 0 ? (
@@ -714,7 +714,7 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} data-message-id={message.id} className={cn('flex gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div key={message.id} data-message-id={message.id} className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
@@ -828,6 +828,17 @@ export const Chat = () => {
           ))
         )}
       </div>
+
+      {hasNewMessagesBelow && (
+        <button
+          type="button"
+          onClick={() => scrollToBottom('smooth')}
+          className="fixed bottom-40 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border/60 bg-card px-4 py-2 text-sm font-medium text-foreground shadow-lg transition-all active:scale-95"
+        >
+          <ArrowDown className="h-4 w-4 text-primary" />
+          New message
+        </button>
+      )}
 
       {pendingAttachment && (
         <div className="px-4 py-2 bg-card border-t border-border">
