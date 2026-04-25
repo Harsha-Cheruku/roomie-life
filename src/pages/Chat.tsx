@@ -650,21 +650,47 @@ export const Chat = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pb-20">
       <header className="sticky top-0 z-10 border-b border-border/60 bg-card px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
-            <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+        {selectedOwnMessage ? (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedMessageId(null)} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80" aria-label="Clear selected message">
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex flex-1 items-center gap-1 overflow-x-auto" data-message-actions-root="true">
+              <button type="button" onClick={() => startEditingSelectedMessage(selectedOwnMessage)} disabled={selectedOwnMessage.message_type !== 'text' || !!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-40" aria-label="Edit selected message">
+                <Edit2 className="h-4 w-4" />
+                <span>Edit</span>
+              </button>
+              <button type="button" onClick={() => { setSelectedMessageId(null); setSeenDialogMessageId(selectedOwnMessage.id); }} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted" aria-label="View who saw selected message">
+                <Eye className="h-4 w-4" />
+                <span>Seen</span>
+              </button>
+              <button type="button" onClick={() => forwardSelectedMessage(selectedOwnMessage)} disabled={!!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-foreground transition-colors hover:bg-muted disabled:opacity-40" aria-label="Forward selected message">
+                <Forward className="h-4 w-4" />
+                <span>Forward</span>
+              </button>
+              <button type="button" onClick={() => { setSelectedMessageId(null); void handleDeleteMessage(selectedOwnMessage.id); }} disabled={!!selectedOwnMessage.deleted_at} className="flex min-w-14 flex-col items-center gap-0.5 rounded-xl px-2 py-1.5 text-xs text-destructive transition-colors hover:bg-muted disabled:opacity-40" aria-label="Delete selected message">
+                <Trash2 className="h-4 w-4" />
+                <span>Delete</span>
+              </button>
+            </div>
           </div>
-          <div className="flex -space-x-2">
-            {roomMembers.slice(0, 4).map(member => (
-              <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="ring-2 ring-card" />
-            ))}
-            {roomMembers.length > 4 && <Avatar className="w-8 h-8 ring-2 ring-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+        ) : (
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('/')} className="flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-foreground shadow-sm transition-all active:scale-95 hover:bg-muted/80">
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
+              <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+            </div>
+            <div className="flex -space-x-2">
+              {roomMembers.slice(0, 4).map(member => (
+                <ProfileAvatar key={member.user_id} avatar={member.profile.avatar} size="sm" className="ring-2 ring-card" />
+              ))}
+              {roomMembers.length > 4 && <Avatar className="w-8 h-8 ring-2 ring-card"><AvatarFallback className="text-xs bg-muted">+{roomMembers.length - 4}</AvatarFallback></Avatar>}
+            </div>
           </div>
-        </div>
+        )}
       </header>
 
       <div ref={scrollRef} style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }} className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--muted)/0.35)_100%)]">
