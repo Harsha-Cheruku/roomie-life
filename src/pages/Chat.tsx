@@ -319,6 +319,11 @@ export const Chat = () => {
             if (prev.some(m => m.id === newMsg.id)) return prev;
             return [...prev, newMsg];
           });
+          if (newMsg.sender_id === user?.id || autoScrollRef.current) {
+            scrollToBottom('smooth');
+          } else {
+            setHasNewMessagesBelow(true);
+          }
           if (newMsg.sender_id !== user?.id) {
             const senderProfile = profilesMap.get(newMsg.sender_id);
             toastHook({ title: senderProfile?.display_name || 'Someone', description: newMsg.message_type === 'text' ? newMsg.content.slice(0, 50) : `Sent a ${newMsg.message_type}` });
@@ -367,7 +372,7 @@ export const Chat = () => {
 
     channelRef.current = channel;
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
-  }, [currentRoom, profilesMap, user?.id, toastHook]);
+  }, [currentRoom, profilesMap, user?.id, toastHook, scrollToBottom]);
 
   // Realtime + reconnect-only refresh. Removed 3.5s polling that caused message-list churn / lag.
   useEffect(() => {
@@ -417,7 +422,9 @@ export const Chat = () => {
     if (!container) return;
 
     const handleScroll = () => {
-      autoScrollRef.current = isNearBottom();
+      const nearBottom = isNearBottom();
+      autoScrollRef.current = nearBottom;
+      if (nearBottom) setHasNewMessagesBelow(false);
     };
 
     handleScroll();
