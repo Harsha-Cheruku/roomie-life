@@ -317,6 +317,17 @@ export const Chat = () => {
           const newMsg = payload.new as Message;
           setMessages(prev => {
             if (prev.some(m => m.id === newMsg.id)) return prev;
+            const pendingIndex = prev.findIndex((m) =>
+              m.id.startsWith('temp-') &&
+              m.sender_id === newMsg.sender_id &&
+              m.message_type === newMsg.message_type &&
+              m.content === newMsg.content
+            );
+            if (pendingIndex >= 0) {
+              const next = [...prev];
+              next[pendingIndex] = newMsg;
+              return next;
+            }
             return [...prev, newMsg];
           });
           if (newMsg.sender_id === user?.id || autoScrollRef.current) {
@@ -574,7 +585,11 @@ export const Chat = () => {
           room_id: currentRoom.id, sender_id: user.id, content: messageText, message_type: 'text',
         }).select().single();
         if (error) throw error;
-        setMessages(prev => prev.map(m => m.id === optimisticMessage.id ? data : m));
+        setMessages(prev => prev.reduce<Message[]>((next, message) => {
+          const resolved = message.id === optimisticMessage.id ? data : message;
+          if (!next.some((existing) => existing.id === resolved.id)) next.push(resolved);
+          return next;
+        }, []));
       }
       inputRef.current?.focus();
     } catch (error) {
