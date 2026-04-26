@@ -133,6 +133,7 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
 export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerProps) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -146,11 +147,32 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
       return;
     }
 
+    // Reject huge files early
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'File too large', description: 'Max 10MB', variant: 'destructive' });
+      return;
+    }
+
+    setIsProcessing(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
       const raw = event.target?.result as string;
-      const optimized = await preprocessForOCR(raw);
-      setImagePreview(optimized);
+      // Show preview immediately so the UI is responsive,
+      // then run heavy preprocessing without blocking.
+      setImagePreview(raw);
+      const runHeavy = async () => {
+        try {
+          const optimized = await preprocessForOCR(raw);
+          setImagePreview(optimized);
+        } catch {
+          // keep raw preview
+        } finally {
+          setIsProcessing(false);
+        }
+      };
+      // Defer to next idle frame so the preview paints first
+      const ric = (window as any).requestIdleCallback as undefined | ((cb: () => void) => number);
+      if (ric) ric(runHeavy); else setTimeout(runHeavy, 50);
     };
     reader.readAsDataURL(file);
   };
@@ -189,6 +211,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const handleClose = () => {
     setImagePreview(null);
     setIsScanning(false);
+    setIsProcessing(false);
     onOpenChange(false);
   };
 
@@ -240,8 +263,8 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
               <div className="flex gap-3">
                 <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setImagePreview(null)} disabled={isScanning}>Retake</Button>
-                <Button className="flex-1 h-12 rounded-xl gap-2" onClick={scanReceipt} disabled={isScanning}>
-                  {isScanning ? (<><Loader2 className="w-4 h-4 animate-spin" />Scanning...</>) : (<><Scan className="w-4 h-4" />Scan Receipt</>)}
+                <Button className="flex-1 h-12 rounded-xl gap-2" onClick={scanReceipt} disabled={isScanning || isProcessing}>
+                  {isScanning ? (<><Loader2 className="w-4 h-4 animate-spin" />Scanning...</>) : isProcessing ? (<><Loader2 className="w-4 h-4 animate-spin" />Optimizing...</>) : (<><Scan className="w-4 h-4" />Scan Receipt</>)}
                 </Button>
               </div>
             </div>
