@@ -5,34 +5,54 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { lazy, Suspense, useEffect } from "react";
+
+// Eager: needed on first paint for any route
 import Index from "./pages/Index";
 import { Auth } from "./pages/Auth";
-import { ForgotPassword } from "./pages/ForgotPassword";
-import { ResetPassword } from "./pages/ResetPassword";
-import { RoomSetup } from "./pages/RoomSetup";
-import { RoomSettings } from "./pages/RoomSettings";
-import { Expenses } from "./pages/Expenses";
-import RecurringBills from "./pages/RecurringBills";
-import { Tasks } from "./pages/Tasks";
-import { Storage } from "./pages/Storage";
-import { Chat } from "./pages/Chat";
-import Alarms from "./pages/Alarms";
-import Reminders from "./pages/Reminders";
-import MusicSync from "./pages/MusicSync";
-import Games from "./pages/Games";
-import Notifications from "./pages/Notifications";
-import NotificationSettings from "./pages/NotificationSettings";
-import AdminPanel from "./pages/AdminPanel";
-import NotFound from "./pages/NotFound";
-import Install from "./pages/Install";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import TermsOfService from "./pages/TermsOfService";
-import DeleteAccount from "./pages/DeleteAccount";
+
+// Lazy: heavy / non-initial routes — drastically cuts initial bundle on Android
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword").then(m => ({ default: m.ForgotPassword })));
+const ResetPassword = lazy(() => import("./pages/ResetPassword").then(m => ({ default: m.ResetPassword })));
+const RoomSetup = lazy(() => import("./pages/RoomSetup").then(m => ({ default: m.RoomSetup })));
+const RoomSettings = lazy(() => import("./pages/RoomSettings").then(m => ({ default: m.RoomSettings })));
+const Expenses = lazy(() => import("./pages/Expenses").then(m => ({ default: m.Expenses })));
+const RecurringBills = lazy(() => import("./pages/RecurringBills"));
+const Tasks = lazy(() => import("./pages/Tasks").then(m => ({ default: m.Tasks })));
+const Storage = lazy(() => import("./pages/Storage").then(m => ({ default: m.Storage })));
+const Chat = lazy(() => import("./pages/Chat").then(m => ({ default: m.Chat })));
+const Alarms = lazy(() => import("./pages/Alarms"));
+const Reminders = lazy(() => import("./pages/Reminders"));
+const MusicSync = lazy(() => import("./pages/MusicSync"));
+const Games = lazy(() => import("./pages/Games"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
+const AdminPanel = lazy(() => import("./pages/AdminPanel"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Install = lazy(() => import("./pages/Install"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
-import { useEffect } from "react";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      retry: 1,
+    },
+  },
+});
+
+const RouteFallback = () => (
+  <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="animate-pulse text-muted-foreground text-sm">Loading…</div>
+  </div>
+);
 
 /** Initialize native alarm permissions + battery optimization check on startup */
 function NativeAlarmInit() {
@@ -79,6 +99,7 @@ const App = () => (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <GlobalAlarmLayer />
           <NativeAlarmInit />
+          <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -216,6 +237,7 @@ const App = () => (
             />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
