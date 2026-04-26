@@ -280,7 +280,7 @@ export const Tasks = () => {
         title="Task Manager" 
         showBack={true}
         onBack={goBack}
-        hint="Everything here is shared with your room ❤️"
+        hint={isSoloMode ? "Your personal tasks — only visible to you 🔒" : "Everything here is shared with your room ❤️"}
         rightContent={
           <div className="flex gap-2">
             <ReminderBellIcon filterType="task" />
@@ -395,8 +395,8 @@ export const Tasks = () => {
       {/* Created by You Section */}
       <div className="px-4 mb-4">
         <div className="bg-card rounded-2xl p-4 shadow-card">
-          <h3 className="font-semibold text-foreground mb-3">Created by You</h3>
-          <p className="text-sm text-muted-foreground mb-3">Tasks you've assigned to others</p>
+          <h3 className="font-semibold text-foreground mb-3">{isSoloMode ? "Your Tasks" : "Created by You"}</h3>
+          <p className="text-sm text-muted-foreground mb-3">{isSoloMode ? "Personal tasks you've created" : "Tasks you've assigned to others"}</p>
           
           {/* Status Filter Tabs - Fixed spelling */}
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
@@ -490,7 +490,7 @@ export const Tasks = () => {
       </div>
 
       {/* Assigned to You by Others */}
-      {tasksAssignedToMe.length > 0 && (
+      {!isSoloMode && tasksAssignedToMe.length > 0 && (
         <div className="px-4 mb-4">
           <div className="bg-card rounded-2xl p-4 shadow-card">
             <h3 className="font-semibold text-foreground mb-3">Assigned to You</h3>
@@ -615,20 +615,20 @@ export const Tasks = () => {
       {/* All Tasks List - Includes Rejected with Highlighting */}
       <div className="px-4 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-foreground px-1">All Tasks</h3>
-          <span className="text-xs text-muted-foreground">{tasks.length} tasks</span>
+          <h3 className="font-semibold text-foreground px-1">{isSoloMode ? "All Your Tasks" : "All Tasks"}</h3>
+          <span className="text-xs text-muted-foreground">{filteredByDateAndMode.length} tasks</span>
         </div>
         
-        {tasks.length === 0 && !isLoading ? (
+        {filteredByDateAndMode.length === 0 && !isLoading ? (
           <EmptyState
             emoji="🌱"
             title="Looks peaceful here"
-            description="No tasks yet! Add your first task and start getting things done together."
+            description={isSoloMode ? "No personal tasks yet. Create one to get started." : "No tasks yet! Add your first task and start getting things done together."}
             actionLabel="Create your first task"
             onAction={() => setShowCreateDialog(true)}
           />
         ) : (
-          tasks.map((task, index) => {
+          filteredByDateAndMode.map((task, index) => {
             const StatusIcon = statusIcons[task.status];
             const isAssignedToMe = task.assigned_to === user?.id;
             const isUpdating = updatingTaskId === task.id;
