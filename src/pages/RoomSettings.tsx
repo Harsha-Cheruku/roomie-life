@@ -5,11 +5,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil, DoorOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useRoomNickname } from "@/hooks/useRoomNickname";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface RoomMemberWithProfile {
   user_id: string;
@@ -195,10 +202,34 @@ export const RoomSettings = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate("/")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="font-display text-xl font-bold text-foreground">
+          <h1 className="font-display text-xl font-bold text-foreground flex-1">
             Room Settings
           </h1>
         </div>
+        {userRooms.length > 0 && (
+          <div className="mt-3 flex items-center gap-2">
+            <DoorOpen className="w-4 h-4 text-primary shrink-0" />
+            <span className="text-xs text-muted-foreground shrink-0">Showing:</span>
+            <Select
+              value={currentRoom.id}
+              onValueChange={(id) => {
+                const room = userRooms.find((r) => r.id === id);
+                if (room && room.id !== currentRoom.id) handleSwitchRoom(room);
+              }}
+            >
+              <SelectTrigger className="h-9 flex-1 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {userRooms.map((room) => (
+                  <SelectItem key={room.id} value={room.id} className="text-sm">
+                    🏠 {room.name}{room.id === currentRoom.id ? ' · Active' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </header>
 
       <div className="p-4 space-y-6">
