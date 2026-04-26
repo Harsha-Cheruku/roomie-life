@@ -34,7 +34,7 @@ interface RoomMember {
 }
 
 export default function Reminders() {
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, isSoloMode } = useAuth();
   const navigate = useNavigate();
   const { sendReminderNotification } = useNotifications();
   const [reminders, setReminders] = useState<Reminder[]>([]);
@@ -160,11 +160,14 @@ export default function Reminders() {
     }
   }, []);
 
-  const activeReminders = reminders.filter(r => r.status !== 'completed');
-  const completedReminders = reminders.filter(r => r.status === 'completed');
+  const visibleReminders = isSoloMode
+    ? reminders.filter(r => r.created_by === user?.id)
+    : reminders;
+  const activeReminders = visibleReminders.filter(r => r.status !== 'completed');
+  const completedReminders = visibleReminders.filter(r => r.status === 'completed');
 
   const myReminders = activeReminders.filter(r => r.created_by === user?.id);
-  const otherReminders = activeReminders.filter(r => r.created_by !== user?.id);
+  const otherReminders = isSoloMode ? [] : activeReminders.filter(r => r.created_by !== user?.id);
 
   if (!currentRoom) {
     return (
@@ -180,7 +183,7 @@ export default function Reminders() {
         title="Reminders" 
         showBack={true}
         onBack={() => navigate('/')}
-        hint="Gentle nudges for you and your roommates ⏰"
+        hint={isSoloMode ? "Personal reminders — only visible to you 🔒" : "Gentle nudges for you and your roommates ⏰"}
         rightContent={
           <Button onClick={() => setShowCreateDialog(true)} size="sm">
             <Plus className="h-4 w-4 mr-1" />
