@@ -21,6 +21,12 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ExpenseSplit {
   id: string;
@@ -548,14 +554,30 @@ export const Expenses = () => {
             >
               <Repeat className="h-4 w-4" />
             </Button>
-            <Button variant="outline" size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs shrink-0" onClick={() => setShowCreateDialog(true)}>
-              <Plus className="w-3.5 h-3.5" />
-              Add
-            </Button>
-            <Button size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs bg-primary shrink-0" onClick={() => setShowScanner(true)}>
-              <Camera className="w-3.5 h-3.5" />
-              Scan
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" className="gap-1 press-effect h-8 px-2.5 text-xs bg-primary shrink-0">
+                  <Plus className="w-3.5 h-3.5" />
+                  Add
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => setShowScanner(true)} className="gap-2 cursor-pointer">
+                  <Camera className="w-4 h-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Scan receipt</span>
+                    <span className="text-[10px] text-muted-foreground">Use camera or photo</span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setShowCreateDialog(true)} className="gap-2 cursor-pointer">
+                  <Plus className="w-4 h-4 text-primary" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">Manual entry</span>
+                    <span className="text-[10px] text-muted-foreground">Type details yourself</span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />

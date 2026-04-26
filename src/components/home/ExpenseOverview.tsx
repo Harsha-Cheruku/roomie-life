@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
-import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar } from "lucide-react";
+import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface MemberRow {
   user_id: string;
@@ -173,6 +180,12 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
     breakdownMode === 'willGet' ? 'You will receive (per roommate)' :
     (isSoloMode ? 'Your spending' : 'Per Roommate (Paid)');
 
+  const modeOptions: { value: 'paid' | 'willPay' | 'willGet'; label: string }[] = [
+    { value: 'paid', label: isSoloMode ? 'Your spending' : 'Paid by roommate' },
+    { value: 'willPay', label: 'You will pay' },
+    { value: 'willGet', label: 'You will receive' },
+  ];
+
   return (
     <section className="px-4">
       <div className="flex items-center justify-between mb-4">
@@ -243,48 +256,63 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
 
       {/* Per User Breakdown - clickable */}
       {breakdownRows.length > 0 ? (
-        <button onClick={() => navigate('/expenses')} className="w-full text-left bg-card rounded-2xl p-4 shadow-card press-effect hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-medium text-muted-foreground">{breakdownLabel}</p>
-            {breakdownMode !== 'paid' && (
-              <span
-                role="button"
-                tabIndex={0}
-                onClick={(e) => { e.stopPropagation(); setBreakdownMode('paid'); }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); setBreakdownMode('paid'); } }}
-                className="text-xs font-medium text-primary cursor-pointer"
-              >
-                Reset
-              </span>
-            )}
+        <div className="bg-card rounded-2xl p-4 shadow-card">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-sm font-medium text-muted-foreground truncate">{breakdownLabel}</p>
+            <Select value={breakdownMode} onValueChange={(v) => setBreakdownMode(v as 'paid' | 'willPay' | 'willGet')}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {modeOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="space-y-3">
+          <div className={cn("space-y-3", breakdownRows.length > 5 && "max-h-72 overflow-y-auto pr-1")}>
             {breakdownRows.map((member, index) => (
-              <div key={`${member.user_id}-${index}`} className="flex items-center gap-3 animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+              <button
+                key={`${member.user_id}-${index}`}
+                type="button"
+                onClick={() => navigate('/expenses')}
+                className="w-full flex items-center gap-3 animate-slide-up text-left press-effect"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
                 <ProfileAvatar avatar={member.avatar} size="md" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{member.name}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
                   <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
                     <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
                   </div>
                 </div>
-                <p className="text-sm font-semibold text-foreground">₹{formatAmount(member.amount)}</p>
-              </div>
+                <p className="text-sm font-semibold text-foreground whitespace-nowrap">₹{formatAmount(member.amount)}</p>
+              </button>
             ))}
           </div>
-        </button>
+        </div>
       ) : breakdownMode !== 'paid' ? (
-        <div className="bg-card rounded-2xl p-4 shadow-card text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="bg-card rounded-2xl p-4 shadow-card">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <p className="text-sm font-medium text-muted-foreground truncate">{breakdownLabel}</p>
+            <Select value={breakdownMode} onValueChange={(v) => setBreakdownMode(v as 'paid' | 'willPay' | 'willGet')}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {modeOptions.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <p className="text-sm text-muted-foreground text-center py-2">
             {breakdownMode === 'willPay' ? 'You don\u2019t owe anyone right now.' : 'No one owes you right now.'}
           </p>
-          <button
-            type="button"
-            onClick={() => setBreakdownMode('paid')}
-            className="mt-2 text-xs font-medium text-primary"
-          >
-            Show paid breakdown
-          </button>
         </div>
       ) : null}
     </section>
