@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { useOfflineExpenses } from '@/hooks/useOfflineExpenses';
+import { useCurrency } from '@/hooks/useCurrency';
 
 interface RoomMember {
   user_id: string;
@@ -54,6 +55,7 @@ export const CreateExpenseDialog = ({
   onComplete 
 }: CreateExpenseDialogProps) => {
   const { user, currentRoom, isSoloMode } = useAuth();
+  const currency = useCurrency();
   const { toast } = useToast();
   const { createExpenseNotification } = useCreateNotification();
   const { isOnline, queueExpense } = useOfflineExpenses();
@@ -304,7 +306,7 @@ export const CreateExpenseDialog = ({
       if (splitType === 'custom' && Math.abs(getTotalSplitAmount() - totalAmount) >= 0.01) {
         toast({
           title: 'Invalid split amounts',
-          description: `Split amounts must total ₹${totalAmount.toFixed(2)}`,
+          description: `Split amounts must total ${currency}${totalAmount.toFixed(2)}`,
           variant: 'destructive',
         });
         return;
@@ -369,7 +371,7 @@ export const CreateExpenseDialog = ({
             created_by: user.id,
             user_id: user.id,
             title: `Bill Reminder: ${title.trim()}`,
-            description: `Reminder for expense of ₹${totalAmount.toFixed(2)}`,
+            description: `Reminder for expense of ${currency}${totalAmount.toFixed(2)}`,
             remind_at: new Date(reminderDate).toISOString(),
             reminder_type: 'expense',
             related_id: expense.id,
@@ -386,8 +388,8 @@ export const CreateExpenseDialog = ({
       toast({
         title: isSoloMode ? 'Expense recorded! 💰' : 'Expense created! 🎉',
          description: isSoloMode 
-          ? `₹${totalAmount.toFixed(2)} expense saved`
-          : `Split ₹${totalAmount.toFixed(2)} between ${selectedSplits.length} people`,
+          ? `${currency}${totalAmount.toFixed(2)} expense saved`
+          : `Split ${currency}${totalAmount.toFixed(2)} between ${selectedSplits.length} people`,
       });
 
       // Reset form
@@ -478,7 +480,7 @@ export const CreateExpenseDialog = ({
           <div>
             <label className="text-sm font-medium text-muted-foreground">Amount</label>
             <div className="relative mt-1">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">₹</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">${currency}</span>
               <Input 
                 type="text"
                 inputMode="decimal"
@@ -624,7 +626,7 @@ export const CreateExpenseDialog = ({
                       
                       {isSelected && splitType === 'equal' && (
                         <span className="font-semibold text-primary">
-                          {split?.amount % 1 === 0 ? `₹${split?.amount}` : `₹${split?.amount.toFixed(2)}`}
+                          {split?.amount % 1 === 0 ? `${currency}${split?.amount}` : `${currency}${split?.amount.toFixed(2)}`}
                         </span>
                       )}
                       
@@ -644,7 +646,7 @@ export const CreateExpenseDialog = ({
                       
                       {isSelected && splitType === 'custom' && (
                         <div className="flex items-center gap-1">
-                          <span className="text-muted-foreground">₹</span>
+                          <span className="text-muted-foreground">${currency}</span>
                           <Input
                             type="number"
                             value={split?.amount || 0}
@@ -671,7 +673,7 @@ export const CreateExpenseDialog = ({
                 )}
                 {splitType === 'custom' && amount && (
                   <p className={Math.abs(getTotalSplitAmount() - parseFloat(amount)) < 0.01 ? 'text-mint' : 'text-coral'}>
-                    Total: ₹{getTotalSplitAmount().toFixed(2)} of ₹{parseFloat(amount).toFixed(2)}
+                    Total: ${currency}{getTotalSplitAmount().toFixed(2)} of ${currency}{parseFloat(amount).toFixed(2)}
                   </p>
                 )}
               </div>
