@@ -447,11 +447,26 @@ export const Chat = () => {
     if (!user) return;
     setIsSending(true);
     try {
-      const fileName = `${user.id}/${Date.now()}.webm`;
-      const { error: uploadError } = await supabase.storage.from('chat-attachments').upload(fileName, audioBlob);
+      const ext = audioBlob.type.includes('mp4')
+        ? 'mp4'
+        : audioBlob.type.includes('ogg')
+        ? 'ogg'
+        : audioBlob.type.includes('aac')
+        ? 'aac'
+        : 'webm';
+      const fileName = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('chat-attachments')
+        .upload(fileName, audioBlob, {
+          contentType: audioBlob.type || 'audio/webm',
+          upsert: false,
+        });
       if (uploadError) throw uploadError;
       await sendMessageWithAttachment(fileName, 'voice', `Voice note (${duration}s)`);
-    } catch (error) { toast.error('Failed to send voice note'); }
+    } catch (error) {
+      console.error('Voice note upload failed:', error);
+      toast.error('Failed to send voice note');
+    }
     finally { setIsSending(false); }
   };
 
