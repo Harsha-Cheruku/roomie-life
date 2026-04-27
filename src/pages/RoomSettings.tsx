@@ -426,6 +426,33 @@ export const RoomSettings = () => {
                 </Button>
               </div>
             </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Split Currency
+              </label>
+              <Select
+                value={currency}
+                onValueChange={handleSaveCurrency}
+                disabled={!isAdmin || isSavingCurrency}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <SelectItem key={c.code} value={c.symbol}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isAdmin
+                  ? "Used everywhere amounts are shown in this room."
+                  : "Only admins can change the room currency."}
+              </p>
+            </div>
           </div>
         </section>
 
