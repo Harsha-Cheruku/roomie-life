@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown } from 'lucide-react';
+import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown, Mic, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -106,6 +106,11 @@ export const Chat = () => {
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceUpload, setVoiceUpload] = useState<{
+    state: 'idle' | 'uploading' | 'success' | 'error';
+    message?: string;
+  }>({ state: 'idle' });
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -447,9 +452,13 @@ export const Chat = () => {
     if (!user) return;
     if (audioBlob.size === 0) {
       toast.error('Recording was empty');
+      setVoiceUpload({ state: 'error', message: 'Recording was empty' });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 2500);
       return;
     }
     setIsSending(true);
+    const sizeKb = Math.max(1, Math.round(audioBlob.size / 1024));
+    setVoiceUpload({ state: 'uploading', message: `Sending voice note (${duration}s, ${sizeKb} KB)…` });
     try {
       const ext = audioBlob.type.includes('mp4')
         ? 'mp4'
@@ -468,9 +477,14 @@ export const Chat = () => {
         });
       if (uploadError) throw uploadError;
       await sendMessageWithAttachment(fileName, 'voice', `Voice note (${duration}s)`);
+      setVoiceUpload({ state: 'success', message: 'Voice note sent' });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 1800);
     } catch (error) {
       console.error('Voice note upload failed:', error);
       toast.error('Failed to send voice note');
+      const msg = error instanceof Error ? error.message : 'Upload failed';
+      setVoiceUpload({ state: 'error', message: `Failed to send: ${msg}` });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 4000);
     }
     finally { setIsSending(false); }
   };
@@ -884,6 +898,42 @@ export const Chat = () => {
         </div>
       )}
 
+      {(isRecordingVoice || voiceUpload.state !== 'idle') && (
+        <div
+          className={cn(
+            'px-4 py-2 border-t border-border flex items-center gap-2 text-sm',
+            isRecordingVoice && 'bg-destructive/10 text-destructive',
+            !isRecordingVoice && voiceUpload.state === 'uploading' && 'bg-primary/10 text-primary',
+            !isRecordingVoice && voiceUpload.state === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            !isRecordingVoice && voiceUpload.state === 'error' && 'bg-destructive/10 text-destructive',
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          {isRecordingVoice ? (
+            <>
+              <Mic className="w-4 h-4 animate-pulse" />
+              <span className="font-medium">Recording voice note…</span>
+            </>
+          ) : voiceUpload.state === 'uploading' ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>{voiceUpload.message || 'Uploading voice note…'}</span>
+            </>
+          ) : voiceUpload.state === 'success' ? (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{voiceUpload.message || 'Voice note sent'}</span>
+            </>
+          ) : voiceUpload.state === 'error' ? (
+            <>
+              <AlertCircle className="w-4 h-4" />
+              <span>{voiceUpload.message || 'Failed to send voice note'}</span>
+            </>
+          ) : null}
+        </div>
+      )}
+
       {editingMessageId && (
         <div className="px-4 py-2 bg-accent/20 border-t border-border flex items-center gap-2">
           <span className="text-xs text-accent font-medium">Editing message</span>
@@ -901,7 +951,11 @@ export const Chat = () => {
               {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </Button>
           ) : (
-            <VoiceRecorder onRecordingComplete={uploadVoiceNote} disabled={isSending} />
+            <VoiceRecorder
+              onRecordingComplete={uploadVoiceNote}
+              onRecordingStateChange={setIsRecordingVoice}
+              disabled={isSending}
+            />
           )}
         </div>
       </form>
