@@ -106,6 +106,11 @@ export const Chat = () => {
   const [reactions, setReactions] = useState<Record<string, Reaction[]>>({});
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceUpload, setVoiceUpload] = useState<{
+    state: 'idle' | 'uploading' | 'success' | 'error';
+    message?: string;
+  }>({ state: 'idle' });
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
