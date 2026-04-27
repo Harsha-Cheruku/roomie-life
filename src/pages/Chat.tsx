@@ -899,6 +899,45 @@ export const Chat = () => {
       )}
 
       {editingMessageId && (
+        null
+      )}
+      {(isRecordingVoice || voiceUpload.state !== 'idle') && (
+        <div
+          className={cn(
+            'px-4 py-2 border-t border-border flex items-center gap-2 text-sm',
+            isRecordingVoice && 'bg-destructive/10 text-destructive',
+            !isRecordingVoice && voiceUpload.state === 'uploading' && 'bg-primary/10 text-primary',
+            !isRecordingVoice && voiceUpload.state === 'success' && 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+            !isRecordingVoice && voiceUpload.state === 'error' && 'bg-destructive/10 text-destructive',
+          )}
+          role="status"
+          aria-live="polite"
+        >
+          {isRecordingVoice ? (
+            <>
+              <Mic className="w-4 h-4 animate-pulse" />
+              <span className="font-medium">Recording voice note…</span>
+            </>
+          ) : voiceUpload.state === 'uploading' ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>{voiceUpload.message || 'Uploading voice note…'}</span>
+            </>
+          ) : voiceUpload.state === 'success' ? (
+            <>
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{voiceUpload.message || 'Voice note sent'}</span>
+            </>
+          ) : voiceUpload.state === 'error' ? (
+            <>
+              <AlertCircle className="w-4 h-4" />
+              <span>{voiceUpload.message || 'Failed to send voice note'}</span>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {editingMessageId && (
         <div className="px-4 py-2 bg-accent/20 border-t border-border flex items-center gap-2">
           <span className="text-xs text-accent font-medium">Editing message</span>
           <button onClick={() => { setEditingMessageId(null); setNewMessage(''); }} className="text-xs text-destructive ml-auto">Cancel</button>
