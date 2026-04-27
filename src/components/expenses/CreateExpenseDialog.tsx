@@ -480,7 +480,7 @@ export const CreateExpenseDialog = ({
           <div>
             <label className="text-sm font-medium text-muted-foreground">Amount</label>
             <div className="relative mt-1">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">${currency}</span>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-medium text-muted-foreground">{currency}</span>
               <Input 
                 type="text"
                 inputMode="decimal"
@@ -646,7 +646,7 @@ export const CreateExpenseDialog = ({
                       
                       {isSelected && splitType === 'custom' && (
                         <div className="flex items-center gap-1">
-                          <span className="text-muted-foreground">${currency}</span>
+                          <span className="text-muted-foreground">{currency}</span>
                           <Input
                             type="number"
                             value={split?.amount || 0}
@@ -673,7 +673,7 @@ export const CreateExpenseDialog = ({
                 )}
                 {splitType === 'custom' && amount && (
                   <p className={Math.abs(getTotalSplitAmount() - parseFloat(amount)) < 0.01 ? 'text-mint' : 'text-coral'}>
-                    Total: ${currency}{getTotalSplitAmount().toFixed(2)} of ${currency}{parseFloat(amount).toFixed(2)}
+                    Total: {currency}{getTotalSplitAmount().toFixed(2)} of {currency}{parseFloat(amount).toFixed(2)}
                   </p>
                 )}
               </div>
