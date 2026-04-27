@@ -19,8 +19,21 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      
+      // Pick a supported mimeType (iOS Safari doesn't support webm)
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4',
+        'audio/aac',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType = candidates.find((t) =>
+        typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)
+      ) || '';
+      const mediaRecorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -31,7 +44,8 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const blobType = mediaRecorder.mimeType || mimeType || 'audio/webm';
+        const audioBlob = new Blob(chunksRef.current, { type: blobType });
         const recordingDuration = Math.floor((Date.now() - startTimeRef.current) / 1000);
         onRecordingComplete(audioBlob, recordingDuration);
         
@@ -50,6 +64,13 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
       }, 1000);
     } catch (error) {
       console.error('Error accessing microphone:', error);
+      // Surface a user-visible error so the UI doesn't silently do nothing
+      try {
+        const { toast } = await import('sonner');
+        toast.error('Microphone access denied or unavailable');
+      } catch {
+        // ignore
+      }
     }
   };
 
