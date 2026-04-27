@@ -44,6 +44,7 @@ const formatAmount = (amount: number) => amount.toLocaleString('en-IN', {
 export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCount?: number }) => {
   const navigate = useNavigate();
   const { user, currentRoom, isSoloMode } = useAuth();
+  const currency = useCurrency();
   const [data, setData] = useState<ExpenseData>({
     total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0,
     members: [], willPayPerMember: [], willGetPerMember: [],
