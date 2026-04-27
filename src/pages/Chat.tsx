@@ -445,6 +445,10 @@ export const Chat = () => {
 
   const uploadVoiceNote = async (audioBlob: Blob, duration: number) => {
     if (!user) return;
+    if (audioBlob.size === 0) {
+      toast.error('Recording was empty');
+      return;
+    }
     setIsSending(true);
     try {
       const ext = audioBlob.type.includes('mp4')
@@ -459,6 +463,7 @@ export const Chat = () => {
         .from('chat-attachments')
         .upload(fileName, audioBlob, {
           contentType: audioBlob.type || 'audio/webm',
+          cacheControl: '3600',
           upsert: false,
         });
       if (uploadError) throw uploadError;
