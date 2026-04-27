@@ -898,9 +898,6 @@ export const Chat = () => {
         </div>
       )}
 
-      {editingMessageId && (
-        null
-      )}
       {(isRecordingVoice || voiceUpload.state !== 'idle') && (
         <div
           className={cn(
