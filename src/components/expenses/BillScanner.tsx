@@ -23,11 +23,10 @@ interface BillScannerProps {
 }
 
 /**
- * Advanced image preprocessing for OCR:
- * 1. Scale to optimal range (800–1600px)
- * 2. Convert to grayscale
- * 3. Apply contrast stretching (adaptive)
- * 4. Sharpen via unsharp-mask convolution
+ * Lightweight image prep for OCR:
+ * Just downscale large photos and JPEG-compress so the upload is fast.
+ * The AI model handles colour, contrast and noise on its own — heavy
+ * grayscale/histogram/unsharp passes added seconds without improving accuracy.
  */
 const preprocessForOCR = (dataUrl: string): Promise<string> => {
   return new Promise((resolve) => {
@@ -35,19 +34,12 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
     img.onload = () => {
       const canvas = document.createElement('canvas');
       let { width, height } = img;
-
-      // Scale to optimal OCR range
-      const maxDim = 1800;
-      const minDim = 900;
+      // Cap the longest edge — large photos slow upload + AI processing
+      const maxDim = 1280;
       if (width > maxDim || height > maxDim) {
         const ratio = Math.min(maxDim / width, maxDim / height);
         width = Math.round(width * ratio);
         height = Math.round(height * ratio);
-      }
-      if (width < minDim && height < minDim) {
-        const upscale = Math.min(2.5, minDim / Math.max(width, height));
-        width = Math.round(width * upscale);
-        height = Math.round(height * upscale);
       }
 
       canvas.width = width;
@@ -57,73 +49,8 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      try {
-        const imageData = ctx.getImageData(0, 0, width, height);
-        const data = imageData.data;
-
-        // Step 1: Convert to grayscale (luminance-preserving)
-        for (let i = 0; i < data.length; i += 4) {
-          const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
-          data[i] = gray;
-          data[i + 1] = gray;
-          data[i + 2] = gray;
-        }
-
-        // Step 2: Histogram-based adaptive contrast stretching
-        const histogram = new Uint32Array(256);
-        for (let i = 0; i < data.length; i += 4) {
-          histogram[data[i]]++;
-        }
-        const totalPixels = width * height;
-        const clipLow = totalPixels * 0.01;
-        const clipHigh = totalPixels * 0.99;
-        let cumulative = 0;
-        let minVal = 0;
-        let maxVal = 255;
-        for (let i = 0; i < 256; i++) {
-          cumulative += histogram[i];
-          if (cumulative >= clipLow && minVal === 0) minVal = i;
-          if (cumulative >= clipHigh) { maxVal = i; break; }
-        }
-        const range = Math.max(maxVal - minVal, 1);
-        for (let i = 0; i < data.length; i += 4) {
-          const stretched = Math.round(((data[i] - minVal) / range) * 255);
-          const clamped = Math.min(255, Math.max(0, stretched));
-          data[i] = clamped;
-          data[i + 1] = clamped;
-          data[i + 2] = clamped;
-        }
-
-        // Step 3: Unsharp mask sharpening
-        // Create a blurred copy first
-        ctx.putImageData(imageData, 0, 0);
-        const sharpCanvas = document.createElement('canvas');
-        sharpCanvas.width = width;
-        sharpCanvas.height = height;
-        const sharpCtx = sharpCanvas.getContext('2d')!;
-        // Draw blurred version
-        sharpCtx.filter = 'blur(1px)';
-        sharpCtx.drawImage(canvas, 0, 0);
-        const blurredData = sharpCtx.getImageData(0, 0, width, height).data;
-
-        // Unsharp: original + strength * (original - blurred)
-        const strength = 0.6;
-        const finalData = ctx.getImageData(0, 0, width, height);
-        const fd = finalData.data;
-        for (let i = 0; i < fd.length; i += 4) {
-          const diff = fd[i] - blurredData[i];
-          const sharpened = Math.round(fd[i] + strength * diff);
-          const v = Math.min(255, Math.max(0, sharpened));
-          fd[i] = v;
-          fd[i + 1] = v;
-          fd[i + 2] = v;
-        }
-        ctx.putImageData(finalData, 0, 0);
-      } catch {
-        // Canvas tainted — send as-is
-      }
-
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
+      // JPEG @ 0.8 — small payload, fast OCR, still very readable
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
