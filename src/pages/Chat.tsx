@@ -915,7 +915,11 @@ export const Chat = () => {
               {isSending ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </Button>
           ) : (
-            <VoiceRecorder onRecordingComplete={uploadVoiceNote} disabled={isSending} />
+            <VoiceRecorder
+              onRecordingComplete={uploadVoiceNote}
+              onRecordingStateChange={setIsRecordingVoice}
+              disabled={isSending}
+            />
           )}
         </div>
       </form>
