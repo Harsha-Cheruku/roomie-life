@@ -5,10 +5,11 @@ import { cn } from "@/lib/utils";
 
 interface VoiceRecorderProps {
   onRecordingComplete: (audioBlob: Blob, duration: number) => void;
+  onRecordingStateChange?: (isRecording: boolean) => void;
   disabled?: boolean;
 }
 
-export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderProps) {
+export function VoiceRecorder({ onRecordingComplete, onRecordingStateChange, disabled }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -68,6 +69,7 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
       mediaRecorder.start(1000);
       startTimeRef.current = Date.now();
       setIsRecording(true);
+      onRecordingStateChange?.(true);
       setDuration(0);
 
       // Update duration every second
@@ -90,6 +92,7 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      onRecordingStateChange?.(false);
       
       if (timerRef.current) {
         clearInterval(timerRef.current);

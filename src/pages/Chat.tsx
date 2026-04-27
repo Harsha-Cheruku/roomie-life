@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown } from 'lucide-react';
+import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown, Mic, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -447,9 +447,13 @@ export const Chat = () => {
     if (!user) return;
     if (audioBlob.size === 0) {
       toast.error('Recording was empty');
+      setVoiceUpload({ state: 'error', message: 'Recording was empty' });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 2500);
       return;
     }
     setIsSending(true);
+    const sizeKb = Math.max(1, Math.round(audioBlob.size / 1024));
+    setVoiceUpload({ state: 'uploading', message: `Sending voice note (${duration}s, ${sizeKb} KB)…` });
     try {
       const ext = audioBlob.type.includes('mp4')
         ? 'mp4'
@@ -468,9 +472,14 @@ export const Chat = () => {
         });
       if (uploadError) throw uploadError;
       await sendMessageWithAttachment(fileName, 'voice', `Voice note (${duration}s)`);
+      setVoiceUpload({ state: 'success', message: 'Voice note sent' });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 1800);
     } catch (error) {
       console.error('Voice note upload failed:', error);
       toast.error('Failed to send voice note');
+      const msg = error instanceof Error ? error.message : 'Upload failed';
+      setVoiceUpload({ state: 'error', message: `Failed to send: ${msg}` });
+      window.setTimeout(() => setVoiceUpload({ state: 'idle' }), 4000);
     }
     finally { setIsSending(false); }
   };
