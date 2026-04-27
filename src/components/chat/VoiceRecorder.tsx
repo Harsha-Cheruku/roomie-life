@@ -30,9 +30,20 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
       const mimeType = candidates.find((t) =>
         typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(t)
       ) || '';
-      const mediaRecorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      // Low bitrate (~24 kbps) is plenty for voice and shrinks upload ~4-8x
+      const recorderOptions: MediaRecorderOptions = {
+        audioBitsPerSecond: 24000,
+        ...(mimeType ? { mimeType } : {}),
+      };
+      let mediaRecorder: MediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, recorderOptions);
+      } catch {
+        // Some browsers reject custom bitrate — fall back to defaults
+        mediaRecorder = mimeType
+          ? new MediaRecorder(stream, { mimeType })
+          : new MediaRecorder(stream);
+      }
 
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
@@ -53,7 +64,8 @@ export function VoiceRecorder({ onRecordingComplete, disabled }: VoiceRecorderPr
         stream.getTracks().forEach(track => track.stop());
       };
 
-      mediaRecorder.start();
+      // Emit chunks every 1s so we can stream them progressively if needed
+      mediaRecorder.start(1000);
       startTimeRef.current = Date.now();
       setIsRecording(true);
       setDuration(0);
