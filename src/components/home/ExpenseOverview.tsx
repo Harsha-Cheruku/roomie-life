@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { useCurrency } from "@/hooks/useCurrency";
 import {
   Select,
   SelectContent,
@@ -43,6 +44,7 @@ const formatAmount = (amount: number) => amount.toLocaleString('en-IN', {
 export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCount?: number }) => {
   const navigate = useNavigate();
   const { user, currentRoom, isSoloMode } = useAuth();
+  const currency = useCurrency();
   const [data, setData] = useState<ExpenseData>({
     total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0,
     members: [], willPayPerMember: [], willGetPerMember: [],
@@ -207,7 +209,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
           </div>
           <div className="min-w-0">
             <p className="text-primary-foreground/70 text-sm">Total This Month</p>
-            <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.75rem,8vw,2.5rem)]">₹{formatAmount(data.total)}</p>
+            <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.75rem,8vw,2.5rem)]">{currency}{formatAmount(data.total)}</p>
           </div>
         </div>
 
@@ -226,7 +228,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
               <ArrowUpCircle className="w-4 h-4 text-coral shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Pay</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willPay)}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">{currency}{formatAmount(data.willPay)}</p>
           </div>
           <div
             role="button"
@@ -242,14 +244,14 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
               <ArrowDownCircle className="w-4 h-4 text-mint shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Will Get</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.willGet)}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">{currency}{formatAmount(data.willGet)}</p>
           </div>
           <div className="col-span-2 bg-primary-foreground/10 rounded-2xl p-3 min-w-0 overflow-hidden">
             <div className="flex items-start gap-2 mb-2 min-w-0">
               <Calendar className="w-4 h-4 text-lavender shrink-0 mt-0.5" />
               <span className="text-xs text-primary-foreground/70 leading-tight">Today</span>
             </div>
-            <p className="text-base font-bold text-primary-foreground leading-tight break-all">₹{formatAmount(data.todaySpending)}</p>
+            <p className="text-base font-bold text-primary-foreground leading-tight break-all">{currency}{formatAmount(data.todaySpending)}</p>
           </div>
         </div>
       </button>
@@ -288,7 +290,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
                     <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
                   </div>
                 </div>
-                <p className="text-sm font-semibold text-foreground whitespace-nowrap">₹{formatAmount(member.amount)}</p>
+                <p className="text-sm font-semibold text-foreground whitespace-nowrap">{currency}{formatAmount(member.amount)}</p>
               </button>
             ))}
           </div>

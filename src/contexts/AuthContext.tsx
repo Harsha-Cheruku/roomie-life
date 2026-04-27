@@ -15,6 +15,7 @@ interface Room {
   name: string;
   invite_code: string;
   created_by: string | null;
+  currency?: string;
 }
 
 interface AuthContextType {

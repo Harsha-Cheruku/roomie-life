@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useRoomNickname } from "@/hooks/useRoomNickname";
+import { CURRENCY_OPTIONS } from "@/hooks/useCurrency";
 import {
   Select,
   SelectContent,
@@ -39,6 +40,8 @@ export const RoomSettings = () => {
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
+  const [currency, setCurrency] = useState<string>(currentRoom?.currency || "₹");
+  const [isSavingCurrency, setIsSavingCurrency] = useState(false);
 
   const { nickname, setNickname } = useRoomNickname(currentRoom?.id, currentRoom?.name || "");
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
@@ -53,6 +56,7 @@ export const RoomSettings = () => {
       return;
     }
     setRoomName(currentRoom.name);
+    setCurrency(currentRoom.currency || "₹");
     fetchMembers();
   }, [currentRoom]);
 
@@ -117,6 +121,26 @@ export const RoomSettings = () => {
         title: "Room updated",
         description: "Room name has been changed successfully",
       });
+    }
+  };
+
+  const handleSaveCurrency = async (newCurrency: string) => {
+    if (!currentRoom || !isAdmin) return;
+    setCurrency(newCurrency);
+    setIsSavingCurrency(true);
+    const { data, error } = await supabase
+      .from("rooms")
+      .update({ currency: newCurrency })
+      .eq("id", currentRoom.id)
+      .select()
+      .single();
+    setIsSavingCurrency(false);
+    if (error) {
+      toast({ title: "Failed to update currency", description: error.message, variant: "destructive" });
+      setCurrency(currentRoom.currency || "₹");
+    } else if (data) {
+      setCurrentRoom({ ...currentRoom, currency: data.currency });
+      toast({ title: "Currency updated", description: `Splits will now show in ${newCurrency}` });
     }
   };
 
@@ -401,6 +425,33 @@ export const RoomSettings = () => {
                   {copied ? <Check className="w-5 h-5 text-mint" /> : <Copy className="w-5 h-5" />}
                 </Button>
               </div>
+            </div>
+
+            <div>
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Split Currency
+              </label>
+              <Select
+                value={currency}
+                onValueChange={handleSaveCurrency}
+                disabled={!isAdmin || isSavingCurrency}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <SelectItem key={c.code} value={c.symbol}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                {isAdmin
+                  ? "Used everywhere amounts are shown in this room."
+                  : "Only admins can change the room currency."}
+              </p>
             </div>
           </div>
         </section>
