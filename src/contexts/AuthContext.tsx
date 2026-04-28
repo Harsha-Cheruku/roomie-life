@@ -37,10 +37,13 @@ interface AuthContextType {
   toggleSoloMode: () => void;
   refreshProfile: () => Promise<void>;
   refreshRooms: () => Promise<void>;
+  defaultRoomId: string | null;
+  setDefaultRoom: (roomId: string | null) => void;
 }
 
 const LAST_ROOM_KEY = 'roommate_last_room_id';
 const SOLO_MODE_KEY = 'roommate_solo_mode';
+const DEFAULT_ROOM_KEY = 'roommate_default_room_id';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -53,6 +56,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isSoloMode, setIsSoloMode] = useState(() => {
     return localStorage.getItem(SOLO_MODE_KEY) === 'true';
+  });
+  const [defaultRoomId, setDefaultRoomId] = useState<string | null>(() => {
+    return localStorage.getItem(DEFAULT_ROOM_KEY);
   });
 
   const fetchProfile = async (userId: string) => {
@@ -80,13 +86,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       setUserRooms(rooms);
 
-      // Get last active room from localStorage
+      // Priority: user-pinned default room > last active room > first room
+      const pinnedRoomId = localStorage.getItem(DEFAULT_ROOM_KEY);
       const lastRoomId = localStorage.getItem(LAST_ROOM_KEY);
-      
-      // Try to restore last active room, otherwise use first room
+
       let roomToSet: Room | null = null;
-      
-      if (lastRoomId) {
+
+      if (pinnedRoomId) {
+        roomToSet = rooms.find(r => r.id === pinnedRoomId) || null;
+      }
+
+      if (!roomToSet && lastRoomId) {
         roomToSet = rooms.find(r => r.id === lastRoomId) || null;
       }
       
@@ -317,6 +327,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const setDefaultRoom = (roomId: string | null) => {
+    if (roomId) {
+      localStorage.setItem(DEFAULT_ROOM_KEY, roomId);
+    } else {
+      localStorage.removeItem(DEFAULT_ROOM_KEY);
+    }
+    setDefaultRoomId(roomId);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -338,6 +357,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         toggleSoloMode,
         refreshProfile,
         refreshRooms,
+        defaultRoomId,
+        setDefaultRoom,
       }}
     >
       {children}
