@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown } from "lucide-react";
+import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,13 @@ interface MemberRow {
   color: string;
 }
 
+interface BillBreakdownItem {
+  expense_id: string;
+  title: string;
+  amount: number;
+  date: string;
+}
+
 interface ExpenseData {
   total: number;
   pending: number;
@@ -32,6 +39,8 @@ interface ExpenseData {
   members: MemberRow[];
   willPayPerMember: MemberRow[];
   willGetPerMember: MemberRow[];
+  willPayBills: Map<string, BillBreakdownItem[]>;
+  willGetBills: Map<string, BillBreakdownItem[]>;
 }
 
 const memberColors = ['bg-primary', 'bg-coral', 'bg-mint', 'bg-lavender', 'bg-accent'];
@@ -48,9 +57,11 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [data, setData] = useState<ExpenseData>({
     total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0,
     members: [], willPayPerMember: [], willGetPerMember: [],
+    willPayBills: new Map(), willGetBills: new Map(),
   });
   const [isLoading, setIsLoading] = useState(true);
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentRoom && user) {
@@ -104,6 +115,8 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const memberAmounts = new Map<string, number>();
       const willPayPerUser = new Map<string, number>();
       const willGetPerUser = new Map<string, number>();
+      const willPayBills = new Map<string, BillBreakdownItem[]>();
+      const willGetBills = new Map<string, BillBreakdownItem[]>();
       const today = new Date().toDateString();
 
       visibleExpenses.forEach((expense: any) => {
@@ -123,9 +136,15 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
             if (split.user_id === user.id && payerId !== user.id) {
               willPay += split.amount;
               willPayPerUser.set(payerId, (willPayPerUser.get(payerId) || 0) + split.amount);
+              const bucket = willPayBills.get(payerId) || [];
+              bucket.push({ expense_id: expense.id, title: expense.title || 'Bill', amount: split.amount, date: expense.created_at });
+              willPayBills.set(payerId, bucket);
             } else if (payerId === user.id && split.user_id !== user.id) {
               willGet += split.amount;
               willGetPerUser.set(split.user_id, (willGetPerUser.get(split.user_id) || 0) + split.amount);
+              const bucket = willGetBills.get(split.user_id) || [];
+              bucket.push({ expense_id: expense.id, title: expense.title || 'Bill', amount: split.amount, date: expense.created_at });
+              willGetBills.set(split.user_id, bucket);
             }
           } else if (split.is_paid) {
             settled += split.amount;
@@ -149,6 +168,8 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         members: buildRows(memberAmounts),
         willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
         willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
+        willPayBills,
+        willGetBills,
       });
     } catch (error) {
       console.error('Error fetching expense data:', error);
