@@ -351,14 +351,18 @@ export const CreateExpenseDialog = ({
 
       // Create notifications for assigned users (non-solo mode only)
       if (!isSoloMode) {
+        const shareMap: Record<string, number> = {};
+        selectedSplits.forEach((s) => { shareMap[s.user_id] = s.amount; });
         await createExpenseNotification(
           { 
             id: expense.id, 
             title: title.trim(), 
             total_amount: totalAmount, 
-            created_by: user.id 
+            created_by: user.id,
+            currency,
           },
-          selectedSplits.map(s => s.user_id)
+          selectedSplits.map(s => s.user_id),
+          shareMap
         );
       }
 
