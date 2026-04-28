@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil, DoorOpen } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil, DoorOpen, Pin, PinOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
@@ -27,7 +27,7 @@ interface RoomMemberWithProfile {
 }
 
 export const RoomSettings = () => {
-  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms, profile, refreshProfile } = useAuth();
+  const { currentRoom, user, setCurrentRoom, userRooms, switchRoom, refreshRooms, profile, refreshProfile, defaultRoomId, setDefaultRoom } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -299,39 +299,69 @@ export const RoomSettings = () => {
 
             <div className="space-y-2">
               {userRooms.map((room) => (
-                <button
+                <div
                   key={room.id}
-                  onClick={() => room.id !== currentRoom.id && handleSwitchRoom(room)}
                   className={cn(
-                    "w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left",
-                    room.id === currentRoom.id 
-                      ? "bg-primary/10 border-2 border-primary" 
+                    "w-full flex items-center gap-3 p-3 rounded-xl transition-colors",
+                    room.id === currentRoom.id
+                      ? "bg-primary/10 border-2 border-primary"
                       : "bg-muted/50 hover:bg-muted border-2 border-transparent"
                   )}
                 >
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center text-xl",
-                    room.id === currentRoom.id ? "bg-primary/20" : "bg-muted"
-                  )}>
-                    🏠
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn(
-                      "font-medium truncate",
-                      room.id === currentRoom.id ? "text-primary" : "text-foreground"
+                  <button
+                    onClick={() => room.id !== currentRoom.id && handleSwitchRoom(room)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center text-xl",
+                      room.id === currentRoom.id ? "bg-primary/20" : "bg-muted"
                     )}>
-                      {room.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Code: {room.invite_code}
-                    </p>
-                  </div>
-                  {room.id === currentRoom.id && (
-                    <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
-                      Current
-                    </span>
-                  )}
-                </button>
+                      🏠
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        "font-medium truncate flex items-center gap-1.5",
+                        room.id === currentRoom.id ? "text-primary" : "text-foreground"
+                      )}>
+                        {room.name}
+                        {defaultRoomId === room.id && (
+                          <Pin className="w-3 h-3 fill-primary text-primary shrink-0" />
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Code: {room.invite_code}
+                        {defaultRoomId === room.id && ' · Opens on login'}
+                      </p>
+                    </div>
+                    {room.id === currentRoom.id && (
+                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
+                        Current
+                      </span>
+                    )}
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 h-9 w-9"
+                    title={defaultRoomId === room.id ? 'Unpin as default' : 'Set as default room on login'}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const next = defaultRoomId === room.id ? null : room.id;
+                      setDefaultRoom(next);
+                      toast({
+                        title: next
+                          ? `${room.name} will open on login`
+                          : 'Default room cleared',
+                      });
+                    }}
+                  >
+                    {defaultRoomId === room.id ? (
+                      <PinOff className="w-4 h-4 text-primary" />
+                    ) : (
+                      <Pin className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
               ))}
               
               <button
