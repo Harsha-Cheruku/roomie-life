@@ -66,20 +66,31 @@ export const useCreateNotification = () => {
   };
 
   const createExpenseNotification = async (
-    expense: { id: string; title: string; total_amount: number; created_by: string },
-    assignedUserIds: string[]
+    expense: { id: string; title: string; total_amount: number; created_by: string; currency?: string },
+    assignedUserIds: string[],
+    perUserAmount?: Map<string, number> | Record<string, number>
   ) => {
     if (!currentRoom) return;
 
     // Notify all assigned users except the creator
     const notifyUsers = assignedUserIds.filter(id => id !== expense.created_by);
+    const symbol = expense.currency || '₹';
+    const lookup = (uid: string): number | undefined => {
+      if (!perUserAmount) return undefined;
+      if (perUserAmount instanceof Map) return perUserAmount.get(uid);
+      return (perUserAmount as Record<string, number>)[uid];
+    };
 
     for (const userId of notifyUsers) {
+      const share = lookup(userId);
+      const shareText = typeof share === 'number'
+        ? `Your share: ${symbol}${share.toFixed(2)} of ${symbol}${expense.total_amount.toFixed(2)}`
+        : `Total ${symbol}${expense.total_amount.toFixed(2)}`;
       await createNotification({
         userId,
         type: 'expense',
-        title: '💰 New expense assigned',
-        body: `You've been added to "${expense.title}" (₹${expense.total_amount.toFixed(2)})`,
+        title: `💰 New bill: ${expense.title}`,
+        body: `${shareText} • Tap to accept or reject`,
         referenceType: 'expense',
         referenceId: expense.id,
       });
