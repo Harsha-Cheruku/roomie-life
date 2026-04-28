@@ -9,6 +9,7 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigation } from "@/hooks/useNavigation";
+import { ExpenseDetailSheet } from "@/components/expenses/ExpenseDetailSheet";
 
 type NotificationType = 'expense' | 'task' | 'reminder' | 'alarm' | 'general';
 
@@ -46,6 +47,54 @@ export const Notifications = () => {
   const { toast } = useToast();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, any>>(new Map());
+  const [loadingExpense, setLoadingExpense] = useState(false);
+
+  const loadExpenseDetails = async (expenseId: string) => {
+    if (!currentRoom) return;
+    setLoadingExpense(true);
+    try {
+      const { data: expense } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', expenseId)
+        .maybeSingle();
+      if (!expense) {
+        toast({ title: 'Expense not found', variant: 'destructive' });
+        navigate('/expenses');
+        return;
+      }
+      const [{ data: splits }, { data: members }] = await Promise.all([
+        supabase.from('expense_splits').select('*').eq('expense_id', expenseId),
+        supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id),
+      ]);
+      const userIds = Array.from(new Set([
+        expense.created_by,
+        expense.paid_by,
+        ...(splits || []).map(s => s.user_id),
+        ...(members || []).map(m => m.user_id),
+      ]));
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, display_name, avatar')
+        .in('user_id', userIds);
+      const pMap = new Map<string, any>();
+      (profiles || []).forEach(p => pMap.set(p.user_id, p));
+      setMemberProfiles(pMap);
+      setSelectedExpense({
+        ...expense,
+        splits: splits || [],
+        creator_profile: pMap.get(expense.created_by),
+        payer_profile: pMap.get(expense.paid_by),
+      });
+    } catch (e) {
+      console.error('Error loading expense details:', e);
+      navigate('/expenses');
+    } finally {
+      setLoadingExpense(false);
+    }
+  };
 
   const fetchNotifications = useCallback(async () => {
     if (!user || !currentRoom) return;
@@ -109,7 +158,11 @@ export const Notifications = () => {
     // Navigate to relevant screen based on type
     switch (notification.type) {
       case 'expense':
-        navigate('/expenses');
+        if (notification.reference_id) {
+          await loadExpenseDetails(notification.reference_id);
+        } else {
+          navigate('/expenses');
+        }
         break;
       case 'task':
         navigate('/tasks');
