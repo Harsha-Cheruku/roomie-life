@@ -29,9 +29,22 @@ export const ExpenseAcceptReject = ({
   const { profile } = useAuth();
   const { createExpenseAcceptedNotification, createExpenseRejectedNotification } = useCreateNotification();
   const [isLoading, setIsLoading] = useState(false);
+  const [optimisticStatus, setOptimisticStatus] = useState<string | null>(null);
+
+  const effectiveStatus = optimisticStatus ?? status;
 
   const handleAction = async (newStatus: 'accepted' | 'rejected') => {
+    // Optimistic UI: update immediately, run network + notifications in background
+    setOptimisticStatus(newStatus);
     setIsLoading(true);
+    toast({
+      title: newStatus === 'accepted' ? 'Expense accepted' : 'Expense rejected',
+      description: newStatus === 'accepted'
+        ? `You accepted your share for "${expenseTitle}"`
+        : `You rejected the split for "${expenseTitle}"`,
+    });
+    onStatusChange();
+
     try {
       const { error } = await supabase
         .from('expense_splits')
@@ -40,26 +53,17 @@ export const ExpenseAcceptReject = ({
 
       if (error) throw error;
 
-      // Create notification for expense creator
+      // Fire-and-forget notification (don't block UI)
       const userName = profile?.display_name || 'Someone';
       const expense = { id: expenseId, title: expenseTitle, created_by: expenseCreatedBy };
-      
       if (newStatus === 'accepted') {
-        await createExpenseAcceptedNotification(expense, userName);
+        createExpenseAcceptedNotification(expense, userName).catch(() => {});
       } else {
-        await createExpenseRejectedNotification(expense, userName);
+        createExpenseRejectedNotification(expense, userName).catch(() => {});
       }
-
-      toast({
-        title: newStatus === 'accepted' ? 'Expense accepted' : 'Expense rejected',
-        description: newStatus === 'accepted' 
-          ? `You accepted ₹${amount.toFixed(0)} for "${expenseTitle}"`
-          : `You rejected the expense for "${expenseTitle}"`,
-      });
-
-      onStatusChange();
     } catch (error) {
       console.error('Error updating expense status:', error);
+      setOptimisticStatus(null); // rollback
       toast({
         title: 'Failed to update',
         description: 'Please try again',
@@ -70,12 +74,12 @@ export const ExpenseAcceptReject = ({
     }
   };
 
-  if (status !== 'pending') {
+  if (effectiveStatus !== 'pending') {
     return (
       <span className={`text-xs px-2 py-1 rounded-full ${
-        status === 'accepted' ? 'bg-mint/20 text-mint' : 'bg-coral/20 text-coral'
+        effectiveStatus === 'accepted' ? 'bg-mint/20 text-mint' : 'bg-coral/20 text-coral'
       }`}>
-        {status === 'accepted' ? 'Accepted' : 'Rejected'}
+        {effectiveStatus === 'accepted' ? 'Accepted' : 'Rejected'}
       </span>
     );
   }

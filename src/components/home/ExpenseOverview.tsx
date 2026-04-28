@@ -209,6 +209,26 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
     { value: 'willGet', label: 'You will receive' },
   ];
 
+  // Net balance per person: positive = they owe you, negative = you owe them
+  const netByUser = new Map<string, { name: string; avatar: string; net: number; color: string }>();
+  data.willPayPerMember.forEach((m, i) => {
+    netByUser.set(m.user_id, { name: m.name, avatar: m.avatar, net: -m.amount, color: m.color });
+  });
+  data.willGetPerMember.forEach((m, i) => {
+    const existing = netByUser.get(m.user_id);
+    if (existing) {
+      existing.net += m.amount;
+    } else {
+      netByUser.set(m.user_id, { name: m.name, avatar: m.avatar, net: m.amount, color: m.color });
+    }
+  });
+  const netRows = Array.from(netByUser.entries())
+    .map(([user_id, v]) => ({ user_id, ...v }))
+    .filter((r) => Math.abs(r.net) > 0.005)
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  const netTotal = data.willGet - data.willPay;
+  const maxNetAbs = netRows.reduce((max, r) => Math.max(max, Math.abs(r.net)), 0);
+
   return (
     <section className="px-4">
       <div className="flex items-center justify-between mb-4">
@@ -276,6 +296,66 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
           </div>
         </div>
       </button>
+
+      {/* You pay / You get — Net Balance Summary */}
+      {!isSoloMode && netRows.length > 0 && (
+        <div className="bg-card rounded-2xl p-4 shadow-card mb-4">
+          <div className="flex items-center justify-between mb-3 gap-2">
+            <p className="text-sm font-semibold text-foreground">Net Balance</p>
+            <p className={cn(
+              "text-sm font-bold whitespace-nowrap",
+              netTotal > 0 ? 'text-mint' : netTotal < 0 ? 'text-coral' : 'text-muted-foreground'
+            )}>
+              {netTotal > 0 ? `You get ${currency}${formatAmount(netTotal)}` :
+               netTotal < 0 ? `You pay ${currency}${formatAmount(Math.abs(netTotal))}` :
+               'All settled'}
+            </p>
+          </div>
+          <div className="space-y-3">
+            {netRows.map((r, idx) => {
+              const isOwedToYou = r.net > 0;
+              const widthPct = maxNetAbs > 0 ? (Math.abs(r.net) / maxNetAbs) * 100 : 0;
+              return (
+                <button
+                  key={r.user_id}
+                  type="button"
+                  onClick={() => navigate('/expenses')}
+                  className="w-full flex items-center gap-3 text-left press-effect animate-slide-up"
+                  style={{ animationDelay: `${idx * 40}ms` }}
+                >
+                  <ProfileAvatar avatar={r.avatar} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground truncate">{r.name}</p>
+                      <p className={cn(
+                        "text-xs font-medium whitespace-nowrap",
+                        isOwedToYou ? 'text-mint' : 'text-coral'
+                      )}>
+                        {isOwedToYou ? 'owes you' : 'you owe'}
+                      </p>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          isOwedToYou ? 'bg-mint' : 'bg-coral'
+                        )}
+                        style={{ width: `${widthPct}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className={cn(
+                    "text-sm font-semibold whitespace-nowrap",
+                    isOwedToYou ? 'text-mint' : 'text-coral'
+                  )}>
+                    {isOwedToYou ? '+' : '-'}{currency}{formatAmount(Math.abs(r.net))}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Per User Breakdown - clickable */}
       {breakdownRows.length > 0 ? (
