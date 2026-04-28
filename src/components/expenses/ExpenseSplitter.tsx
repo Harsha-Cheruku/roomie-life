@@ -349,9 +349,12 @@ export const ExpenseSplitter = ({
         
         // Create notifications for assigned users
         const assignedUserIds = [...new Set(splits.map(s => s.user_id))];
+        const shareMap: Record<string, number> = {};
+        splits.forEach((s) => { shareMap[s.user_id] = (shareMap[s.user_id] || 0) + Number(s.amount); });
         await createExpenseNotification(
           { id: expense.id, title, total_amount: calculateTotal(), created_by: user.id },
-          assignedUserIds
+          assignedUserIds,
+          shareMap
         );
 
         if (splitsError) throw splitsError;
