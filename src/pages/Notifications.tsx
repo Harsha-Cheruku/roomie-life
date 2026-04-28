@@ -349,6 +349,16 @@ export const Notifications = () => {
           </div>
         )}
       </div>
+
+      <ExpenseDetailSheet
+        open={!!selectedExpense}
+        onOpenChange={(open) => { if (!open) setSelectedExpense(null); }}
+        expense={selectedExpense}
+        memberProfiles={memberProfiles}
+        onUpdate={() => {
+          if (selectedExpense?.id) loadExpenseDetails(selectedExpense.id);
+        }}
+      />
     </div>
   );
 };
