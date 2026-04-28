@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown } from "lucide-react";
+import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +22,13 @@ interface MemberRow {
   color: string;
 }
 
+interface BillBreakdownItem {
+  expense_id: string;
+  title: string;
+  amount: number;
+  date: string;
+}
+
 interface ExpenseData {
   total: number;
   pending: number;
@@ -32,6 +39,8 @@ interface ExpenseData {
   members: MemberRow[];
   willPayPerMember: MemberRow[];
   willGetPerMember: MemberRow[];
+  willPayBills: Map<string, BillBreakdownItem[]>;
+  willGetBills: Map<string, BillBreakdownItem[]>;
 }
 
 const memberColors = ['bg-primary', 'bg-coral', 'bg-mint', 'bg-lavender', 'bg-accent'];
@@ -48,9 +57,11 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [data, setData] = useState<ExpenseData>({
     total: 0, pending: 0, settled: 0, willPay: 0, willGet: 0, todaySpending: 0,
     members: [], willPayPerMember: [], willGetPerMember: [],
+    willPayBills: new Map(), willGetBills: new Map(),
   });
   const [isLoading, setIsLoading] = useState(true);
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentRoom && user) {
@@ -104,6 +115,8 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const memberAmounts = new Map<string, number>();
       const willPayPerUser = new Map<string, number>();
       const willGetPerUser = new Map<string, number>();
+      const willPayBills = new Map<string, BillBreakdownItem[]>();
+      const willGetBills = new Map<string, BillBreakdownItem[]>();
       const today = new Date().toDateString();
 
       visibleExpenses.forEach((expense: any) => {
@@ -123,9 +136,15 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
             if (split.user_id === user.id && payerId !== user.id) {
               willPay += split.amount;
               willPayPerUser.set(payerId, (willPayPerUser.get(payerId) || 0) + split.amount);
+              const bucket = willPayBills.get(payerId) || [];
+              bucket.push({ expense_id: expense.id, title: expense.title || 'Bill', amount: split.amount, date: expense.created_at });
+              willPayBills.set(payerId, bucket);
             } else if (payerId === user.id && split.user_id !== user.id) {
               willGet += split.amount;
               willGetPerUser.set(split.user_id, (willGetPerUser.get(split.user_id) || 0) + split.amount);
+              const bucket = willGetBills.get(split.user_id) || [];
+              bucket.push({ expense_id: expense.id, title: expense.title || 'Bill', amount: split.amount, date: expense.created_at });
+              willGetBills.set(split.user_id, bucket);
             }
           } else if (split.is_paid) {
             settled += split.amount;
@@ -149,6 +168,8 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         members: buildRows(memberAmounts),
         willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
         willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
+        willPayBills,
+        willGetBills,
       });
     } catch (error) {
       console.error('Error fetching expense data:', error);
@@ -274,25 +295,75 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
               </SelectContent>
             </Select>
           </div>
-          <div className={cn("space-y-3", breakdownRows.length > 5 && "max-h-72 overflow-y-auto pr-1")}>
-            {breakdownRows.map((member, index) => (
-              <button
-                key={`${member.user_id}-${index}`}
-                type="button"
-                onClick={() => navigate('/expenses')}
-                className="w-full flex items-center gap-3 animate-slide-up text-left press-effect"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <ProfileAvatar avatar={member.avatar} size="md" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
-                    <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
-                  </div>
+          <div className={cn("space-y-3", breakdownRows.length > 5 && "max-h-96 overflow-y-auto pr-1")}>
+            {breakdownRows.map((member, index) => {
+              const isExpandable = breakdownMode !== 'paid';
+              const billsForMember = breakdownMode === 'willPay'
+                ? data.willPayBills.get(member.user_id) || []
+                : breakdownMode === 'willGet'
+                  ? data.willGetBills.get(member.user_id) || []
+                  : [];
+              const isOpen = isExpandable && expandedUserId === member.user_id;
+              return (
+                <div key={`${member.user_id}-${index}`} className="animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isExpandable) {
+                        setExpandedUserId(isOpen ? null : member.user_id);
+                      } else {
+                        navigate('/expenses');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 text-left press-effect"
+                  >
+                    <ProfileAvatar avatar={member.avatar} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
+                        {isExpandable && billsForMember.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">({billsForMember.length})</span>
+                        )}
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
+                        <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground whitespace-nowrap">{currency}{formatAmount(member.amount)}</p>
+                    {isExpandable && (
+                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", isOpen && "rotate-90")} />
+                    )}
+                  </button>
+                  {isOpen && billsForMember.length > 0 && (
+                    <div className="mt-2 ml-12 pl-3 border-l-2 border-border space-y-1.5">
+                      {billsForMember.map((bill) => (
+                        <button
+                          key={bill.expense_id}
+                          type="button"
+                          onClick={() => navigate('/expenses')}
+                          className="w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-foreground truncate">{bill.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{new Date(bill.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</p>
+                          </div>
+                          <p className={cn("text-xs font-semibold whitespace-nowrap", breakdownMode === 'willPay' ? 'text-coral' : 'text-mint')}>
+                            {breakdownMode === 'willPay' ? '-' : '+'}{currency}{formatAmount(bill.amount)}
+                          </p>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/expenses')}
+                        className="w-full text-[11px] text-primary font-medium pt-1 text-left hover:underline"
+                      >
+                        View & manage in Expenses →
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm font-semibold text-foreground whitespace-nowrap">{currency}{formatAmount(member.amount)}</p>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : breakdownMode !== 'paid' ? (
