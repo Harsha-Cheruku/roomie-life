@@ -295,25 +295,75 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
               </SelectContent>
             </Select>
           </div>
-          <div className={cn("space-y-3", breakdownRows.length > 5 && "max-h-72 overflow-y-auto pr-1")}>
-            {breakdownRows.map((member, index) => (
-              <button
-                key={`${member.user_id}-${index}`}
-                type="button"
-                onClick={() => navigate('/expenses')}
-                className="w-full flex items-center gap-3 animate-slide-up text-left press-effect"
-                style={{ animationDelay: `${index * 50}ms` }}
-              >
-                <ProfileAvatar avatar={member.avatar} size="md" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
-                  <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
-                    <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
-                  </div>
+          <div className={cn("space-y-3", breakdownRows.length > 5 && "max-h-96 overflow-y-auto pr-1")}>
+            {breakdownRows.map((member, index) => {
+              const isExpandable = breakdownMode !== 'paid';
+              const billsForMember = breakdownMode === 'willPay'
+                ? data.willPayBills.get(member.user_id) || []
+                : breakdownMode === 'willGet'
+                  ? data.willGetBills.get(member.user_id) || []
+                  : [];
+              const isOpen = isExpandable && expandedUserId === member.user_id;
+              return (
+                <div key={`${member.user_id}-${index}`} className="animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isExpandable) {
+                        setExpandedUserId(isOpen ? null : member.user_id);
+                      } else {
+                        navigate('/expenses');
+                      }
+                    }}
+                    className="w-full flex items-center gap-3 text-left press-effect"
+                  >
+                    <ProfileAvatar avatar={member.avatar} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm font-medium text-foreground truncate">{member.name}</p>
+                        {isExpandable && billsForMember.length > 0 && (
+                          <span className="text-[10px] text-muted-foreground shrink-0">({billsForMember.length})</span>
+                        )}
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden mt-1">
+                        <div className={cn("h-full rounded-full transition-all duration-500", member.color)} style={{ width: breakdownTotal > 0 ? `${(member.amount / breakdownTotal) * 100}%` : '0%' }} />
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-foreground whitespace-nowrap">{currency}{formatAmount(member.amount)}</p>
+                    {isExpandable && (
+                      <ChevronRight className={cn("w-4 h-4 text-muted-foreground transition-transform shrink-0", isOpen && "rotate-90")} />
+                    )}
+                  </button>
+                  {isOpen && billsForMember.length > 0 && (
+                    <div className="mt-2 ml-12 pl-3 border-l-2 border-border space-y-1.5">
+                      {billsForMember.map((bill) => (
+                        <button
+                          key={bill.expense_id}
+                          type="button"
+                          onClick={() => navigate('/expenses')}
+                          className="w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/60 transition-colors text-left"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-medium text-foreground truncate">{bill.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{new Date(bill.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</p>
+                          </div>
+                          <p className={cn("text-xs font-semibold whitespace-nowrap", breakdownMode === 'willPay' ? 'text-coral' : 'text-mint')}>
+                            {breakdownMode === 'willPay' ? '-' : '+'}{currency}{formatAmount(bill.amount)}
+                          </p>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/expenses')}
+                        className="w-full text-[11px] text-primary font-medium pt-1 text-left hover:underline"
+                      >
+                        View & manage in Expenses →
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="text-sm font-semibold text-foreground whitespace-nowrap">{currency}{formatAmount(member.amount)}</p>
-              </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       ) : breakdownMode !== 'paid' ? (
