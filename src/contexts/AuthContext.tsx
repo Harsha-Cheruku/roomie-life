@@ -327,6 +327,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const setDefaultRoom = (roomId: string | null) => {
+    if (roomId) {
+      localStorage.setItem(DEFAULT_ROOM_KEY, roomId);
+    } else {
+      localStorage.removeItem(DEFAULT_ROOM_KEY);
+    }
+    setDefaultRoomId(roomId);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -348,6 +357,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         toggleSoloMode,
         refreshProfile,
         refreshRooms,
+        defaultRoomId,
+        setDefaultRoom,
       }}
     >
       {children}
