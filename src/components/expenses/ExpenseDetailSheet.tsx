@@ -303,6 +303,44 @@ export const ExpenseDetailSheet = ({
               </div>
             </div>
 
+            {/* Itemized breakdown */}
+            {(loadingItems || items.length > 0) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <ListOrdered className="w-4 h-4 text-primary" />
+                  Items ({items.length})
+                </h3>
+                {loadingItems ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading items...
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {items.map((it) => (
+                      <div key={it.id} className="flex items-center justify-between border-b border-border last:border-0 pb-2 last:pb-0">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{it.name}</p>
+                          {it.quantity > 1 && (
+                            <p className="text-xs text-muted-foreground">Qty: {it.quantity} × ₹{it.price.toFixed(2)}</p>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">₹{(it.price * it.quantity).toFixed(2)}</p>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 mt-1 border-t border-border">
+                      <p className="text-sm font-semibold text-foreground">Total</p>
+                      <p className="text-sm font-bold text-primary">
+                        ₹{items.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Your share is split equally below across {expense.splits?.length || 0} {(expense.splits?.length || 0) === 1 ? 'person' : 'people'}.
+                </p>
+              </div>
+            )}
+
             {/* Paid By */}
             <div className="bg-card rounded-2xl p-4 shadow-card">
               <div className="flex items-center gap-3">
