@@ -99,18 +99,43 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
       return;
     }
 
-    // Schedule native alarm (Android AlarmManager) for reliable triggering
-    if (isNative && scheduleMode !== "custom") {
+    // Schedule native alarms (Android AlarmManager) for reliable background triggering.
+    // For "custom" mode, register one weekly-repeating native alarm per selected day.
+    if (isNative) {
       const nativeCondition = conditionType === "owner_only" ? "owner_only" : "anyone";
-      await createAlarm({
-        id: insertedAlarm?.id || `alarm_${Date.now()}`,
-        title: title.trim(),
-        hour: hours,
-        minute: minutes,
-        repeatDaily: scheduleMode === "daily",
-        stopCondition: nativeCondition,
-        createdBy: userId,
-      });
+      const baseId = insertedAlarm?.id || `alarm_${Date.now()}`;
+      try {
+        if (scheduleMode === "custom") {
+          await Promise.all(
+            daysToUse.map((d) =>
+              createAlarm({
+                // d: 0=Sun..6=Sat (JS) → Calendar.DAY_OF_WEEK 1=Sun..7=Sat
+                id: `${baseId}_d${d}`,
+                title: title.trim(),
+                hour: hours,
+                minute: minutes,
+                repeatDaily: false,
+                repeatWeekly: true,
+                dayOfWeek: d + 1,
+                stopCondition: nativeCondition,
+                createdBy: userId,
+              })
+            )
+          );
+        } else {
+          await createAlarm({
+            id: baseId,
+            title: title.trim(),
+            hour: hours,
+            minute: minutes,
+            repeatDaily: scheduleMode === "daily",
+            stopCondition: nativeCondition,
+            createdBy: userId,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to schedule native alarm(s):", e);
+      }
     }
 
     toast.success("Alarm created!");

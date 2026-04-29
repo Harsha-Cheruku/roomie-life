@@ -10,6 +10,8 @@ export interface NativeAlarmPlugin {
     ringtoneUri?: string;
     stopCondition?: string; // "anyone" | "owner_only"
     createdBy?: string;
+    repeatWeekly?: boolean;
+    dayOfWeek?: number; // 1=Sun..7=Sat
   }): Promise<{ success: boolean; alarmId: string }>;
 
   stopAlarm(options: { alarmId?: string }): Promise<{ success: boolean }>;
