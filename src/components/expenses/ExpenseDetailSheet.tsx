@@ -319,7 +319,15 @@ export const ExpenseDetailSheet = ({
                   <div className="space-y-2">
                     {items.map((it) => {
                       const itemTotal = it.price * it.quantity;
-                      const participants = (expense.splits || []).filter(s => s.status !== 'rejected');
+                      // Dedupe by user_id to avoid showing the same person multiple times
+                      const seenUsers = new Set<string>();
+                      const participants = (expense.splits || [])
+                        .filter(s => s.status !== 'rejected')
+                        .filter(s => {
+                          if (seenUsers.has(s.user_id)) return false;
+                          seenUsers.add(s.user_id);
+                          return true;
+                        });
                       const perPerson = participants.length > 0 ? itemTotal / participants.length : 0;
                       const isExpanded = expandedItemId === it.id;
                       return (
