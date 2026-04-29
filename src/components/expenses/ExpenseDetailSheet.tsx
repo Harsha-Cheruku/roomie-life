@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw, ListOrdered } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,6 +57,13 @@ interface ExpenseDetailSheetProps {
   onUpdate: () => void;
 }
 
+interface ExpenseItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 export const ExpenseDetailSheet = ({
   open,
   onOpenChange,
@@ -73,6 +80,30 @@ export const ExpenseDetailSheet = ({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [items, setItems] = useState<ExpenseItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  // Load itemized breakdown whenever a new expense opens
+  useEffect(() => {
+    if (!open || !expense?.id) {
+      setItems([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingItems(true);
+    supabase
+      .from('expense_items')
+      .select('id, name, price, quantity')
+      .eq('expense_id', expense.id)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error('Failed to load items:', error);
+        setItems((data as ExpenseItem[]) || []);
+        setLoadingItems(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, expense?.id]);
 
   if (!expense) return null;
 
