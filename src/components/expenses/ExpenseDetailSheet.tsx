@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw, ListOrdered } from 'lucide-react';
+import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw, ListOrdered, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -82,6 +82,7 @@ export const ExpenseDetailSheet = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [items, setItems] = useState<ExpenseItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
 
   // Load itemized breakdown whenever a new expense opens
   useEffect(() => {
