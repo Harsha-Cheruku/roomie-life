@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Check, CreditCard, Loader2, X, Receipt, Users, ArrowLeft, Download, Edit2, Trash2, RefreshCw, ListOrdered } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,6 +57,13 @@ interface ExpenseDetailSheetProps {
   onUpdate: () => void;
 }
 
+interface ExpenseItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
+
 export const ExpenseDetailSheet = ({
   open,
   onOpenChange,
@@ -73,6 +80,30 @@ export const ExpenseDetailSheet = ({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [items, setItems] = useState<ExpenseItem[]>([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+
+  // Load itemized breakdown whenever a new expense opens
+  useEffect(() => {
+    if (!open || !expense?.id) {
+      setItems([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingItems(true);
+    supabase
+      .from('expense_items')
+      .select('id, name, price, quantity')
+      .eq('expense_id', expense.id)
+      .order('created_at', { ascending: true })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) console.error('Failed to load items:', error);
+        setItems((data as ExpenseItem[]) || []);
+        setLoadingItems(false);
+      });
+    return () => { cancelled = true; };
+  }, [open, expense?.id]);
 
   if (!expense) return null;
 
@@ -271,6 +302,44 @@ export const ExpenseDetailSheet = ({
                 </div>
               </div>
             </div>
+
+            {/* Itemized breakdown */}
+            {(loadingItems || items.length > 0) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <ListOrdered className="w-4 h-4 text-primary" />
+                  Items ({items.length})
+                </h3>
+                {loadingItems ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading items...
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {items.map((it) => (
+                      <div key={it.id} className="flex items-center justify-between border-b border-border last:border-0 pb-2 last:pb-0">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{it.name}</p>
+                          {it.quantity > 1 && (
+                            <p className="text-xs text-muted-foreground">Qty: {it.quantity} × ₹{it.price.toFixed(2)}</p>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-foreground">₹{(it.price * it.quantity).toFixed(2)}</p>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between pt-2 mt-1 border-t border-border">
+                      <p className="text-sm font-semibold text-foreground">Total</p>
+                      <p className="text-sm font-bold text-primary">
+                        ₹{items.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Your share is split equally below across {expense.splits?.length || 0} {(expense.splits?.length || 0) === 1 ? 'person' : 'people'}.
+                </p>
+              </div>
+            )}
 
             {/* Paid By */}
             <div className="bg-card rounded-2xl p-4 shadow-card">

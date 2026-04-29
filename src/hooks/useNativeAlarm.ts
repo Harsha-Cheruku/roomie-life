@@ -19,6 +19,8 @@ export function useNativeAlarm() {
     ringtoneUri?: string;
     stopCondition?: string;
     createdBy?: string;
+    repeatWeekly?: boolean;
+    dayOfWeek?: number;
   }) => {
     if (!isNative) return null;
     try {

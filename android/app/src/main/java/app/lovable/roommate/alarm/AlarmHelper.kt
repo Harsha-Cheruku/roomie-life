@@ -28,7 +28,10 @@ object AlarmHelper {
 
     fun scheduleAlarm(context: Context, alarm: AlarmData) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val triggerTime = getNextTriggerTimeMillis(alarm.hour, alarm.minute)
+        val triggerTime = if (alarm.repeatWeekly && alarm.dayOfWeek in 1..7)
+            getNextTriggerTimeMillisForDay(alarm.hour, alarm.minute, alarm.dayOfWeek)
+        else
+            getNextTriggerTimeMillis(alarm.hour, alarm.minute)
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             action = "app.lovable.roommate.ALARM_TRIGGER"
@@ -37,6 +40,8 @@ object AlarmHelper {
             putExtra("alarm_hour", alarm.hour)
             putExtra("alarm_minute", alarm.minute)
             putExtra("repeat_daily", alarm.repeatDaily)
+            putExtra("repeat_weekly", alarm.repeatWeekly)
+            putExtra("day_of_week", alarm.dayOfWeek)
             putExtra("ringtone_uri", alarm.ringtoneUri ?: "")
             putExtra("stop_condition", alarm.stopCondition)
             putExtra("created_by", alarm.createdBy)
@@ -112,6 +117,20 @@ object AlarmHelper {
         return cal.timeInMillis
     }
 
+    /** Next occurrence of given dayOfWeek (1=Sun..7=Sat) at hour:minute. */
+    private fun getNextTriggerTimeMillisForDay(hour: Int, minute: Int, dayOfWeek: Int): Long {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        var daysAhead = (dayOfWeek - cal.get(Calendar.DAY_OF_WEEK) + 7) % 7
+        if (daysAhead == 0 && cal.timeInMillis <= System.currentTimeMillis()) daysAhead = 7
+        cal.add(Calendar.DAY_OF_YEAR, daysAhead)
+        return cal.timeInMillis
+    }
+
     // ---- Persistent Storage ----
 
     fun saveAlarm(context: Context, alarm: AlarmData) {
@@ -143,7 +162,9 @@ object AlarmHelper {
                     ringtoneUri = obj.optString("ringtoneUri", null),
                     stopCondition = obj.optString("stopCondition", "anyone"),
                     createdBy = obj.optString("createdBy", ""),
-                    isActive = obj.optBoolean("isActive", true)
+                    isActive = obj.optBoolean("isActive", true),
+                    repeatWeekly = obj.optBoolean("repeatWeekly", false),
+                    dayOfWeek = obj.optInt("dayOfWeek", -1)
                 )
             }
         } catch (e: Exception) {
@@ -165,6 +186,8 @@ object AlarmHelper {
                 put("stopCondition", a.stopCondition)
                 put("createdBy", a.createdBy)
                 put("isActive", a.isActive)
+                put("repeatWeekly", a.repeatWeekly)
+                put("dayOfWeek", a.dayOfWeek)
             })
         }
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

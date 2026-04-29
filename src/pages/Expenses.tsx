@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -681,6 +681,17 @@ export const Expenses = () => {
                       </p>
                     </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    className="w-full h-9 mb-2 gap-2 border-primary/40 text-primary hover:bg-primary/5"
+                    onClick={() => {
+                      setSelectedExpense(expense);
+                      setShowExpenseDetail(true);
+                    }}
+                  >
+                    <Eye className="w-4 h-4" />
+                    View bill & split
+                  </Button>
                   <div className="flex gap-2">
                     <Button
                       className="flex-1 h-10 gap-2 bg-mint hover:bg-mint/90"
