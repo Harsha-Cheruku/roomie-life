@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
 
 /**
@@ -20,11 +21,17 @@ class AlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(TAG, "Alarm triggered! Action: ${intent.action}")
 
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "roommate:alarm_recv")
+        try { wl.acquire(60_000L) } catch (_: Exception) {}
+
         val alarmId = intent.getStringExtra("alarm_id") ?: return
         val title = intent.getStringExtra("alarm_title") ?: "Alarm"
         val hour = intent.getIntExtra("alarm_hour", 0)
         val minute = intent.getIntExtra("alarm_minute", 0)
         val repeatDaily = intent.getBooleanExtra("repeat_daily", false)
+        val repeatWeekly = intent.getBooleanExtra("repeat_weekly", false)
+        val dayOfWeek = intent.getIntExtra("day_of_week", -1)
         val ringtoneUri = intent.getStringExtra("ringtone_uri") ?: ""
         val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
         val createdBy = intent.getStringExtra("created_by") ?: ""
