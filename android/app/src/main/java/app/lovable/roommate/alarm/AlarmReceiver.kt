@@ -52,21 +52,25 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startService(serviceIntent)
         }
 
-        // If repeating daily, reschedule for tomorrow
-        if (repeatDaily) {
+        // If repeating daily/weekly, reschedule for next occurrence
+        if (repeatDaily || repeatWeekly) {
             val alarm = AlarmData(
                 id = alarmId,
                 title = title,
                 hour = hour,
                 minute = minute,
-                repeatDaily = true,
+                repeatDaily = repeatDaily,
                 ringtoneUri = ringtoneUri,
                 stopCondition = stopCondition,
                 createdBy = createdBy,
-                isActive = true
+                isActive = true,
+                repeatWeekly = repeatWeekly,
+                dayOfWeek = dayOfWeek
             )
             AlarmHelper.scheduleAlarm(context, alarm)
-            Log.d(TAG, "Daily alarm rescheduled for tomorrow")
+            Log.d(TAG, "Alarm rescheduled (daily=$repeatDaily, weekly=$repeatWeekly)")
         }
+
+        try { if (wl.isHeld) wl.release() } catch (_: Exception) {}
     }
 }
