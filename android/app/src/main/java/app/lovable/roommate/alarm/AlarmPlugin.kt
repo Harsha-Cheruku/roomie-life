@@ -26,6 +26,8 @@ class AlarmPlugin : Plugin() {
         val timeHour = call.getInt("hour", 7)!!
         val timeMinute = call.getInt("minute", 0)!!
         val repeatDaily = call.getBoolean("repeatDaily", false)!!
+        val repeatWeekly = call.getBoolean("repeatWeekly", false)!!
+        val dayOfWeek = call.getInt("dayOfWeek", -1)!!
         val ringtoneUri = call.getString("ringtoneUri")
         val stopCondition = call.getString("stopCondition", "anyone")!!
         val createdBy = call.getString("createdBy") ?: ""
@@ -39,7 +41,9 @@ class AlarmPlugin : Plugin() {
             ringtoneUri = ringtoneUri,
             stopCondition = stopCondition,
             createdBy = createdBy,
-            isActive = true
+            isActive = true,
+            repeatWeekly = repeatWeekly,
+            dayOfWeek = dayOfWeek
         )
 
         AlarmHelper.saveAlarm(context, alarm)
