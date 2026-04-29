@@ -317,17 +317,62 @@ export const ExpenseDetailSheet = ({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {items.map((it) => (
-                      <div key={it.id} className="flex items-center justify-between border-b border-border last:border-0 pb-2 last:pb-0">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{it.name}</p>
-                          {it.quantity > 1 && (
-                            <p className="text-xs text-muted-foreground">Qty: {it.quantity} × ₹{it.price.toFixed(2)}</p>
+                    {items.map((it) => {
+                      const itemTotal = it.price * it.quantity;
+                      const participants = (expense.splits || []).filter(s => s.status !== 'rejected');
+                      const perPerson = participants.length > 0 ? itemTotal / participants.length : 0;
+                      const isExpanded = expandedItemId === it.id;
+                      return (
+                        <div key={it.id} className="border-b border-border last:border-0 pb-2 last:pb-0">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedItemId(isExpanded ? null : it.id)}
+                            className="w-full flex items-center justify-between gap-2 text-left"
+                          >
+                            <div className="flex-1 min-w-0 flex items-center gap-2">
+                              <ChevronDown
+                                className={cn(
+                                  "w-4 h-4 text-muted-foreground transition-transform shrink-0",
+                                  isExpanded && "rotate-180"
+                                )}
+                              />
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-foreground truncate">{it.name}</p>
+                                {it.quantity > 1 && (
+                                  <p className="text-xs text-muted-foreground">Qty: {it.quantity} × ₹{it.price.toFixed(2)}</p>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-sm font-semibold text-foreground shrink-0">₹{itemTotal.toFixed(2)}</p>
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-2 ml-6 bg-muted/40 rounded-lg p-2 space-y-1.5">
+                              <div className="flex items-center justify-between text-xs text-muted-foreground pb-1 border-b border-border">
+                                <span>Split across {participants.length} {participants.length === 1 ? 'person' : 'people'}</span>
+                                <span className="font-semibold text-primary">₹{perPerson.toFixed(2)} each</span>
+                              </div>
+                              {participants.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No active participants.</p>
+                              ) : (
+                                participants.map(s => {
+                                  const p = memberProfiles.get(s.user_id);
+                                  const isMe = s.user_id === user?.id;
+                                  return (
+                                    <div key={s.id} className="flex items-center gap-2">
+                                      <ProfileAvatar avatar={p?.avatar} size="sm" />
+                                      <p className="flex-1 text-xs font-medium text-foreground truncate">
+                                        {isMe ? 'You' : p?.display_name || 'Unknown'}
+                                      </p>
+                                      <p className="text-xs font-semibold text-foreground">₹{perPerson.toFixed(2)}</p>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
                           )}
                         </div>
-                        <p className="text-sm font-semibold text-foreground">₹{(it.price * it.quantity).toFixed(2)}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-border">
                       <p className="text-sm font-semibold text-foreground">Total</p>
                       <p className="text-sm font-bold text-primary">
