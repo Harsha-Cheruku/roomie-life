@@ -9,5 +9,7 @@ data class AlarmData(
     val ringtoneUri: String? = null,
     val stopCondition: String = "anyone", // "anyone", "owner_only"
     val createdBy: String = "",
-    val isActive: Boolean = true
+    val isActive: Boolean = true,
+    val repeatWeekly: Boolean = false,
+    val dayOfWeek: Int = -1 // 1=Sun..7=Sat (Calendar.DAY_OF_WEEK), -1 = none
 )
