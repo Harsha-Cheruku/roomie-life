@@ -24,7 +24,7 @@
 
         <!-- Main Capacitor activity -->
         <activity
-            android:name=".MainActivity"
+            android:name="app.lovable.roommate.MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
