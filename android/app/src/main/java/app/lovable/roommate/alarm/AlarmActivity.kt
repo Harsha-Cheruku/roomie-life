@@ -11,7 +11,6 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Full-screen alarm activity that shows over lock screen.
@@ -21,7 +20,6 @@ class AlarmActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "AlarmActivity"
-        private val ringingStarted = AtomicBoolean(false)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,8 +58,9 @@ class AlarmActivity : AppCompatActivity() {
         val dayOfWeek = intent.getIntExtra("day_of_week", -1)
         val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
         val createdBy = intent.getStringExtra("created_by") ?: ""
+        val fromService = intent.getBooleanExtra("from_service", false)
 
-        if (alarmId.isNotBlank() && ringingStarted.compareAndSet(false, true)) {
+        if (alarmId.isNotBlank() && !fromService) {
             Log.d(TAG, "Starting AlarmService from foreground AlarmActivity")
             val serviceIntent = Intent(this, AlarmService::class.java).apply {
                 action = AlarmService.ACTION_START
@@ -133,7 +132,6 @@ class AlarmActivity : AppCompatActivity() {
 
             setOnClickListener {
                 Log.d(TAG, "STOP pressed — killing alarm instantly")
-                ringingStarted.set(false)
                 // Stop foreground service immediately — no JS, no network
                 val stopIntent = Intent(this@AlarmActivity, AlarmService::class.java).apply {
                     action = AlarmService.ACTION_STOP
