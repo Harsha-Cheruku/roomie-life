@@ -59,8 +59,9 @@ class AlarmActivity : Activity() {
         val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
         val createdBy = intent.getStringExtra("created_by") ?: ""
         val fromService = intent.getBooleanExtra("from_service", false)
+        val previewOnly = intent.getBooleanExtra("preview_only", false)
 
-        if (alarmId.isNotBlank() && !fromService) {
+        if (alarmId.isNotBlank() && !fromService && !previewOnly) {
             Log.d(TAG, "Starting AlarmService from foreground AlarmActivity")
             val serviceIntent = Intent(this, AlarmService::class.java).apply {
                 action = AlarmService.ACTION_START
