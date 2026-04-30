@@ -392,11 +392,12 @@ export const Tasks = () => {
             </div>
           </div>
 
-      {/* Created by You Section */}
+      {/* Created by You Section - hidden in solo mode (replaced by unified list) */}
+      {!isSoloMode && (
       <div className="px-4 mb-4">
         <div className="bg-card rounded-2xl p-4 shadow-card">
-          <h3 className="font-semibold text-foreground mb-3">{isSoloMode ? "Your Tasks" : "Created by You"}</h3>
-          <p className="text-sm text-muted-foreground mb-3">{isSoloMode ? "Personal tasks you've created" : "Tasks you've assigned to others"}</p>
+          <h3 className="font-semibold text-foreground mb-3">Created by You</h3>
+          <p className="text-sm text-muted-foreground mb-3">Tasks you've assigned to others</p>
           
           {/* Status Filter Tabs - Fixed spelling */}
           <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
@@ -488,6 +489,7 @@ export const Tasks = () => {
           </div>
         </div>
       </div>
+      )}
 
       {/* Assigned to You by Others */}
       {!isSoloMode && tasksAssignedToMe.length > 0 && (
