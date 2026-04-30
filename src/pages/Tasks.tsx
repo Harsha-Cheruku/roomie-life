@@ -722,7 +722,7 @@ export const Tasks = () => {
                         </Button>
                       </>
                     )}
-                    {task.status === 'accepted' && (
+                    {(task.status === 'accepted' || (isSoloMode && task.status === 'pending')) && (
                       <Button
                         size="sm"
                         className="w-full h-8 text-xs"
