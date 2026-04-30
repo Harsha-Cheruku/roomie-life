@@ -11,6 +11,7 @@ import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
+import { useCurrency } from '@/hooks/useCurrency';
 
 interface ExpenseSplit {
   id: string;
@@ -73,6 +74,7 @@ export const ExpenseDetailSheet = ({
 }: ExpenseDetailSheetProps) => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const currency = useCurrency();
   const { createExpenseAcceptedNotification, createExpenseRejectedNotification, createExpensePaidNotification } = useCreateNotification();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
@@ -293,7 +295,7 @@ export const ExpenseDetailSheet = ({
                   <p className="text-sm text-muted-foreground">{formatDate(expense.created_at)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-2xl font-bold text-primary">₹{expense.total_amount.toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-primary">{currency}{expense.total_amount.toLocaleString()}</p>
                   <span className={cn(
                     "text-xs px-2 py-1 rounded-full",
                     expense.status === 'settled' ? 'bg-mint/20 text-mint' : 'bg-accent/20 text-accent'
@@ -347,17 +349,17 @@ export const ExpenseDetailSheet = ({
                               <div className="min-w-0">
                                 <p className="text-sm font-medium text-foreground truncate">{it.name}</p>
                                 {it.quantity > 1 && (
-                                  <p className="text-xs text-muted-foreground">Qty: {it.quantity} × ₹{it.price.toFixed(2)}</p>
+                                  <p className="text-xs text-muted-foreground">Qty: {it.quantity} × {currency}{it.price.toFixed(2)}</p>
                                 )}
                               </div>
                             </div>
-                            <p className="text-sm font-semibold text-foreground shrink-0">₹{itemTotal.toFixed(2)}</p>
+                            <p className="text-sm font-semibold text-foreground shrink-0">{currency}{itemTotal.toFixed(2)}</p>
                           </button>
                           {isExpanded && (
                             <div className="mt-2 ml-6 bg-muted/40 rounded-lg p-2 space-y-1.5">
                               <div className="flex items-center justify-between text-xs text-muted-foreground pb-1 border-b border-border">
                                 <span>Split across {participants.length} {participants.length === 1 ? 'person' : 'people'}</span>
-                                <span className="font-semibold text-primary">₹{perPerson.toFixed(2)} each</span>
+                                <span className="font-semibold text-primary">{currency}{perPerson.toFixed(2)} each</span>
                               </div>
                               {participants.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">No active participants.</p>
@@ -371,7 +373,7 @@ export const ExpenseDetailSheet = ({
                                       <p className="flex-1 text-xs font-medium text-foreground truncate">
                                         {isMe ? 'You' : p?.display_name || 'Unknown'}
                                       </p>
-                                      <p className="text-xs font-semibold text-foreground">₹{perPerson.toFixed(2)}</p>
+                                      <p className="text-xs font-semibold text-foreground">{currency}{perPerson.toFixed(2)}</p>
                                     </div>
                                   );
                                 })
@@ -384,7 +386,7 @@ export const ExpenseDetailSheet = ({
                     <div className="flex items-center justify-between pt-2 mt-1 border-t border-border">
                       <p className="text-sm font-semibold text-foreground">Total</p>
                       <p className="text-sm font-bold text-primary">
-                        ₹{items.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}
+                        {currency}{items.reduce((s, i) => s + i.price * i.quantity, 0).toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -406,7 +408,7 @@ export const ExpenseDetailSheet = ({
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="text-lg font-bold text-mint">₹{expense.total_amount.toLocaleString()}</p>
+                  <p className="text-lg font-bold text-mint">{currency}{expense.total_amount.toLocaleString()}</p>
                 </div>
               </div>
             </div>
@@ -448,7 +450,7 @@ export const ExpenseDetailSheet = ({
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-foreground">₹{split.amount.toFixed(2)}</p>
+                          <p className="font-bold text-foreground">{currency}{split.amount.toFixed(2)}</p>
                         </div>
                       </div>
 

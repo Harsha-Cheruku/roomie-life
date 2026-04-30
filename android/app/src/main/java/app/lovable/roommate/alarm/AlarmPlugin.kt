@@ -99,6 +99,8 @@ class AlarmPlugin : Plugin() {
             obj.put("stopCondition", alarm.stopCondition)
             obj.put("createdBy", alarm.createdBy)
             obj.put("isActive", alarm.isActive)
+            obj.put("repeatWeekly", alarm.repeatWeekly)
+            obj.put("dayOfWeek", alarm.dayOfWeek)
             arr.put(obj)
         }
         val result = JSObject()
