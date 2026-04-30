@@ -53,22 +53,24 @@ object AlarmHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val showIntent = PendingIntent.getActivity(
+            context,
+            requestCode,
+            Intent(context, AlarmActivity::class.java).apply {
+                putExtra("alarm_id", alarm.id)
+                putExtra("alarm_title", alarm.title)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (alarmManager.canScheduleExactAlarms()) {
-                    alarmManager.setAlarmClock(
-                        AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
-                        pendingIntent
-                    )
-                } else {
-                    // Fallback if exact alarm permission not granted
-                    alarmManager.setExactAndAllowWhileIdle(
-                        AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent
-                    )
-                }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                // Safe fallback when Android has not granted "Alarms & reminders" yet.
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             } else {
                 alarmManager.setAlarmClock(
-                    AlarmManager.AlarmClockInfo(triggerTime, pendingIntent),
+                    AlarmManager.AlarmClockInfo(triggerTime, showIntent),
                     pendingIntent
                 )
             }
