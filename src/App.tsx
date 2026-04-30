@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { lazy, Suspense, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { getDeviceId } from "@/hooks/useDeviceId";
 
 // Eager: needed on first paint for any route
 import Index from "./pages/Index";
@@ -56,7 +58,8 @@ const RouteFallback = () => (
 
 /** Initialize native alarm permissions + battery optimization check on startup */
 function NativeAlarmInit() {
-  const { isNative, checkBatteryOptimization, requestDisableBatteryOptimization, requestExactAlarmPermission } = useNativeAlarm();
+  const { user, currentRoom } = useAuth();
+  const { isNative, createAlarm, checkBatteryOptimization, requestDisableBatteryOptimization, requestExactAlarmPermission } = useNativeAlarm();
   useEffect(() => {
     if (isNative) {
       requestExactAlarmPermission();
@@ -65,6 +68,63 @@ function NativeAlarmInit() {
       });
     }
   }, [isNative, checkBatteryOptimization, requestDisableBatteryOptimization, requestExactAlarmPermission]);
+
+  useEffect(() => {
+    if (!isNative || !user || !currentRoom?.id) return;
+
+    let cancelled = false;
+    const syncNativeAlarms = async () => {
+      const deviceId = getDeviceId();
+      const { data, error } = await supabase
+        .from("alarms")
+        .select("id,title,alarm_time,days_of_week,condition_type,created_by,owner_device_id")
+        .eq("room_id", currentRoom.id)
+        .eq("is_active", true)
+        .eq("created_by", user.id);
+
+      if (cancelled || error || !data) return;
+
+      for (const alarm of data) {
+        if (alarm.owner_device_id && alarm.owner_device_id !== deviceId) continue;
+        const [hourPart, minutePart] = alarm.alarm_time.split(":");
+        const hour = Number(hourPart);
+        const minute = Number(minutePart);
+        if (!Number.isFinite(hour) || !Number.isFinite(minute)) continue;
+
+        const days = Array.isArray(alarm.days_of_week) ? alarm.days_of_week : [];
+        const isDaily = days.length >= 7;
+        const stopCondition = alarm.condition_type === "owner_only" ? "owner_only" : "anyone";
+
+        if (isDaily || days.length <= 1) {
+          await createAlarm({
+            id: alarm.id,
+            title: alarm.title,
+            hour,
+            minute,
+            repeatDaily: isDaily,
+            stopCondition,
+            createdBy: user.id,
+          });
+        } else {
+          await Promise.all(days.map((day) => createAlarm({
+            id: `${alarm.id}_d${day}`,
+            title: alarm.title,
+            hour,
+            minute,
+            repeatDaily: false,
+            repeatWeekly: true,
+            dayOfWeek: day + 1,
+            stopCondition,
+            createdBy: user.id,
+          })));
+        }
+      }
+    };
+
+    syncNativeAlarms();
+    return () => { cancelled = true; };
+  }, [isNative, user, currentRoom?.id, createAlarm]);
+
   return null;
 }
 

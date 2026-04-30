@@ -24,7 +24,7 @@
 
         <!-- Main Capacitor activity -->
         <activity
-            android:name=".MainActivity"
+            android:name="app.lovable.roommate.MainActivity"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
@@ -44,7 +44,7 @@
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
         <!-- Alarm foreground service -->
         <service

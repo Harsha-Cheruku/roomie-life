@@ -1,5 +1,6 @@
 package app.lovable.roommate.alarm
 
+import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -10,13 +11,12 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
 /**
  * Full-screen alarm activity that shows over lock screen.
  * Big STOP button for instant dismiss. No JS dependency.
  */
-class AlarmActivity : AppCompatActivity() {
+class AlarmActivity : Activity() {
 
     companion object {
         private const val TAG = "AlarmActivity"
@@ -44,8 +44,56 @@ class AlarmActivity : AppCompatActivity() {
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        handleAlarmIntent(intent)
+    }
+
+    private fun handleAlarmIntent(intent: Intent) {
         val alarmId = intent.getStringExtra("alarm_id") ?: ""
         val title = intent.getStringExtra("alarm_title") ?: "Alarm"
+        val ringtoneUri = intent.getStringExtra("ringtone_uri") ?: ""
+        val repeatDaily = intent.getBooleanExtra("repeat_daily", false)
+        val repeatWeekly = intent.getBooleanExtra("repeat_weekly", false)
+        val hour = intent.getIntExtra("alarm_hour", -1)
+        val minute = intent.getIntExtra("alarm_minute", -1)
+        val dayOfWeek = intent.getIntExtra("day_of_week", -1)
+        val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
+        val createdBy = intent.getStringExtra("created_by") ?: ""
+        val fromService = intent.getBooleanExtra("from_service", false)
+        val previewOnly = intent.getBooleanExtra("preview_only", false)
+
+        if (alarmId.isNotBlank() && !fromService && !previewOnly) {
+            Log.d(TAG, "Starting AlarmService from foreground AlarmActivity")
+            val serviceIntent = Intent(this, AlarmService::class.java).apply {
+                action = AlarmService.ACTION_START
+                putExtra("alarm_id", alarmId)
+                putExtra("alarm_title", title)
+                putExtra("ringtone_uri", ringtoneUri)
+                putExtra("stop_condition", stopCondition)
+                putExtra("created_by", createdBy)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
+        }
+
+        if (!previewOnly && alarmId.isNotBlank() && (repeatDaily || repeatWeekly) && hour in 0..23 && minute in 0..59) {
+            AlarmHelper.scheduleAlarm(
+                this,
+                AlarmData(
+                    id = alarmId,
+                    title = title,
+                    hour = hour,
+                    minute = minute,
+                    repeatDaily = repeatDaily,
+                    ringtoneUri = ringtoneUri,
+                    stopCondition = stopCondition,
+                    createdBy = createdBy,
+                    isActive = true,
+                    repeatWeekly = repeatWeekly,
+                    dayOfWeek = dayOfWeek
+                )
+            )
+        } else if (!previewOnly && alarmId.isNotBlank() && !repeatDaily && !repeatWeekly) {
+            AlarmHelper.removeAlarm(this, alarmId)
+        }
 
         // Build UI programmatically (no XML layout needed)
         val layout = LinearLayout(this).apply {
@@ -115,6 +163,7 @@ class AlarmActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        handleAlarmIntent(intent)
     }
 
     override fun onBackPressed() {
