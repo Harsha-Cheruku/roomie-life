@@ -44,7 +44,7 @@
             android:excludeFromRecents="true"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
-            android:theme="@style/Theme.AppCompat.NoActionBar" />
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
         <!-- Alarm foreground service -->
         <service
