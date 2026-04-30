@@ -74,7 +74,7 @@ class AlarmActivity : Activity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent) else startService(serviceIntent)
         }
 
-        if (alarmId.isNotBlank() && (repeatDaily || repeatWeekly) && hour in 0..23 && minute in 0..59) {
+        if (!previewOnly && alarmId.isNotBlank() && (repeatDaily || repeatWeekly) && hour in 0..23 && minute in 0..59) {
             AlarmHelper.scheduleAlarm(
                 this,
                 AlarmData(
@@ -91,7 +91,7 @@ class AlarmActivity : Activity() {
                     dayOfWeek = dayOfWeek
                 )
             )
-        } else if (alarmId.isNotBlank() && !repeatDaily && !repeatWeekly) {
+        } else if (!previewOnly && alarmId.isNotBlank() && !repeatDaily && !repeatWeekly) {
             AlarmHelper.removeAlarm(this, alarmId)
         }
 
