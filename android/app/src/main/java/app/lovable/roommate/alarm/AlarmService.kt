@@ -101,6 +101,7 @@ class AlarmService : Service() {
             )
             putExtra("alarm_id", alarmId)
             putExtra("alarm_title", title)
+            putExtra("from_service", true)
         }
         startActivity(activityIntent)
     }
@@ -111,6 +112,7 @@ class AlarmService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             putExtra("alarm_id", alarmId)
             putExtra("alarm_title", title)
+            putExtra("from_service", true)
         }
         val fullScreenPending = PendingIntent.getActivity(
             this, 0, fullScreenIntent,
