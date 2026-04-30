@@ -665,10 +665,14 @@ export const Tasks = () => {
                       {task.title}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="xs" />
-                      <span className="text-xs text-muted-foreground">
-                        {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
-                      </span>
+                      {!isSoloMode && (
+                        <>
+                          <ProfileAvatar avatar={task.assignee_profile?.avatar || '😊'} size="xs" />
+                          <span className="text-xs text-muted-foreground">
+                            {task.assigned_to === user?.id ? 'You' : task.assignee_profile?.display_name}
+                          </span>
+                        </>
+                      )}
                       <span className={cn("text-xs px-2 py-0.5 rounded-full", priorityColors[task.priority])}>
                         {task.priority}
                       </span>
