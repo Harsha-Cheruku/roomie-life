@@ -90,6 +90,8 @@ class AlarmActivity : Activity() {
                     dayOfWeek = dayOfWeek
                 )
             )
+        } else if (alarmId.isNotBlank() && !repeatDaily && !repeatWeekly) {
+            AlarmHelper.removeAlarm(this, alarmId)
         }
 
         // Build UI programmatically (no XML layout needed)
