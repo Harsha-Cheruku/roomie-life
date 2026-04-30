@@ -11,6 +11,7 @@ import { EditExpenseDialog } from '@/components/expenses/EditExpenseDialog';
 import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
+import { useCurrency } from '@/hooks/useCurrency';
 
 interface ExpenseSplit {
   id: string;
@@ -73,6 +74,7 @@ export const ExpenseDetailSheet = ({
 }: ExpenseDetailSheetProps) => {
   const { user, profile } = useAuth();
   const { toast } = useToast();
+  const currency = useCurrency();
   const { createExpenseAcceptedNotification, createExpenseRejectedNotification, createExpensePaidNotification } = useCreateNotification();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
