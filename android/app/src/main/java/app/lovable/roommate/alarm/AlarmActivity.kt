@@ -1,5 +1,6 @@
 package app.lovable.roommate.alarm
 
+import android.app.Activity
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -10,13 +11,12 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
 
 /**
  * Full-screen alarm activity that shows over lock screen.
  * Big STOP button for instant dismiss. No JS dependency.
  */
-class AlarmActivity : AppCompatActivity() {
+class AlarmActivity : Activity() {
 
     companion object {
         private const val TAG = "AlarmActivity"
