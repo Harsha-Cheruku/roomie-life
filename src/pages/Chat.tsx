@@ -117,6 +117,14 @@ export const Chat = () => {
   const messageIdsRef = useRef<Set<string>>(new Set());
   const autoScrollRef = useRef(true);
   const focusMessageIdRef = useRef<string | null>(((location.state as { focusMessageId?: string } | null)?.focusMessageId) ?? null);
+  // Refs that mirror state so realtime callbacks stay stable and the channel
+  // never tears down on every profile/toast change (root cause of chat lag).
+  const profilesMapRef = useRef(profilesMap);
+  const userIdRef = useRef<string | undefined>(user?.id);
+  const messageViewsRef = useRef(messageViews);
+  useEffect(() => { profilesMapRef.current = profilesMap; }, [profilesMap]);
+  useEffect(() => { userIdRef.current = user?.id; }, [user?.id]);
+  useEffect(() => { messageViewsRef.current = messageViews; }, [messageViews]);
 
   const isNearBottom = useCallback(() => {
     const container = scrollRef.current;
@@ -285,9 +293,10 @@ export const Chat = () => {
   // Mark messages as seen
   const markMessagesSeen = useCallback(async () => {
     if (!user || !currentRoom || messages.length === 0) return;
+    const currentViews = messageViewsRef.current;
     const unseenIncoming = messages.filter((message) => {
       if (message.sender_id === user.id || message.deleted_at) return false;
-      return !(messageViews[message.id] || []).some((receipt) => receipt.user_id === user.id);
+      return !(currentViews[message.id] || []).some((receipt) => receipt.user_id === user.id);
     });
 
     if (unseenIncoming.length === 0) return;
@@ -306,7 +315,9 @@ export const Chat = () => {
     } else {
       console.error('Error marking messages seen:', error);
     }
-  }, [currentRoom, messageViews, messages, user]);
+    // Intentionally NOT depending on `messageViews` — it would create a feedback
+    // loop (effect writes views, which retriggers the effect).
+  }, [currentRoom, messages, user]);
 
   useEffect(() => { markMessagesSeen(); }, [markMessagesSeen]);
 
@@ -335,13 +346,14 @@ export const Chat = () => {
             }
             return [...prev, newMsg];
           });
-          if (newMsg.sender_id === user?.id || autoScrollRef.current) {
+          const currentUserId = userIdRef.current;
+          if (newMsg.sender_id === currentUserId || autoScrollRef.current) {
             scrollToBottom('smooth');
           } else {
             setHasNewMessagesBelow(true);
           }
-          if (newMsg.sender_id !== user?.id) {
-            const senderProfile = profilesMap.get(newMsg.sender_id);
+          if (newMsg.sender_id !== currentUserId) {
+            const senderProfile = profilesMapRef.current.get(newMsg.sender_id);
             toastHook({ title: senderProfile?.display_name || 'Someone', description: newMsg.message_type === 'text' ? newMsg.content.slice(0, 50) : `Sent a ${newMsg.message_type}` });
           }
         }
@@ -388,7 +400,10 @@ export const Chat = () => {
 
     channelRef.current = channel;
     return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
-  }, [currentRoom, profilesMap, user?.id, toastHook, scrollToBottom]);
+    // Only re-subscribe when the room actually changes. profilesMap/user/toast are
+    // accessed via refs to keep the channel stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentRoom?.id]);
 
   // Realtime + reconnect-only refresh. Removed 3.5s polling that caused message-list churn / lag.
   useEffect(() => {
