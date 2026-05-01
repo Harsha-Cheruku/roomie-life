@@ -107,6 +107,7 @@ export const Chat = () => {
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
   const [hasNewMessagesBelow, setHasNewMessagesBelow] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [connectionState, setConnectionState] = useState<'connecting' | 'connected' | 'disconnected'>('connecting');
   const [voiceUpload, setVoiceUpload] = useState<{
     state: 'idle' | 'uploading' | 'success' | 'error';
     message?: string;
@@ -326,7 +327,11 @@ export const Chat = () => {
     if (!currentRoom) return;
     if (channelRef.current) supabase.removeChannel(channelRef.current);
 
-    const channel = supabase
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    const buildChannel = () => supabase
       .channel(`room-${currentRoom.id}-messages-realtime`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` },
         (payload) => {
@@ -395,11 +400,49 @@ export const Chat = () => {
             [r.message_id]: (prev[r.message_id] || []).filter((x) => !(x.user_id === r.user_id && x.emoji === r.emoji)),
           }));
         }
-      )
-      .subscribe();
+      );
 
-    channelRef.current = channel;
-    return () => { if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; } };
+    const scheduleReconnect = () => {
+      if (cancelled) return;
+      if (reconnectTimer) return;
+      attempt = Math.min(attempt + 1, 6);
+      const delay = Math.min(1000 * 2 ** (attempt - 1), 15000); // 1s,2s,4s,8s,15s cap
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        if (cancelled) return;
+        if (channelRef.current) {
+          supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+        connect();
+      }, delay);
+    };
+
+    const connect = () => {
+      setConnectionState('connecting');
+      const channel = buildChannel();
+      channel.subscribe((status) => {
+        if (cancelled) return;
+        if (status === 'SUBSCRIBED') {
+          attempt = 0;
+          setConnectionState('connected');
+          // Refresh on (re)connect to recover any missed messages.
+          void fetchMessages({ silent: true });
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setConnectionState('disconnected');
+          scheduleReconnect();
+        }
+      });
+      channelRef.current = channel;
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
+    };
     // Only re-subscribe when the room actually changes. profilesMap/user/toast are
     // accessed via refs to keep the channel stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -747,7 +790,18 @@ export const Chat = () => {
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="truncate font-display text-lg font-semibold text-foreground">{currentRoom?.name || 'Room Chat'}</h1>
-              <div className="flex items-center gap-1 text-xs text-muted-foreground"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1"><Users className="w-3 h-3" /><span>{roomMembers.length} members</span></span>
+                <span className="flex items-center gap-1" aria-label={`Realtime ${connectionState}`} title={`Realtime: ${connectionState}`}>
+                  <span className={cn(
+                    "h-2 w-2 rounded-full",
+                    connectionState === 'connected' && "bg-green-500",
+                    connectionState === 'connecting' && "bg-yellow-500 animate-pulse",
+                    connectionState === 'disconnected' && "bg-red-500",
+                  )} />
+                  <span className="capitalize">{connectionState}</span>
+                </span>
+              </div>
             </div>
             <div className="flex -space-x-2">
               {roomMembers.slice(0, 4).map(member => (
