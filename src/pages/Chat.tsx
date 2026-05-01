@@ -462,6 +462,20 @@ export const Chat = () => {
     };
   }, [currentRoom, fetchMessages]);
 
+  // Safety-net polling: if realtime is not connected (slow network, mobile
+  // backgrounding, channel stuck), still pull new messages every few seconds
+  // so the list stays in sync without requiring a navigation refresh.
+  useEffect(() => {
+    if (!currentRoom) return;
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      // Always do a silent refresh; cheap and keeps UI in sync even if realtime
+      // events are dropped. messagesAreEqual prevents unnecessary re-renders.
+      void fetchMessages({ silent: true });
+    }, connectionState === 'connected' ? 8000 : 3000);
+    return () => window.clearInterval(interval);
+  }, [currentRoom, fetchMessages, connectionState]);
+
   useEffect(() => {
     if (!messages.length) return;
 
