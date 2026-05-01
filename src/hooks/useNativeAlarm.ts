@@ -60,18 +60,21 @@ export function useNativeAlarm() {
         const id = opts.id || `alarm_${Date.now()}`;
         const notificationId = toNotificationId(id);
 
-        const schedule: Record<string, unknown> = {
-          hour: opts.hour,
-          minute: opts.minute,
-          allowWhileIdle: true,
-        };
+        // Compute next trigger date for one-shot or fallback usage.
+        const now = new Date();
+        const next = new Date();
+        next.setHours(opts.hour, opts.minute, 0, 0);
+        if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1);
+
+        const schedule: Record<string, unknown> = { allowWhileIdle: true };
         if (opts.repeatDaily) {
+          schedule.on = { hour: opts.hour, minute: opts.minute };
           schedule.repeats = true;
-          schedule.every = 'day';
         } else if (opts.repeatWeekly && typeof opts.dayOfWeek === 'number') {
-          schedule.repeats = true;
-          // iOS weekday: Capacitor uses on.weekday 1=Sun..7=Sat (matches our mapping).
           schedule.on = { weekday: opts.dayOfWeek, hour: opts.hour, minute: opts.minute };
+          schedule.repeats = true;
+        } else {
+          schedule.at = next;
         }
 
         await LocalNotifications.schedule({
