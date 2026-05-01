@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const fetchUserRooms = async (userId: string) => {
+  const fetchUserRooms = async (userId: string, applyPriority = false) => {
     const { data: memberships } = await supabase
       .from("room_members")
       .select("room_id, rooms(*)")
@@ -86,28 +86,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       setUserRooms(rooms);
 
-      // Priority: user-pinned default room > last active room > first room
-      const pinnedRoomId = localStorage.getItem(DEFAULT_ROOM_KEY);
-      const lastRoomId = localStorage.getItem(LAST_ROOM_KEY);
+      // Room priority (pinned default > last active > first) only applies on
+      // initial login. On token refresh / background re-runs, preserve whatever
+      // room the user is currently using so they aren't yanked back to default.
+      setCurrentRoom((existing) => {
+        const stillValid = existing && rooms.find((r) => r.id === existing.id);
+        if (stillValid && !applyPriority) return existing;
 
-      let roomToSet: Room | null = null;
+        const pinnedRoomId = localStorage.getItem(DEFAULT_ROOM_KEY);
+        const lastRoomId = localStorage.getItem(LAST_ROOM_KEY);
 
-      if (pinnedRoomId) {
-        roomToSet = rooms.find(r => r.id === pinnedRoomId) || null;
-      }
+        let roomToSet: Room | null = null;
+        if (applyPriority && pinnedRoomId) {
+          roomToSet = rooms.find(r => r.id === pinnedRoomId) || null;
+        }
+        if (!roomToSet && lastRoomId) {
+          roomToSet = rooms.find(r => r.id === lastRoomId) || null;
+        }
+        if (!roomToSet) roomToSet = rooms[0] || null;
 
-      if (!roomToSet && lastRoomId) {
-        roomToSet = rooms.find(r => r.id === lastRoomId) || null;
-      }
-      
-      if (!roomToSet && rooms.length > 0) {
-        roomToSet = rooms[0];
-      }
-      
-      if (roomToSet) {
-        setCurrentRoom(roomToSet);
-        localStorage.setItem(LAST_ROOM_KEY, roomToSet.id);
-      }
+        if (roomToSet) localStorage.setItem(LAST_ROOM_KEY, roomToSet.id);
+        return roomToSet;
+      });
     } else {
       setUserRooms([]);
       setCurrentRoom(null);
@@ -115,17 +115,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    // Track whether the initial-session resolution has applied login priority,
+    // so onAuthStateChange callbacks (TOKEN_REFRESHED, USER_UPDATED, etc.) do
+    // not re-apply the pinned default room mid-session.
+    let initialPriorityApplied = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          const isLoginEvent = event === 'SIGNED_IN' && !initialPriorityApplied;
           setTimeout(() => {
             fetchProfile(session.user.id);
-            fetchUserRooms(session.user.id);
+            fetchUserRooms(session.user.id, isLoginEvent);
+            if (isLoginEvent) initialPriorityApplied = true;
           }, 0);
         } else {
+          initialPriorityApplied = false;
           setProfile(null);
           setCurrentRoom(null);
           setUserRooms([]);
@@ -138,9 +146,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(session?.user ?? null);
       
       if (session?.user) {
+        initialPriorityApplied = true;
         await Promise.all([
           fetchProfile(session.user.id),
-          fetchUserRooms(session.user.id),
+          fetchUserRooms(session.user.id, true),
         ]);
       }
       setLoading(false);
@@ -323,7 +332,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshRooms = async () => {
     if (user) {
-      await fetchUserRooms(user.id);
+      await fetchUserRooms(user.id, false);
     }
   };
 
