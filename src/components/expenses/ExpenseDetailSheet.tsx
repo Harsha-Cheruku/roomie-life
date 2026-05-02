@@ -367,13 +367,44 @@ export const ExpenseDetailSheet = ({
                                 participants.map(s => {
                                   const p = memberProfiles.get(s.user_id);
                                   const isMe = s.user_id === user?.id;
+                                  const canAct =
+                                    isMe &&
+                                    s.status === 'pending' &&
+                                    !isCreator &&
+                                    expense.paid_by !== user?.id;
+                                  const isUpdating = updatingId === s.id;
                                   return (
-                                    <div key={s.id} className="flex items-center gap-2">
-                                      <ProfileAvatar avatar={p?.avatar} size="sm" />
-                                      <p className="flex-1 text-xs font-medium text-foreground truncate">
-                                        {isMe ? 'You' : p?.display_name || 'Unknown'}
-                                      </p>
-                                      <p className="text-xs font-semibold text-foreground">{currency}{perPerson.toFixed(2)}</p>
+                                    <div key={s.id} className="space-y-1.5">
+                                      <div className="flex items-center gap-2">
+                                        <ProfileAvatar avatar={p?.avatar} size="sm" />
+                                        <p className="flex-1 text-xs font-medium text-foreground truncate">
+                                          {isMe ? 'You' : p?.display_name || 'Unknown'}
+                                        </p>
+                                        <p className="text-xs font-semibold text-foreground">{currency}{perPerson.toFixed(2)}</p>
+                                      </div>
+                                      {canAct && (
+                                        <div className="flex gap-1.5 ml-7">
+                                          <Button
+                                            size="sm"
+                                            className="h-7 px-2 text-xs gap-1 bg-mint hover:bg-mint/90"
+                                            onClick={(e) => { e.stopPropagation(); handleAccept(s.id); }}
+                                            disabled={isUpdating}
+                                          >
+                                            {isUpdating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                            Accept
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 px-2 text-xs gap-1 border-coral text-coral hover:bg-coral/10"
+                                            onClick={(e) => { e.stopPropagation(); handleRejectClick(s.id); }}
+                                            disabled={isUpdating}
+                                          >
+                                            <X className="w-3 h-3" />
+                                            Reject
+                                          </Button>
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })
