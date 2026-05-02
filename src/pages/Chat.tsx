@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown, Mic, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -777,7 +777,15 @@ export const Chat = () => {
     return `Seen by ${names[0]} +${receipts.length - 1}`;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  // Smart windowing: only render the last N messages to keep DOM small and
+  // scrolling smooth on long histories. Older messages remain in state and
+  // can be exposed via "load older" later if needed.
+  const MAX_RENDERED = 200;
+  const visibleMessages = useMemo(
+    () => (messages.length > MAX_RENDERED ? messages.slice(messages.length - MAX_RENDERED) : messages),
+    [messages]
+  );
+  const messageGroups = useMemo(() => groupMessagesByDate(visibleMessages), [visibleMessages]);
   const selectedMessage = selectedMessageId ? messages.find((message) => message.id === selectedMessageId) : null;
   const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
