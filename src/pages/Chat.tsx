@@ -867,7 +867,12 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} data-message-id={message.id} className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div
+                    key={message.id}
+                    data-message-id={message.id}
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: '0 64px' } as React.CSSProperties}
+                    className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}
+                  >
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
