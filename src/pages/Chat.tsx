@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Send, Loader2, ArrowLeft, Users, Check, CheckCheck, Edit2, Trash2, Eye, Forward, X, ArrowDown, Mic, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -462,18 +462,29 @@ export const Chat = () => {
     };
   }, [currentRoom, fetchMessages]);
 
-  // Safety-net polling: if realtime is not connected (slow network, mobile
-  // backgrounding, channel stuck), still pull new messages every few seconds
-  // so the list stays in sync without requiring a navigation refresh.
+  // Always-on background sync: poll every few seconds regardless of realtime
+  // state. messagesAreEqual prevents re-renders when nothing changed, so this
+  // is cheap. When realtime is healthy we slow down; when it stalls we speed
+  // up. Also kicks off immediately on focus / online events for instant catch-up.
   useEffect(() => {
     if (!currentRoom) return;
-    const interval = window.setInterval(() => {
+    const tick = () => {
       if (document.visibilityState !== 'visible') return;
-      // Always do a silent refresh; cheap and keeps UI in sync even if realtime
-      // events are dropped. messagesAreEqual prevents unnecessary re-renders.
       void fetchMessages({ silent: true });
-    }, connectionState === 'connected' ? 8000 : 3000);
-    return () => window.clearInterval(interval);
+    };
+    const intervalMs = connectionState === 'connected' ? 5000 : 2000;
+    const interval = window.setInterval(tick, intervalMs);
+    // Immediate catch-up on focus/online
+    const onFocus = () => tick();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('online', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('online', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
   }, [currentRoom, fetchMessages, connectionState]);
 
   useEffect(() => {
@@ -766,7 +777,15 @@ export const Chat = () => {
     return `Seen by ${names[0]} +${receipts.length - 1}`;
   };
 
-  const messageGroups = groupMessagesByDate(messages);
+  // Smart windowing: only render the last N messages to keep DOM small and
+  // scrolling smooth on long histories. Older messages remain in state and
+  // can be exposed via "load older" later if needed.
+  const MAX_RENDERED = 200;
+  const visibleMessages = useMemo(
+    () => (messages.length > MAX_RENDERED ? messages.slice(messages.length - MAX_RENDERED) : messages),
+    [messages]
+  );
+  const messageGroups = useMemo(() => groupMessagesByDate(visibleMessages), [visibleMessages]);
   const selectedMessage = selectedMessageId ? messages.find((message) => message.id === selectedMessageId) : null;
   const selectedOwnMessage = selectedMessage?.sender_id === user?.id ? selectedMessage : null;
 
@@ -848,7 +867,12 @@ export const Chat = () => {
                 const hasSeen = seenReceipts.length > 0;
 
                 return (
-                  <div key={message.id} data-message-id={message.id} className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}>
+                  <div
+                    key={message.id}
+                    data-message-id={message.id}
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: '0 64px' } as React.CSSProperties}
+                    className={cn('flex w-full gap-2 scroll-mt-28', isOwnMessage ? 'justify-end' : 'justify-start')}
+                  >
                     {!isOwnMessage && (
                       <div className="w-8 shrink-0">
                         {showAvatar ? <ProfileAvatar avatar={senderProfile?.avatar} size="sm" /> : null}
