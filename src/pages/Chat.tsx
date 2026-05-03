@@ -88,6 +88,41 @@ const messagesAreEqual = (current: Message[], next: Message[]) => {
   });
 };
 
+const MESSAGE_HISTORY_LIMIT = 300;
+
+const sortMessages = (items: Message[]) =>
+  [...items].sort((a, b) => {
+    const byDate = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return byDate || a.id.localeCompare(b.id);
+  });
+
+const mergeMessages = (current: Message[], incoming: Message[], keepExisting = true) => {
+  const byId = new Map<string, Message>();
+
+  if (keepExisting) {
+    current.forEach((message) => byId.set(message.id, message));
+  }
+
+  incoming.forEach((message) => {
+    byId.set(message.id, message);
+  });
+
+  incoming.forEach((message) => {
+    current.forEach((existing) => {
+      if (
+        existing.id.startsWith('temp-') &&
+        existing.sender_id === message.sender_id &&
+        existing.message_type === message.message_type &&
+        existing.content === message.content
+      ) {
+        byId.delete(existing.id);
+      }
+    });
+  });
+
+  return sortMessages(Array.from(byId.values())).slice(-MESSAGE_HISTORY_LIMIT);
+};
+
 export const Chat = () => {
   const { user, currentRoom } = useAuth();
   const { toast: toastHook } = useToast();
