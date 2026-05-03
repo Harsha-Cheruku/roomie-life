@@ -337,6 +337,8 @@ export const Chat = () => {
     }
 
     autoScrollRef.current = true;
+    newestMessageAtRef.current = null;
+    fetchingMessagesRef.current = false;
     setSelectedMessageId(null);
     void fetchRoomMembers();
     void fetchMessages();
