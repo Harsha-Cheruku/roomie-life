@@ -75,31 +75,30 @@ export const PushNotificationPrompt = ({ onDismiss, variant = 'banner' }: PushNo
   return (
     <div className={cn(
       "fixed top-16 left-0 right-0 z-40 mx-4 animate-slide-down",
-      "bg-gradient-to-r from-primary/90 to-accent/90 backdrop-blur-lg",
-      "rounded-2xl shadow-lg p-4"
+      "bg-card border border-border backdrop-blur-lg",
+      "rounded-2xl shadow-lg p-3"
     )}>
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center">
-          <Bell className="w-5 h-5 text-white" />
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <Bell className="w-5 h-5 text-primary" />
         </div>
-        <div className="flex-1">
-          <p className="font-semibold text-white text-sm">Enable push notifications</p>
-          <p className="text-xs text-white/80">Get alerts even when app is closed</p>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-foreground text-sm">Enable notifications</p>
+          <p className="text-xs text-muted-foreground truncate">Get alerts even when app is closed</p>
         </div>
         <Button
           size="sm"
-          variant="secondary"
           onClick={handleEnable}
           disabled={isLoading}
-          className="bg-white text-primary hover:bg-white/90"
+          className="h-8 px-3 text-xs"
         >
           {isLoading ? 'Enabling...' : 'Enable'}
         </Button>
         <button
           onClick={handleDismiss}
-          className="text-white/80 hover:text-white ml-1"
+          className="text-muted-foreground hover:text-foreground ml-1 shrink-0"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>

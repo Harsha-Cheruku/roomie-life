@@ -425,7 +425,19 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
                         >
                           <div className="min-w-0 flex-1">
                             <p className="text-xs font-medium text-foreground truncate">{bill.title}</p>
-                            <p className="text-[10px] text-muted-foreground">{new Date(bill.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span className={cn(
+                                "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
+                                breakdownMode === 'willPay'
+                                  ? 'bg-coral/15 text-coral'
+                                  : 'bg-mint/15 text-mint'
+                              )}>
+                                {breakdownMode === 'willPay' ? 'You have to pay' : 'You will receive'}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {new Date(bill.date).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
                           </div>
                           <p className={cn("text-xs font-semibold whitespace-nowrap", breakdownMode === 'willPay' ? 'text-coral' : 'text-mint')}>
                             {breakdownMode === 'willPay' ? '-' : '+'}{currency}{formatAmount(bill.amount)}

@@ -444,128 +444,104 @@ export const ExpenseDetailSheet = ({
               </div>
             </div>
 
-            {/* Split Details */}
-            <div className="bg-card rounded-2xl p-4 shadow-card">
-              <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Users className="w-4 h-4 text-primary" />
-                Split Between ({expense.splits?.length || 0})
-              </h3>
-              <div className="space-y-3">
-                {expense.splits?.map(split => {
-                  const splitProfile = memberProfiles.get(split.user_id);
-                  const isMe = split.user_id === user?.id;
-                  const isUpdating = updatingId === split.id;
-                  const needsAction = isMe && split.status === 'pending' && !isCreator && expense.paid_by !== user?.id;
-                  const needsPayment = isMe && split.status === 'accepted' && !split.is_paid && expense.paid_by !== user?.id;
+            {/* Your share summary + payment actions */}
+            {mySplit && !isCreator && expense.paid_by !== user?.id && (
+              <div className="bg-card rounded-2xl p-4 shadow-card">
+                <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-primary" />
+                  Your Share
+                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <span className={cn(
+                    "text-xs px-2 py-1 rounded-full",
+                    mySplit.is_paid ? 'bg-mint/20 text-mint' :
+                    mySplit.status === 'accepted' ? 'bg-accent/20 text-accent' :
+                    mySplit.status === 'rejected' ? 'bg-muted text-muted-foreground' :
+                    'bg-coral/20 text-coral'
+                  )}>
+                    {mySplit.is_paid ? '✓ Paid' :
+                     mySplit.status === 'accepted' ? 'Accepted — pay now' :
+                     mySplit.status === 'rejected' ? 'Rejected' : 'Pending'}
+                  </span>
+                  <p className="font-bold text-foreground">{currency}{mySplit.amount.toFixed(2)}</p>
+                </div>
 
+                {mySplit.status === 'rejected' && mySplit.rejection_comment && (
+                  <div className="mt-2 p-2 bg-coral/10 rounded-lg">
+                    <p className="text-xs text-coral font-medium">Your rejection reason:</p>
+                    <p className="text-xs text-foreground">{mySplit.rejection_comment}</p>
+                  </div>
+                )}
+
+                {mySplit.status === 'accepted' && !mySplit.is_paid && (
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-border">
+                    <Button className="flex-1 h-9 gap-2" onClick={() => handlePayment(mySplit)}>
+                      <CreditCard className="w-4 h-4" />
+                      Pay via UPI
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-9 gap-2"
+                      onClick={() => markAsPaid(mySplit.id, mySplit.amount)}
+                      disabled={updatingId === mySplit.id}
+                    >
+                      {updatingId === mySplit.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      Mark Paid
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Rejected splits — creator can resend */}
+            {isCreator && !isReadOnly && expense.splits?.some(s => s.status === 'rejected' && s.rejection_comment) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card space-y-2">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <X className="w-4 h-4 text-coral" />
+                  Rejected by
+                </h3>
+                {expense.splits.filter(s => s.status === 'rejected').map(split => {
+                  const p = memberProfiles.get(split.user_id);
                   return (
-                    <div key={split.id} className="border border-border rounded-xl p-3">
-                      <div className="flex items-center gap-3">
-                        <ProfileAvatar avatar={splitProfile?.avatar} size="md" />
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">
-                            {isMe ? 'You' : splitProfile?.display_name || 'Unknown'}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <span className={cn(
-                              "text-xs px-2 py-0.5 rounded-full",
-                              split.is_paid ? 'bg-mint/20 text-mint' :
-                              split.status === 'accepted' ? 'bg-accent/20 text-accent' :
-                              split.status === 'rejected' ? 'bg-muted text-muted-foreground' :
-                              'bg-coral/20 text-coral'
-                            )}>
-                              {split.is_paid ? '✓ Paid' : 
-                               split.status === 'accepted' ? 'Accepted' : 
-                               split.status === 'rejected' ? 'Rejected' : 'Pending'}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-foreground">{currency}{split.amount.toFixed(2)}</p>
-                        </div>
+                    <div key={split.id} className="p-2 bg-coral/10 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <ProfileAvatar avatar={p?.avatar} size="sm" />
+                        <p className="text-sm font-medium flex-1">{p?.display_name || 'Unknown'}</p>
+                        <p className="text-sm font-semibold">{currency}{split.amount.toFixed(2)}</p>
                       </div>
-
-                      {split.status === 'rejected' && split.rejection_comment && (
-                        <div className="mt-2 p-2 bg-coral/10 rounded-lg">
-                          <p className="text-xs text-coral font-medium">Rejection reason:</p>
-                          <p className="text-xs text-foreground">{split.rejection_comment}</p>
-                          {isCreator && !isReadOnly && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mt-2 h-7 text-xs gap-1 border-primary text-primary hover:bg-primary/10"
-                              onClick={async () => {
-                                setUpdatingId(split.id);
-                                try {
-                                  const { error } = await supabase
-                                    .from('expense_splits')
-                                    .update({ status: 'pending', rejection_comment: null })
-                                    .eq('id', split.id);
-                                  if (error) throw error;
-                                  toast({ title: 'Bill resent for approval' });
-                                  onUpdate();
-                                } catch (err) {
-                                  toast({ title: 'Failed to resend', variant: 'destructive' });
-                                } finally {
-                                  setUpdatingId(null);
-                                }
-                              }}
-                              disabled={updatingId === split.id}
-                            >
-                              {updatingId === split.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                              Resend Bill
-                            </Button>
-                          )}
-                        </div>
+                      {split.rejection_comment && (
+                        <p className="text-xs text-foreground mt-1 ml-8">{split.rejection_comment}</p>
                       )}
-
-                      {needsAction && (
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                          <Button
-                            className="flex-1 h-9 gap-2 bg-mint hover:bg-mint/90"
-                            onClick={() => handleAccept(split.id)}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            Accept
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="flex-1 h-9 gap-2 border-coral text-coral hover:bg-coral/10"
-                            onClick={() => handleRejectClick(split.id)}
-                            disabled={isUpdating}
-                          >
-                            <X className="w-4 h-4" />
-                            Reject
-                          </Button>
-                        </div>
-                      )}
-
-                      {needsPayment && (
-                        <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                          <Button
-                            className="flex-1 h-9 gap-2"
-                            onClick={() => handlePayment(split)}
-                          >
-                            <CreditCard className="w-4 h-4" />
-                            Pay via UPI
-                          </Button>
-                          <Button
-                            variant="outline"
-                            className="flex-1 h-9 gap-2"
-                            onClick={() => markAsPaid(split.id, split.amount)}
-                            disabled={isUpdating}
-                          >
-                            {isUpdating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                            Mark Paid
-                          </Button>
-                        </div>
-                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 ml-8 h-7 text-xs gap-1 border-primary text-primary hover:bg-primary/10"
+                        onClick={async () => {
+                          setUpdatingId(split.id);
+                          try {
+                            const { error } = await supabase
+                              .from('expense_splits')
+                              .update({ status: 'pending', rejection_comment: null })
+                              .eq('id', split.id);
+                            if (error) throw error;
+                            toast({ title: 'Bill resent for approval' });
+                            onUpdate();
+                          } catch (err) {
+                            toast({ title: 'Failed to resend', variant: 'destructive' });
+                          } finally {
+                            setUpdatingId(null);
+                          }
+                        }}
+                        disabled={updatingId === split.id}
+                      >
+                        {updatingId === split.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                        Resend
+                      </Button>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            )}
 
             {expense.receipt_url && (
               <div className="bg-card rounded-2xl p-4 shadow-card">
