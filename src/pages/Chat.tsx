@@ -497,7 +497,7 @@ export const Chat = () => {
   useEffect(() => {
     if (!currentRoom) return;
     const onVisible = () => {
-      if (document.visibilityState === "visible") void fetchMessages({ silent: true });
+      if (document.visibilityState === "visible") void fetchMessages({ silent: true, incremental: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
@@ -515,7 +515,7 @@ export const Chat = () => {
     if (!currentRoom) return;
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
-      void fetchMessages({ silent: true });
+      void fetchMessages({ silent: true, incremental: true });
     };
     const intervalMs = connectionState === 'connected' ? 5000 : 2000;
     const interval = window.setInterval(tick, intervalMs);
