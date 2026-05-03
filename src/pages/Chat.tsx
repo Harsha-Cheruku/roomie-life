@@ -88,6 +88,41 @@ const messagesAreEqual = (current: Message[], next: Message[]) => {
   });
 };
 
+const MESSAGE_HISTORY_LIMIT = 300;
+
+const sortMessages = (items: Message[]) =>
+  [...items].sort((a, b) => {
+    const byDate = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    return byDate || a.id.localeCompare(b.id);
+  });
+
+const mergeMessages = (current: Message[], incoming: Message[], keepExisting = true) => {
+  const byId = new Map<string, Message>();
+
+  if (keepExisting) {
+    current.forEach((message) => byId.set(message.id, message));
+  }
+
+  incoming.forEach((message) => {
+    byId.set(message.id, message);
+  });
+
+  incoming.forEach((message) => {
+    current.forEach((existing) => {
+      if (
+        existing.id.startsWith('temp-') &&
+        existing.sender_id === message.sender_id &&
+        existing.message_type === message.message_type &&
+        existing.content === message.content
+      ) {
+        byId.delete(existing.id);
+      }
+    });
+  });
+
+  return sortMessages(Array.from(byId.values())).slice(-MESSAGE_HISTORY_LIMIT);
+};
+
 export const Chat = () => {
   const { user, currentRoom } = useAuth();
   const { toast: toastHook } = useToast();
@@ -117,6 +152,8 @@ export const Chat = () => {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const autoScrollRef = useRef(true);
+  const newestMessageAtRef = useRef<string | null>(null);
+  const fetchingMessagesRef = useRef(false);
   const focusMessageIdRef = useRef<string | null>(((location.state as { focusMessageId?: string } | null)?.focusMessageId) ?? null);
   // Refs that mirror state so realtime callbacks stay stable and the channel
   // never tears down on every profile/toast change (root cause of chat lag).
@@ -159,6 +196,7 @@ export const Chat = () => {
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((message) => message.id));
+    newestMessageAtRef.current = messages.length ? messages[messages.length - 1].created_at : null;
   }, [messages]);
 
   const fetchMessageViews = useCallback(async (messageList: Message[]) => {
@@ -253,27 +291,40 @@ export const Chat = () => {
     setProfilesMap(nextProfilesMap);
   }, [currentRoom]);
 
-  const fetchMessages = useCallback(async (options?: { silent?: boolean }) => {
+  const fetchMessages = useCallback(async (options?: { silent?: boolean; incremental?: boolean }) => {
     if (!currentRoom) return;
+    if (fetchingMessagesRef.current) return;
+    fetchingMessagesRef.current = true;
     if (!options?.silent) setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('messages')
         .select('*')
         .eq('room_id', currentRoom.id)
         .order('created_at', { ascending: true })
-        .limit(100);
+        .limit(options?.incremental ? 200 : MESSAGE_HISTORY_LIMIT);
+
+      if (options?.incremental && newestMessageAtRef.current) {
+        query = query.gte('created_at', newestMessageAtRef.current);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       const nextMessages = data || [];
-      setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
-      await Promise.all([fetchMessageViews(nextMessages), fetchReactions(nextMessages)]);
+      let mergedMessages: Message[] = nextMessages;
+      setMessages((prev) => {
+        mergedMessages = mergeMessages(prev, nextMessages, !!options?.incremental);
+        return messagesAreEqual(prev, mergedMessages) ? prev : mergedMessages;
+      });
+      await Promise.all([fetchMessageViews(mergedMessages), fetchReactions(mergedMessages)]);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
       if (!options?.silent) setIsLoading(false);
+      fetchingMessagesRef.current = false;
     }
   }, [currentRoom, fetchMessageViews, fetchReactions]);
 
@@ -286,6 +337,8 @@ export const Chat = () => {
     }
 
     autoScrollRef.current = true;
+    newestMessageAtRef.current = null;
+    fetchingMessagesRef.current = false;
     setSelectedMessageId(null);
     void fetchRoomMembers();
     void fetchMessages();
@@ -337,19 +390,8 @@ export const Chat = () => {
         (payload) => {
           const newMsg = payload.new as Message;
           setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            const pendingIndex = prev.findIndex((m) =>
-              m.id.startsWith('temp-') &&
-              m.sender_id === newMsg.sender_id &&
-              m.message_type === newMsg.message_type &&
-              m.content === newMsg.content
-            );
-            if (pendingIndex >= 0) {
-              const next = [...prev];
-              next[pendingIndex] = newMsg;
-              return next;
-            }
-            return [...prev, newMsg];
+            const next = mergeMessages(prev, [newMsg]);
+            return messagesAreEqual(prev, next) ? prev : next;
           });
           const currentUserId = userIdRef.current;
           if (newMsg.sender_id === currentUserId || autoScrollRef.current) {
@@ -366,7 +408,10 @@ export const Chat = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` },
         (payload) => {
           const updated = payload.new as Message;
-          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+          setMessages(prev => {
+            const next = mergeMessages(prev, [updated]);
+            return messagesAreEqual(prev, next) ? prev : next;
+          });
         }
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_views' },
@@ -427,7 +472,7 @@ export const Chat = () => {
           attempt = 0;
           setConnectionState('connected');
           // Refresh on (re)connect to recover any missed messages.
-          void fetchMessages({ silent: true });
+          void fetchMessages({ silent: true, incremental: true });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setConnectionState('disconnected');
           scheduleReconnect();
@@ -452,7 +497,7 @@ export const Chat = () => {
   useEffect(() => {
     if (!currentRoom) return;
     const onVisible = () => {
-      if (document.visibilityState === "visible") void fetchMessages({ silent: true });
+      if (document.visibilityState === "visible") void fetchMessages({ silent: true, incremental: true });
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("online", onVisible);
@@ -470,7 +515,7 @@ export const Chat = () => {
     if (!currentRoom) return;
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
-      void fetchMessages({ silent: true });
+      void fetchMessages({ silent: true, incremental: true });
     };
     const intervalMs = connectionState === 'connected' ? 5000 : 2000;
     const interval = window.setInterval(tick, intervalMs);
@@ -702,11 +747,7 @@ export const Chat = () => {
           room_id: currentRoom.id, sender_id: user.id, content: messageText, message_type: 'text',
         }).select().single();
         if (error) throw error;
-        setMessages(prev => prev.reduce<Message[]>((next, message) => {
-          const resolved = message.id === optimisticMessage.id ? data : message;
-          if (!next.some((existing) => existing.id === resolved.id)) next.push(resolved);
-          return next;
-        }, []));
+        setMessages(prev => mergeMessages(prev, [data as Message]));
       }
       inputRef.current?.focus();
     } catch (error) {
@@ -777,10 +818,10 @@ export const Chat = () => {
     return `Seen by ${names[0]} +${receipts.length - 1}`;
   };
 
-  // Smart windowing: only render the last N messages to keep DOM small and
-  // scrolling smooth on long histories. Older messages remain in state and
-  // can be exposed via "load older" later if needed.
-  const MAX_RENDERED = 200;
+  // Smart windowing: only render the recent window to keep DOM small and
+  // scrolling smooth on long histories. The fetched state still keeps enough
+  // history for stable seen receipts and catch-up sync.
+  const MAX_RENDERED = 220;
   const visibleMessages = useMemo(
     () => (messages.length > MAX_RENDERED ? messages.slice(messages.length - MAX_RENDERED) : messages),
     [messages]
