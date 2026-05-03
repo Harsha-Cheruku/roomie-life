@@ -388,19 +388,8 @@ export const Chat = () => {
         (payload) => {
           const newMsg = payload.new as Message;
           setMessages(prev => {
-            if (prev.some(m => m.id === newMsg.id)) return prev;
-            const pendingIndex = prev.findIndex((m) =>
-              m.id.startsWith('temp-') &&
-              m.sender_id === newMsg.sender_id &&
-              m.message_type === newMsg.message_type &&
-              m.content === newMsg.content
-            );
-            if (pendingIndex >= 0) {
-              const next = [...prev];
-              next[pendingIndex] = newMsg;
-              return next;
-            }
-            return [...prev, newMsg];
+            const next = mergeMessages(prev, [newMsg]);
+            return messagesAreEqual(prev, next) ? prev : next;
           });
           const currentUserId = userIdRef.current;
           if (newMsg.sender_id === currentUserId || autoScrollRef.current) {
@@ -417,7 +406,10 @@ export const Chat = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` },
         (payload) => {
           const updated = payload.new as Message;
-          setMessages(prev => prev.map(m => m.id === updated.id ? updated : m));
+          setMessages(prev => {
+            const next = mergeMessages(prev, [updated]);
+            return messagesAreEqual(prev, next) ? prev : next;
+          });
         }
       )
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_views' },
@@ -478,7 +470,7 @@ export const Chat = () => {
           attempt = 0;
           setConnectionState('connected');
           // Refresh on (re)connect to recover any missed messages.
-          void fetchMessages({ silent: true });
+          void fetchMessages({ silent: true, incremental: true });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setConnectionState('disconnected');
           scheduleReconnect();
