@@ -152,6 +152,8 @@ export const Chat = () => {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const messageIdsRef = useRef<Set<string>>(new Set());
   const autoScrollRef = useRef(true);
+  const newestMessageAtRef = useRef<string | null>(null);
+  const fetchingMessagesRef = useRef(false);
   const focusMessageIdRef = useRef<string | null>(((location.state as { focusMessageId?: string } | null)?.focusMessageId) ?? null);
   // Refs that mirror state so realtime callbacks stay stable and the channel
   // never tears down on every profile/toast change (root cause of chat lag).
@@ -194,6 +196,7 @@ export const Chat = () => {
 
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((message) => message.id));
+    newestMessageAtRef.current = messages.length ? messages[messages.length - 1].created_at : null;
   }, [messages]);
 
   const fetchMessageViews = useCallback(async (messageList: Message[]) => {
