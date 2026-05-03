@@ -291,27 +291,40 @@ export const Chat = () => {
     setProfilesMap(nextProfilesMap);
   }, [currentRoom]);
 
-  const fetchMessages = useCallback(async (options?: { silent?: boolean }) => {
+  const fetchMessages = useCallback(async (options?: { silent?: boolean; incremental?: boolean }) => {
     if (!currentRoom) return;
+    if (fetchingMessagesRef.current) return;
+    fetchingMessagesRef.current = true;
     if (!options?.silent) setIsLoading(true);
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('messages')
         .select('*')
         .eq('room_id', currentRoom.id)
         .order('created_at', { ascending: true })
-        .limit(100);
+        .limit(options?.incremental ? 200 : MESSAGE_HISTORY_LIMIT);
+
+      if (options?.incremental && newestMessageAtRef.current) {
+        query = query.gte('created_at', newestMessageAtRef.current);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
 
       const nextMessages = data || [];
-      setMessages((prev) => (messagesAreEqual(prev, nextMessages) ? prev : nextMessages));
-      await Promise.all([fetchMessageViews(nextMessages), fetchReactions(nextMessages)]);
+      let mergedMessages: Message[] = nextMessages;
+      setMessages((prev) => {
+        mergedMessages = mergeMessages(prev, nextMessages, !!options?.incremental);
+        return messagesAreEqual(prev, mergedMessages) ? prev : mergedMessages;
+      });
+      await Promise.all([fetchMessageViews(mergedMessages), fetchReactions(mergedMessages)]);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
       if (!options?.silent) setIsLoading(false);
+      fetchingMessagesRef.current = false;
     }
   }, [currentRoom, fetchMessageViews, fetchReactions]);
 
