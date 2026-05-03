@@ -818,10 +818,10 @@ export const Chat = () => {
     return `Seen by ${names[0]} +${receipts.length - 1}`;
   };
 
-  // Smart windowing: only render the last N messages to keep DOM small and
-  // scrolling smooth on long histories. Older messages remain in state and
-  // can be exposed via "load older" later if needed.
-  const MAX_RENDERED = 200;
+  // Smart windowing: only render the recent window to keep DOM small and
+  // scrolling smooth on long histories. The fetched state still keeps enough
+  // history for stable seen receipts and catch-up sync.
+  const MAX_RENDERED = 220;
   const visibleMessages = useMemo(
     () => (messages.length > MAX_RENDERED ? messages.slice(messages.length - MAX_RENDERED) : messages),
     [messages]
