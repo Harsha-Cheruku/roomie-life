@@ -747,11 +747,7 @@ export const Chat = () => {
           room_id: currentRoom.id, sender_id: user.id, content: messageText, message_type: 'text',
         }).select().single();
         if (error) throw error;
-        setMessages(prev => prev.reduce<Message[]>((next, message) => {
-          const resolved = message.id === optimisticMessage.id ? data : message;
-          if (!next.some((existing) => existing.id === resolved.id)) next.push(resolved);
-          return next;
-        }, []));
+        setMessages(prev => mergeMessages(prev, [data as Message]));
       }
       inputRef.current?.focus();
     } catch (error) {
