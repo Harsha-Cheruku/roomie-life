@@ -333,6 +333,7 @@ class AlarmService : Service() {
         if (keepAliveHandler == null) keepAliveHandler = Handler(Looper.getMainLooper())
         val keepAliveRunnable = object : Runnable {
             override fun run() {
+                forceAlarmVolume()
                 val player = mediaPlayer
                 if (player == null) {
                     restartRinging()
@@ -410,6 +411,7 @@ class AlarmService : Service() {
         vibrator?.cancel()
         vibrator = null
 
+        abandonAlarmAudioFocus()
         restoreAlarmVolume()
 
         wakeLock?.let {
