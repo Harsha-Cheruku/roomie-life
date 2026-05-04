@@ -57,6 +57,8 @@ class AlarmService : Service() {
     private var lastRingtoneUri: String = ""
     private var currentAlarmId: String? = null
     private var previousAlarmVolume: Int = -1
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var audioManager: AudioManager? = null
 
     override fun onBind(intent: Intent?) = null
 
@@ -83,6 +85,7 @@ class AlarmService : Service() {
 
                 acquireWakeLock()
                 forceAlarmVolume()
+                requestAlarmAudioFocus()
                 startRinging(ringtoneUri)
                 startVibration()
                 launchAlarmActivity(title, alarmId)
@@ -164,6 +167,55 @@ class AlarmService : Service() {
                 am.setStreamVolume(AudioManager.STREAM_ALARM, previousAlarmVolume, 0)
             } catch (_: Exception) {}
         }
+    }
+
+    private fun requestAlarmAudioFocus() {
+        try {
+            audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_ALARM)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setOnAudioFocusChangeListener { focusChange ->
+                        if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                            restartRinging()
+                        }
+                    }
+                    .build()
+                audioFocusRequest = request
+                audioManager?.requestAudioFocus(request)
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.requestAudioFocus(
+                    { focusChange ->
+                        if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                            restartRinging()
+                        }
+                    },
+                    AudioManager.STREAM_ALARM,
+                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to request alarm audio focus", e)
+        }
+    }
+
+    private fun abandonAlarmAudioFocus() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                audioFocusRequest?.let { audioManager?.abandonAudioFocusRequest(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                audioManager?.abandonAudioFocus(null)
+            }
+        } catch (_: Exception) {}
+        audioFocusRequest = null
+        audioManager = null
     }
 
     private fun acquireWakeLock() {
