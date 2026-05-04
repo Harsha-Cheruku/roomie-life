@@ -258,6 +258,7 @@ class AlarmService : Service() {
                 )
                 setDataSource(this@AlarmService, uri)
                 isLooping = true  // CRITICAL: continuous ring, never stops
+                setWakeMode(this@AlarmService, PowerManager.PARTIAL_WAKE_LOCK)
                 setVolume(0.3f, 0.3f)
                 setOnCompletionListener { player ->
                     try {
@@ -303,6 +304,8 @@ class AlarmService : Service() {
                 )
                 setDataSource(this@AlarmService, uri)
                 isLooping = true
+                setWakeMode(this@AlarmService, PowerManager.PARTIAL_WAKE_LOCK)
+                setVolume(1f, 1f)
                 setOnCompletionListener { player ->
                     try { player.seekTo(0); player.start() } catch (_: Exception) { restartRinging() }
                 }
