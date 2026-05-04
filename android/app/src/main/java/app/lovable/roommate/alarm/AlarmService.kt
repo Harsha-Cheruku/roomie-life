@@ -180,16 +180,21 @@ class AlarmService : Service() {
 
     private fun startRinging(ringtoneUri: String) {
         try {
-            mediaPlayer?.release()
+            lastRingtoneUri = ringtoneUri
+            keepAliveHandler?.removeCallbacksAndMessages(null)
+            mediaPlayer?.let {
+                try { it.stop() } catch (_: Exception) {}
+                try { it.release() } catch (_: Exception) {}
+            }
+            mediaPlayer = null
 
             val uri: Uri = when {
                 ringtoneUri.isNotEmpty() && ringtoneUri != "default" -> {
                     try { Uri.parse(ringtoneUri) } catch (_: Exception) {
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                        bundledAlarmUri()
                     }
                 }
-                else -> RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-                    ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                else -> bundledAlarmUri()
             }
 
             mediaPlayer = MediaPlayer().apply {
@@ -202,11 +207,26 @@ class AlarmService : Service() {
                 setDataSource(this@AlarmService, uri)
                 isLooping = true  // CRITICAL: continuous ring, never stops
                 setVolume(0.3f, 0.3f)
+                setOnCompletionListener { player ->
+                    try {
+                        player.seekTo(0)
+                        player.start()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Alarm completed unexpectedly; restarting", e)
+                        restartRinging()
+                    }
+                }
+                setOnErrorListener { _, what, extra ->
+                    Log.e(TAG, "Alarm player error what=$what extra=$extra; restarting")
+                    restartRinging()
+                    true
+                }
                 prepare()
                 start()
             }
 
             startVolumeRamp()
+            startPlaybackKeepAlive()
             Log.d(TAG, "Alarm ringing with URI: $uri, looping=true")
         } catch (e: Exception) {
             Log.e(TAG, "Primary ringtone failed, trying fallback", e)
@@ -214,11 +234,13 @@ class AlarmService : Service() {
         }
     }
 
+    private fun bundledAlarmUri(): Uri = Uri.parse("android.resource://$packageName/${R.raw.alarm_sound}")
+
     private fun playFallbackRingtone() {
         try {
             val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
                 ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-                ?: return
+                ?: bundledAlarmUri()
 
             mediaPlayer = MediaPlayer().apply {
                 setAudioAttributes(
@@ -229,12 +251,48 @@ class AlarmService : Service() {
                 )
                 setDataSource(this@AlarmService, uri)
                 isLooping = true
+                setOnCompletionListener { player ->
+                    try { player.seekTo(0); player.start() } catch (_: Exception) { restartRinging() }
+                }
+                setOnErrorListener { _, _, _ -> restartRinging(); true }
                 prepare()
                 start()
             }
+            startPlaybackKeepAlive()
         } catch (e: Exception) {
             Log.e(TAG, "Fallback ringtone also failed", e)
         }
+    }
+
+    private fun restartRinging() {
+        keepAliveHandler?.post {
+            try {
+                mediaPlayer?.release()
+            } catch (_: Exception) {}
+            mediaPlayer = null
+            startRinging(lastRingtoneUri)
+        }
+    }
+
+    private fun startPlaybackKeepAlive() {
+        if (keepAliveHandler == null) keepAliveHandler = Handler(Looper.getMainLooper())
+        val keepAliveRunnable = object : Runnable {
+            override fun run() {
+                val player = mediaPlayer
+                if (player == null) {
+                    restartRinging()
+                } else {
+                    try {
+                        if (!player.isPlaying) player.start()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Alarm keep-alive restart failed", e)
+                        restartRinging()
+                    }
+                }
+                keepAliveHandler?.postDelayed(this, 2_000L)
+            }
+        }
+        keepAliveHandler?.postDelayed(keepAliveRunnable, 2_000L)
     }
 
     private fun startVolumeRamp() {
