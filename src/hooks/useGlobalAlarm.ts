@@ -24,8 +24,8 @@ interface Alarm {
   owner_device_id?: string | null;
 }
 
-// Ignore triggers older than 90 seconds to prevent stale alarms replaying on app open
-const FRESH_TRIGGER_WINDOW_MS = 90_000;
+// Ignore very old triggers on app open, but never stop an already ringing alarm by age.
+const FRESH_TRIGGER_WINDOW_MS = 30 * 60_000;
 
 export function useGlobalAlarm() {
   const { user, currentRoom } = useAuth();
@@ -63,7 +63,7 @@ export function useGlobalAlarm() {
         const t = triggers[0];
         // Check freshness — ignore stale triggers
         const triggerAge = Date.now() - new Date(t.triggered_at).getTime();
-        if (triggerAge > FRESH_TRIGGER_WINDOW_MS) {
+        if (triggerAge > FRESH_TRIGGER_WINDOW_MS && activeTrigger?.id !== t.id) {
           // Auto-dismiss stale trigger
           setActiveTrigger(null);
           setActiveAlarm(null);
@@ -79,7 +79,7 @@ export function useGlobalAlarm() {
         setActiveAlarm(null);
       }
     } catch (err) { console.error("Global alarm: fetch error", err); }
-  }, [roomId]);
+  }, [roomId, activeTrigger?.id]);
 
   // Poll every 5s + realtime subscription
   useEffect(() => {
