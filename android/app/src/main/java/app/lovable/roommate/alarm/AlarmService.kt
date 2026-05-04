@@ -10,6 +10,7 @@ import android.media.RingtoneManager
 import android.net.Uri
 import android.os.*
 import android.util.Log
+import app.lovable.roommate.R
 import androidx.core.app.NotificationCompat
 
 /**
@@ -23,7 +24,7 @@ class AlarmService : Service() {
         const val TAG = "AlarmService"
         const val ACTION_START = "app.lovable.roommate.alarm.START"
         const val ACTION_STOP = "app.lovable.roommate.alarm.STOP"
-        const val CHANNEL_ID = "roommate_alarm_channel"
+        const val CHANNEL_ID = "roommate_continuous_alarm_channel"
         const val NOTIFICATION_ID = 9999
 
         fun createNotificationChannel(context: Context) {
@@ -38,13 +39,9 @@ class AlarmService : Service() {
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     enableVibration(true)
                     vibrationPattern = longArrayOf(0, 800, 200, 800, 200, 800)
-                    setSound(
-                        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM),
-                        AudioAttributes.Builder()
-                            .setUsage(AudioAttributes.USAGE_ALARM)
-                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                            .build()
-                    )
+                    // The notification channel must stay silent; AlarmService owns the
+                    // looping sound. Otherwise Android may only play a single channel beep.
+                    setSound(null, null)
                 }
                 val nm = context.getSystemService(NotificationManager::class.java)
                 nm.createNotificationChannel(channel)
@@ -56,6 +53,8 @@ class AlarmService : Service() {
     private var vibrator: Vibrator? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var volumeRampHandler: Handler? = null
+    private var keepAliveHandler: Handler? = null
+    private var lastRingtoneUri: String = ""
     private var currentAlarmId: String? = null
     private var previousAlarmVolume: Int = -1
 
