@@ -343,6 +343,9 @@ class AlarmService : Service() {
         volumeRampHandler?.removeCallbacksAndMessages(null)
         volumeRampHandler = null
 
+        keepAliveHandler?.removeCallbacksAndMessages(null)
+        keepAliveHandler = null
+
         mediaPlayer?.let {
             try { it.stop() } catch (_: Exception) {}
             try { it.release() } catch (_: Exception) {}
