@@ -93,16 +93,15 @@ self.addEventListener("push", (event: PushEvent) => {
   }
 
   const title = payload.title || "RoomMate";
-  const options: NotificationOptions = {
+  const options: NotificationOptions & { renotify?: boolean; vibrate?: number[] } = {
     body: payload.body || "",
     icon: payload.icon || "/icon-192.png",
     badge: payload.badge || "/icon-192.png",
     tag: payload.tag,
-    renotify: payload.renotify ?? true,
+    renotify: payload.renotify ?? Boolean(payload.tag),
     requireInteraction: payload.requireInteraction ?? false,
     silent: payload.silent ?? false,
     data: { ...(payload.data || {}), url: payload.url || "/" },
-    // @ts-expect-error vibrate is supported on Android
     vibrate: payload.vibrate || [200, 100, 200],
   };
 
