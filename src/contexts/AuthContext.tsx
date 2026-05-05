@@ -115,25 +115,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    // Track whether the initial-session resolution has applied login priority,
-    // so onAuthStateChange callbacks (TOKEN_REFRESHED, USER_UPDATED, etc.) do
-    // not re-apply the pinned default room mid-session.
-    let initialPriorityApplied = false;
+    // Track previous user id so we can detect actual login transitions
+    // (no-user -> user) and apply pinned-room priority only then.
+    let previousUserId: string | null = null;
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (session?.user) {
-          const isLoginEvent = event === 'SIGNED_IN' && !initialPriorityApplied;
+          const isLoginTransition =
+            previousUserId !== session.user.id &&
+            (event === 'SIGNED_IN' || event === 'INITIAL_SESSION');
+          previousUserId = session.user.id;
           setTimeout(() => {
             fetchProfile(session.user.id);
-            fetchUserRooms(session.user.id, isLoginEvent);
-            if (isLoginEvent) initialPriorityApplied = true;
+            fetchUserRooms(session.user.id, isLoginTransition);
           }, 0);
         } else {
-          initialPriorityApplied = false;
+          previousUserId = null;
           setProfile(null);
           setCurrentRoom(null);
           setUserRooms([]);
@@ -144,12 +145,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (session?.user) {
-        initialPriorityApplied = true;
+        const isLoginTransition = previousUserId !== session.user.id;
+        previousUserId = session.user.id;
         await Promise.all([
           fetchProfile(session.user.id),
-          fetchUserRooms(session.user.id, true),
+          fetchUserRooms(session.user.id, isLoginTransition),
         ]);
       }
       setLoading(false);
