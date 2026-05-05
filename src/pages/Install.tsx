@@ -6,6 +6,12 @@ import { ArrowLeft, Download, Share, MoreVertical, Plus, Check, Smartphone } fro
 import { cn } from "@/lib/utils";
 import logoImg from "@/assets/logo.jpg";
 
+// Direct APK download URL for Android users. Replace with the hosted APK URL
+// (e.g. GitHub Releases asset). Kept as a constant so it's easy to update.
+const ANDROID_APK_URL =
+  (import.meta.env.VITE_ANDROID_APK_URL as string | undefined) ||
+  "/downloads/roommate-latest.apk";
+
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
@@ -150,14 +156,43 @@ export default function Install() {
                 Install on Android
               </h3>
 
+              {/* Direct APK download (native build) */}
+              <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/15 flex items-center justify-center shrink-0">
+                    <Download className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground text-sm">
+                      Get the Android app (APK)
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Full native experience with background notifications, alarms and offline mode.
+                    </p>
+                    <a
+                      href={ANDROID_APK_URL}
+                      download
+                      rel="noopener"
+                      className="inline-flex items-center gap-2 mt-3 h-9 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:opacity-90 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download APK
+                    </a>
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      After download, open the file and allow install from your browser if prompted.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {deferredPrompt ? (
                 <div className="bg-primary/10 rounded-xl p-4 text-center">
                   <p className="text-sm text-foreground mb-3">
-                    Your browser supports direct installation!
+                    Or install as a web app — no download needed.
                   </p>
                   <Button onClick={handleInstall} className="gap-2">
                     <Download className="w-4 h-4" />
-                    Install Now
+                    Install Web App
                   </Button>
                 </div>
               ) : (
