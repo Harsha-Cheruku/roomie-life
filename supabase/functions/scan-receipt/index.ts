@@ -51,7 +51,11 @@ Return ONLY a valid JSON object with this exact structure:
   "items": [
     { "name": "Item name", "price": 12.99, "quantity": 1 }
   ],
-  "discount": 0,
+  "adjustments": [
+    { "label": "GST", "amount": 18.50, "type": "tax" },
+    { "label": "Service Charge", "amount": 25.00, "type": "fee" },
+    { "label": "Coupon SAVE10", "amount": 50.00, "type": "discount" }
+  ],
   "total": 24.49
 }
 
@@ -61,11 +65,18 @@ CRITICAL RULES:
 - Prices MUST be decimal numbers: 12.99 not "12.99" or "₹12.99"
 - Remove currency symbols and commas: "1,299.00" → 1299.00
 - If quantity shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit)
-- "discount": sum of ALL discount / offer / coupon / promo / "save" / "off" / round-off-down lines as a positive number. 0 if none.
 - EXCLUDE returned / voided / removed / cancelled items entirely from items[].
-- Taxes (GST / CGST / SGST / IGST / VAT / service tax / service charge / tip) and any other added fees should be folded into item prices proportionally so they don't appear as separate rows — only discounts are surfaced separately.
-- "total" MUST equal the final payable grand total printed on the receipt. It should equal SUM(price × quantity) − discount within ±0.05.
-  If grand total is not printed, compute total = SUM(price × quantity) − discount.
+- "adjustments" MUST list every separately-printed charge or deduction so the user can review/delete/edit them. Each entry:
+    • "label": exact text printed on the receipt (e.g. "CGST 9%", "Service Charge", "Tip", "Round Off", "Coupon SAVE10").
+    • "amount": positive decimal magnitude (never negative — the sign is implied by "type").
+    • "type": one of:
+        - "tax"      → GST / CGST / SGST / IGST / VAT / service tax  (ADDED to total)
+        - "fee"      → service charge / delivery / packaging / convenience / tip / round-up  (ADDED to total)
+        - "discount" → discount / offer / coupon / promo / "save" / "off" / round-off-down / loyalty  (SUBTRACTED from total)
+  Return [] if none. Do NOT fold taxes/fees/discounts into item prices.
+- "total" MUST equal the final payable grand total printed on the receipt.
+  It should equal SUM(price × quantity) + sum(tax+fee amounts) − sum(discount amounts) within ±0.05.
+  If grand total is not printed, compute it from the items + adjustments above.
 - Handle Indian receipts: ₹ symbol, GST/CGST/SGST lines, MRP formats
 - The image may be a phone photo: handle perspective skew, glare, shadows,
   crumpled paper, low light, motion blur and partially cut edges. Use column

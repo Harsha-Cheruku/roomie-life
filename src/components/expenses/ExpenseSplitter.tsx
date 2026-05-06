@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X } from 'lucide-react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X, Receipt, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -19,11 +19,19 @@ interface ExtractedItem {
   isManual?: boolean; // Track manually added items
 }
 
+type AdjustmentType = 'tax' | 'fee' | 'discount';
+interface Adjustment {
+  label: string;
+  amount: number;
+  type: AdjustmentType;
+}
+
 interface ScanResult {
   title: string;
   items: ExtractedItem[];
   total: number;
   discount?: number;
+  adjustments?: Adjustment[];
 }
 
 interface RoomMember {
@@ -59,7 +67,7 @@ export const ExpenseSplitter = ({
   
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [title, setTitle] = useState('');
-  const [discount, setDiscount] = useState<number>(0);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
@@ -77,7 +85,20 @@ export const ExpenseSplitter = ({
       // Only set items on first load, preserve manual edits
       setItems(scanResult.items.map(item => ({ ...item, isManual: false })));
       setTitle(scanResult.title || 'Scanned Receipt');
-      setDiscount(Math.max(0, Number(scanResult.discount) || 0));
+      const initialAdj: Adjustment[] = Array.isArray(scanResult.adjustments)
+        ? scanResult.adjustments
+            .filter(a => a && Number(a.amount) > 0)
+            .map(a => ({
+              label: String(a.label || 'Charge'),
+              amount: Math.abs(Number(a.amount) || 0),
+              type: (a.type === 'tax' || a.type === 'fee' || a.type === 'discount') ? a.type : 'fee',
+            }))
+        : [];
+      // Backward-compat: if only legacy discount field came back
+      if (initialAdj.length === 0 && Number(scanResult.discount) > 0) {
+        initialAdj.push({ label: 'Discount', amount: Number(scanResult.discount), type: 'discount' });
+      }
+      setAdjustments(initialAdj);
       // Default: assign all items to all members
       const defaultAssignments: ItemAssignment = {};
       scanResult.items.forEach((_, index) => {
@@ -231,22 +252,38 @@ export const ExpenseSplitter = ({
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  const adjustmentsSum = (type: AdjustmentType) =>
+    adjustments.filter(a => a.type === type).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+
   const calculateTotal = () => {
     const sub = calculateSubtotal();
-    const d = Math.min(Math.max(0, discount), sub);
-    return Math.max(0, Math.round((sub - d) * 100) / 100);
+    const taxes = adjustmentsSum('tax');
+    const fees = adjustmentsSum('fee');
+    const disc = Math.min(adjustmentsSum('discount'), sub + taxes + fees);
+    return Math.max(0, Math.round((sub + taxes + fees - disc) * 100) / 100);
   };
 
-  const discountFactor = () => {
+  // Per-item scale so member shares reflect taxes/fees/discounts proportionally.
+  const totalFactor = () => {
     const sub = calculateSubtotal();
     if (sub <= 0) return 1;
-    const d = Math.min(Math.max(0, discount), sub);
-    return (sub - d) / sub;
+    return calculateTotal() / sub;
+  };
+
+  const updateAdjustment = (index: number, patch: Partial<Adjustment>) => {
+    setAdjustments(prev => prev.map((a, i) => i === index ? { ...a, ...patch } : a));
+  };
+  const removeAdjustment = (index: number) => {
+    setAdjustments(prev => prev.filter((_, i) => i !== index));
+  };
+  const addAdjustment = (type: AdjustmentType) => {
+    const defaults: Record<AdjustmentType, string> = { tax: 'Tax', fee: 'Service Charge', discount: 'Discount' };
+    setAdjustments(prev => [...prev, { label: defaults[type], amount: 0, type }]);
   };
 
   const calculateMemberOwes = (userId: string) => {
     let total = 0;
-    const factor = discountFactor();
+    const factor = totalFactor();
     items.forEach((item, index) => {
       const assignedMembers = assignments[index] || [];
       if (assignedMembers.includes(userId) && assignedMembers.length > 0) {
@@ -335,9 +372,9 @@ export const ExpenseSplitter = ({
 
       if (itemsError) throw itemsError;
 
-      // Create splits for each item (apply discount proportionally)
+      // Create splits for each item (apply taxes/fees/discounts proportionally)
       const splits: any[] = [];
-      const factor = discountFactor();
+      const factor = totalFactor();
       createdItems.forEach((createdItem, index) => {
         const assignedMembers = assignments[index] || [];
         if (assignedMembers.length > 0) {
@@ -573,37 +610,84 @@ export const ExpenseSplitter = ({
             </Button>
           </div>
 
-          {/* Discount control */}
-          <div className="bg-muted/50 rounded-2xl p-4 space-y-2">
-            <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
-              <Tag className="w-3.5 h-3.5" />
-              Discount {discount > 0 && <span className="text-xs">(auto-detected)</span>}
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">₹</span>
-              <Input
-                type="number"
-                value={discount}
-                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="h-10 rounded-lg flex-1"
-                step="0.01"
-                placeholder="0.00"
-              />
-              {discount > 0 && (
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-10 w-10 rounded-lg text-muted-foreground"
-                  onClick={() => setDiscount(0)}
-                  title="Remove discount"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
+          {/* Adjustments — taxes / fees / discounts (editable & deletable) */}
+          <div className="bg-muted/50 rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+                <Receipt className="w-3.5 h-3.5" />
+                Taxes, fees & discounts
+              </label>
+              {adjustments.length > 0 && (
+                <span className="text-xs text-muted-foreground">{adjustments.length} item{adjustments.length === 1 ? '' : 's'}</span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Subtracted from the total and split proportionally across items.
-            </p>
+
+            {adjustments.length === 0 && (
+              <p className="text-xs text-muted-foreground">No taxes or discounts detected. Add one if needed.</p>
+            )}
+
+            <div className="space-y-2">
+              {adjustments.map((adj, idx) => {
+                const isDiscount = adj.type === 'discount';
+                return (
+                  <div key={idx} className="bg-background rounded-xl p-2.5 space-y-2 border border-border/50">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        value={adj.label}
+                        onChange={(e) => updateAdjustment(idx, { label: e.target.value })}
+                        className="h-9 rounded-lg flex-1 text-sm"
+                        placeholder="Label (e.g. GST, Service Charge)"
+                      />
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-9 w-9 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => removeAdjustment(idx)}
+                        title="Remove"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={adj.type}
+                        onChange={(e) => updateAdjustment(idx, { type: e.target.value as AdjustmentType })}
+                        className="h-9 rounded-lg border border-input bg-background px-2 text-xs flex-1"
+                      >
+                        <option value="tax">Tax (+)</option>
+                        <option value="fee">Fee (+)</option>
+                        <option value="discount">Discount (−)</option>
+                      </select>
+                      <div className="flex items-center gap-1 flex-1">
+                        <span className={`text-sm font-medium ${isDiscount ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}>
+                          {isDiscount ? '−₹' : '+₹'}
+                        </span>
+                        <Input
+                          type="number"
+                          value={adj.amount}
+                          onChange={(e) => updateAdjustment(idx, { amount: Math.max(0, parseFloat(e.target.value) || 0) })}
+                          className="h-9 rounded-lg text-sm"
+                          step="0.01"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1 text-xs" onClick={() => addAdjustment('tax')}>
+                <Percent className="w-3 h-3" /> Tax
+              </Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1 text-xs" onClick={() => addAdjustment('fee')}>
+                <Plus className="w-3 h-3" /> Fee
+              </Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1 text-xs" onClick={() => addAdjustment('discount')}>
+                <Tag className="w-3 h-3" /> Discount
+              </Button>
+            </div>
           </div>
 
           {/* Summary */}
@@ -636,12 +720,15 @@ export const ExpenseSplitter = ({
                 <span>Subtotal</span>
                 <span>₹{calculateSubtotal().toFixed(2)}</span>
               </div>
-              {discount > 0 && (
-                <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
-                  <span>Discount</span>
-                  <span>− ₹{Math.min(discount, calculateSubtotal()).toFixed(2)}</span>
+              {adjustments.map((a, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between text-sm ${a.type === 'discount' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}
+                >
+                  <span className="truncate pr-2">{a.label || (a.type === 'discount' ? 'Discount' : a.type === 'tax' ? 'Tax' : 'Fee')}</span>
+                  <span>{a.type === 'discount' ? '− ' : '+ '}₹{Number(a.amount || 0).toFixed(2)}</span>
                 </div>
-              )}
+              ))}
               <div className="flex items-center justify-between pt-1">
                 <span className="font-semibold">Total</span>
                 <span className="text-lg font-bold text-primary">₹{calculateTotal().toFixed(2)}</span>
@@ -681,7 +768,7 @@ export const ExpenseSplitter = ({
         items={items}
         total={calculateTotal()}
         subtotal={calculateSubtotal()}
-        discount={Math.min(discount, calculateSubtotal())}
+        adjustments={adjustments}
         paidBy={{
           name: profile?.display_name || 'You',
           avatar: profile?.avatar || '😊',

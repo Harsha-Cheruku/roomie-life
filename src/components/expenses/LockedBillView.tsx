@@ -11,6 +11,12 @@ interface ExtractedItem {
   quantity: number;
 }
 
+interface Adjustment {
+  label: string;
+  amount: number;
+  type: 'tax' | 'fee' | 'discount';
+}
+
 interface MemberSplit {
   userId: string;
   name: string;
@@ -25,7 +31,7 @@ interface LockedBillViewProps {
   items: ExtractedItem[];
   total: number;
   subtotal?: number;
-  discount?: number;
+  adjustments?: Adjustment[];
   paidBy: {
     name: string;
     avatar: string;
@@ -44,7 +50,7 @@ export const LockedBillView = ({
   items,
   total,
   subtotal,
-  discount = 0,
+  adjustments = [],
   paidBy,
   splits,
   category,
@@ -111,16 +117,21 @@ export const LockedBillView = ({
                   </span>
                 </div>
               ))}
-              {(subtotal !== undefined && discount > 0) && (
+              {(subtotal !== undefined && adjustments.length > 0) && (
                 <>
                   <div className="p-3 flex items-center justify-between text-sm text-muted-foreground border-b border-border/50">
                     <span>Subtotal</span>
                     <span>₹{subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="p-3 flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400 border-b border-border/50">
-                    <span>Discount</span>
-                    <span>− ₹{discount.toFixed(2)}</span>
-                  </div>
+                  {adjustments.map((a, i) => (
+                    <div
+                      key={i}
+                      className={`p-3 flex items-center justify-between text-sm border-b border-border/50 ${a.type === 'discount' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}`}
+                    >
+                      <span className="truncate pr-2">{a.label || (a.type === 'discount' ? 'Discount' : a.type === 'tax' ? 'Tax' : 'Fee')}</span>
+                      <span>{a.type === 'discount' ? '− ' : '+ '}₹{Number(a.amount || 0).toFixed(2)}</span>
+                    </div>
+                  ))}
                 </>
               )}
               <div className="p-3 bg-primary/5 flex items-center justify-between">
