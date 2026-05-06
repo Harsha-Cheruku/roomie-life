@@ -34,8 +34,9 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
     img.onload = () => {
       const canvas = document.createElement('canvas');
       let { width, height } = img;
-      // Cap the longest edge — large photos slow upload + AI processing
-      const maxDim = 1280;
+      // Cap the longest edge — large photos slow upload + AI processing,
+      // but keep enough resolution for small printed text on phone photos.
+      const maxDim = 1800;
       if (width > maxDim || height > maxDim) {
         const ratio = Math.min(maxDim / width, maxDim / height);
         width = Math.round(width * ratio);
@@ -49,8 +50,40 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, width, height);
 
-      // JPEG @ 0.8 — small payload, fast OCR, still very readable
-      resolve(canvas.toDataURL('image/jpeg', 0.8));
+      // Light auto contrast + brightness normalisation so dim / shadowed
+      // phone photos become readable for the OCR model. We deliberately
+      // keep colour (no grayscale) — Gemini handles colour well and
+      // grayscaling hurt accuracy on coloured receipts.
+      try {
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const d = imgData.data;
+        // Sample luminance histogram to find black/white points
+        let min = 255, max = 0;
+        const step = Math.max(1, Math.floor(d.length / 4 / 20000));
+        for (let i = 0; i < d.length; i += 4 * step) {
+          const l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          if (l < min) min = l;
+          if (l > max) max = l;
+        }
+        // Pull endpoints in slightly to stretch contrast
+        const lo = Math.min(min + 8, 80);
+        const hi = Math.max(max - 8, 175);
+        const range = Math.max(1, hi - lo);
+        if (range < 230) {
+          const scale = 255 / range;
+          for (let i = 0; i < d.length; i += 4) {
+            d[i]     = Math.max(0, Math.min(255, (d[i]     - lo) * scale));
+            d[i + 1] = Math.max(0, Math.min(255, (d[i + 1] - lo) * scale));
+            d[i + 2] = Math.max(0, Math.min(255, (d[i + 2] - lo) * scale));
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+      } catch {
+        // Non-fatal — fall through with original pixels
+      }
+
+      // JPEG @ 0.9 — keeps fine text crisp for camera photos
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
     };
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
