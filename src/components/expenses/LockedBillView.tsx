@@ -24,6 +24,8 @@ interface LockedBillViewProps {
   title: string;
   items: ExtractedItem[];
   total: number;
+  subtotal?: number;
+  discount?: number;
   paidBy: {
     name: string;
     avatar: string;
@@ -41,6 +43,8 @@ export const LockedBillView = ({
   title,
   items,
   total,
+  subtotal,
+  discount = 0,
   paidBy,
   splits,
   category,
@@ -107,6 +111,18 @@ export const LockedBillView = ({
                   </span>
                 </div>
               ))}
+              {(subtotal !== undefined && discount > 0) && (
+                <>
+                  <div className="p-3 flex items-center justify-between text-sm text-muted-foreground border-b border-border/50">
+                    <span>Subtotal</span>
+                    <span>₹{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="p-3 flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400 border-b border-border/50">
+                    <span>Discount</span>
+                    <span>− ₹{discount.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
               <div className="p-3 bg-primary/5 flex items-center justify-between">
                 <span className="font-semibold">Total</span>
                 <span className="text-xl font-bold text-primary">₹{total.toFixed(2)}</span>
