@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Camera, Upload, X, Loader2, Scan } from 'lucide-react';
+import { Camera, Upload, X, Loader2, Scan, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
@@ -94,6 +94,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -141,6 +142,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     if (!imagePreview) return;
 
     setIsScanning(true);
+    setScanError(null);
     try {
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-receipt`,
@@ -156,13 +158,18 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Failed to scan receipt');
+      if (!data.items || data.items.length === 0) {
+        throw new Error("Couldn't read any items from this photo");
+      }
 
       toast({ title: 'Receipt scanned!', description: `Found ${data.items?.length || 0} items` });
       onScanComplete(data, imagePreview);
       handleClose();
     } catch (error) {
       console.error('Scan error:', error);
-      toast({ title: 'Scan failed', description: error instanceof Error ? error.message : 'Could not process receipt', variant: 'destructive' });
+      const msg = error instanceof Error ? error.message : 'Could not process receipt';
+      setScanError(msg);
+      toast({ title: 'Scan failed', description: msg, variant: 'destructive' });
     } finally {
       setIsScanning(false);
     }
@@ -172,7 +179,20 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     setImagePreview(null);
     setIsScanning(false);
     setIsProcessing(false);
+    setScanError(null);
     onOpenChange(false);
+  };
+
+  const retakePhoto = () => {
+    setImagePreview(null);
+    setScanError(null);
+    cameraInputRef.current?.click();
+  };
+
+  const chooseDifferent = () => {
+    setImagePreview(null);
+    setScanError(null);
+    fileInputRef.current?.click();
   };
 
   return (
@@ -221,12 +241,38 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
                 </Button>
               </div>
 
-              <div className="flex gap-3">
-                <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setImagePreview(null)} disabled={isScanning}>Retake</Button>
-                <Button className="flex-1 h-12 rounded-xl gap-2" onClick={scanReceipt} disabled={isScanning || isProcessing}>
-                  {isScanning ? (<><Loader2 className="w-4 h-4 animate-spin" />Scanning...</>) : isProcessing ? (<><Loader2 className="w-4 h-4 animate-spin" />Optimizing...</>) : (<><Scan className="w-4 h-4" />Scan Receipt</>)}
-                </Button>
-              </div>
+              {scanError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-medium text-destructive">Couldn't read this photo</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">{scanError}. Try a clearer, well-lit photo with the full receipt in frame.</p>
+                  </div>
+                </div>
+              )}
+
+              {scanError ? (
+                <div className="space-y-2">
+                  <Button className="w-full h-12 rounded-xl gap-2" onClick={scanReceipt} disabled={isScanning || isProcessing}>
+                    {isScanning ? (<><Loader2 className="w-4 h-4 animate-spin" />Trying again...</>) : (<><RotateCcw className="w-4 h-4" />Try again</>)}
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 h-12 rounded-xl gap-2" onClick={retakePhoto} disabled={isScanning}>
+                      <Camera className="w-4 h-4" /> Retake
+                    </Button>
+                    <Button variant="outline" className="flex-1 h-12 rounded-xl gap-2" onClick={chooseDifferent} disabled={isScanning}>
+                      <Upload className="w-4 h-4" /> Choose another
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Button variant="outline" className="flex-1 h-12 rounded-xl" onClick={() => setImagePreview(null)} disabled={isScanning}>Retake</Button>
+                  <Button className="flex-1 h-12 rounded-xl gap-2" onClick={scanReceipt} disabled={isScanning || isProcessing}>
+                    {isScanning ? (<><Loader2 className="w-4 h-4 animate-spin" />Scanning...</>) : isProcessing ? (<><Loader2 className="w-4 h-4 animate-spin" />Optimizing...</>) : (<><Scan className="w-4 h-4" />Scan Receipt</>)}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
