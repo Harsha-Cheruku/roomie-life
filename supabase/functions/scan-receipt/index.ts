@@ -60,11 +60,22 @@ CRITICAL RULES:
 - Prices MUST be decimal numbers: 12.99 not "12.99" or "₹12.99"
 - Remove currency symbols and commas: "1,299.00" → 1299.00
 - If quantity shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit)
-- Include discount/offer lines as negative price items
-- "total" should match receipt total. If not visible, SUM all (price × quantity)
+- AUTO-ADJUST line items for any of the following — DO NOT add them as separate rows:
+  • Discounts / offers / coupons / promo / "save" / "off" lines → subtract proportionally from item prices
+  • Returned, voided or removed items → exclude entirely from items[]
+  • Round-off / round-down adjustments → silently fold into nearest item
+  • Taxes (GST / CGST / SGST / IGST / VAT / service tax / service charge / tip) →
+    distribute across items so that SUM(price × quantity) ≈ printed grand total
+  This means the returned items[] should already reflect the FINAL payable amount
+  per item, with no separate discount/tax/fee rows.
+- "total" MUST equal the final payable grand total printed on the receipt.
+  After distribution, SUM(price × quantity) should match "total" within ±0.05.
+  If grand total is not printed, compute it from the adjusted items.
 - Handle Indian receipts: ₹ symbol, GST/CGST/SGST lines, MRP formats
-- For faded/old bills: look for number patterns, column alignment, and price formats
-- The image is already grayscale and contrast-enhanced — focus on text extraction
+- The image may be a phone photo: handle perspective skew, glare, shadows,
+  crumpled paper, low light, motion blur and partially cut edges. Use column
+  alignment and price-format patterns (e.g. ##.##) to recover unclear digits.
+- For faded / thermal / old bills: rely on number patterns and layout
 - If completely unreadable, return { "error": "Could not read receipt" }
 - Return ONLY JSON, no markdown, no explanation`
           },
@@ -73,7 +84,7 @@ CRITICAL RULES:
             content: [
               {
                 type: 'text',
-                text: 'Extract all items from this receipt with accurate prices and quantities. The image may be blurry or low quality — extract everything you can read.'
+                text: 'Extract all items from this receipt with accurate prices and quantities. The image may be a phone photo with skew, glare, shadows or low light — extract everything you can read. Auto-apply any discounts, removed items and taxes/fees into the per-item prices so the items sum to the final printed total. Do NOT return separate discount or tax rows.'
               },
               {
                 type: 'image_url',
