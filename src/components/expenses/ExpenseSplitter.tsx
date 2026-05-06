@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3 } from 'lucide-react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -23,6 +23,7 @@ interface ScanResult {
   title: string;
   items: ExtractedItem[];
   total: number;
+  discount?: number;
 }
 
 interface RoomMember {
@@ -58,6 +59,7 @@ export const ExpenseSplitter = ({
   
   const [items, setItems] = useState<ExtractedItem[]>([]);
   const [title, setTitle] = useState('');
+  const [discount, setDiscount] = useState<number>(0);
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
@@ -75,6 +77,7 @@ export const ExpenseSplitter = ({
       // Only set items on first load, preserve manual edits
       setItems(scanResult.items.map(item => ({ ...item, isManual: false })));
       setTitle(scanResult.title || 'Scanned Receipt');
+      setDiscount(Math.max(0, Number(scanResult.discount) || 0));
       // Default: assign all items to all members
       const defaultAssignments: ItemAssignment = {};
       scanResult.items.forEach((_, index) => {
@@ -224,16 +227,30 @@ export const ExpenseSplitter = ({
     ));
   };
 
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     return items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  };
+
+  const calculateTotal = () => {
+    const sub = calculateSubtotal();
+    const d = Math.min(Math.max(0, discount), sub);
+    return Math.max(0, Math.round((sub - d) * 100) / 100);
+  };
+
+  const discountFactor = () => {
+    const sub = calculateSubtotal();
+    if (sub <= 0) return 1;
+    const d = Math.min(Math.max(0, discount), sub);
+    return (sub - d) / sub;
   };
 
   const calculateMemberOwes = (userId: string) => {
     let total = 0;
+    const factor = discountFactor();
     items.forEach((item, index) => {
       const assignedMembers = assignments[index] || [];
       if (assignedMembers.includes(userId) && assignedMembers.length > 0) {
-        const itemTotal = Math.round((item.price * item.quantity) * 100) / 100;
+        const itemTotal = Math.round((item.price * item.quantity) * factor * 100) / 100;
         const baseShare = Math.floor((itemTotal / assignedMembers.length) * 100) / 100;
         const remainder = Math.round((itemTotal - baseShare * assignedMembers.length) * 100) / 100;
         const memberIndex = assignedMembers.indexOf(userId);
@@ -318,12 +335,13 @@ export const ExpenseSplitter = ({
 
       if (itemsError) throw itemsError;
 
-      // Create splits for each item
+      // Create splits for each item (apply discount proportionally)
       const splits: any[] = [];
+      const factor = discountFactor();
       createdItems.forEach((createdItem, index) => {
         const assignedMembers = assignments[index] || [];
         if (assignedMembers.length > 0) {
-          const itemTotal = Math.round((items[index].price * items[index].quantity) * 100) / 100;
+          const itemTotal = Math.round((items[index].price * items[index].quantity) * factor * 100) / 100;
           const baseShare = Math.floor((itemTotal / assignedMembers.length) * 100) / 100;
           const remainder = Math.round((itemTotal - baseShare * assignedMembers.length) * 100) / 100;
 
@@ -555,6 +573,39 @@ export const ExpenseSplitter = ({
             </Button>
           </div>
 
+          {/* Discount control */}
+          <div className="bg-muted/50 rounded-2xl p-4 space-y-2">
+            <label className="text-sm font-medium text-muted-foreground flex items-center gap-1">
+              <Tag className="w-3.5 h-3.5" />
+              Discount {discount > 0 && <span className="text-xs">(auto-detected)</span>}
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">₹</span>
+              <Input
+                type="number"
+                value={discount}
+                onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                className="h-10 rounded-lg flex-1"
+                step="0.01"
+                placeholder="0.00"
+              />
+              {discount > 0 && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-10 w-10 rounded-lg text-muted-foreground"
+                  onClick={() => setDiscount(0)}
+                  title="Remove discount"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Subtracted from the total and split proportionally across items.
+            </p>
+          </div>
+
           {/* Summary */}
           <div className="bg-muted/50 rounded-2xl p-4 space-y-3">
             <h3 className="font-semibold flex items-center gap-2">
@@ -580,9 +631,21 @@ export const ExpenseSplitter = ({
                 </div>
               );
             })}
-            <div className="border-t border-border pt-3 flex items-center justify-between">
-              <span className="font-semibold">Total</span>
-              <span className="text-lg font-bold text-primary">₹{calculateTotal().toFixed(2)}</span>
+            <div className="border-t border-border pt-3 space-y-1.5">
+              <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <span>Subtotal</span>
+                <span>₹{calculateSubtotal().toFixed(2)}</span>
+              </div>
+              {discount > 0 && (
+                <div className="flex items-center justify-between text-sm text-emerald-600 dark:text-emerald-400">
+                  <span>Discount</span>
+                  <span>− ₹{Math.min(discount, calculateSubtotal()).toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1">
+                <span className="font-semibold">Total</span>
+                <span className="text-lg font-bold text-primary">₹{calculateTotal().toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -617,6 +680,8 @@ export const ExpenseSplitter = ({
         title={title}
         items={items}
         total={calculateTotal()}
+        subtotal={calculateSubtotal()}
+        discount={Math.min(discount, calculateSubtotal())}
         paidBy={{
           name: profile?.display_name || 'You',
           avatar: profile?.avatar || '😊',
