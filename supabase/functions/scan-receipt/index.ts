@@ -51,26 +51,21 @@ Return ONLY a valid JSON object with this exact structure:
   "items": [
     { "name": "Item name", "price": 12.99, "quantity": 1 }
   ],
+  "discount": 0,
   "total": 24.49
 }
 
 CRITICAL RULES:
-- Extract ALL line items visible, even if partially readable — use best guess for unclear text
+- Extract ALL line items visible at their ORIGINAL printed prices (MRP/list price). Do NOT bake discounts or taxes into item prices.
 - Use EXACT item names as printed. If unreadable, use descriptive placeholder like "Item 1"
 - Prices MUST be decimal numbers: 12.99 not "12.99" or "₹12.99"
 - Remove currency symbols and commas: "1,299.00" → 1299.00
 - If quantity shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit)
-- AUTO-ADJUST line items for any of the following — DO NOT add them as separate rows:
-  • Discounts / offers / coupons / promo / "save" / "off" lines → subtract proportionally from item prices
-  • Returned, voided or removed items → exclude entirely from items[]
-  • Round-off / round-down adjustments → silently fold into nearest item
-  • Taxes (GST / CGST / SGST / IGST / VAT / service tax / service charge / tip) →
-    distribute across items so that SUM(price × quantity) ≈ printed grand total
-  This means the returned items[] should already reflect the FINAL payable amount
-  per item, with no separate discount/tax/fee rows.
-- "total" MUST equal the final payable grand total printed on the receipt.
-  After distribution, SUM(price × quantity) should match "total" within ±0.05.
-  If grand total is not printed, compute it from the adjusted items.
+- "discount": sum of ALL discount / offer / coupon / promo / "save" / "off" / round-off-down lines as a positive number. 0 if none.
+- EXCLUDE returned / voided / removed / cancelled items entirely from items[].
+- Taxes (GST / CGST / SGST / IGST / VAT / service tax / service charge / tip) and any other added fees should be folded into item prices proportionally so they don't appear as separate rows — only discounts are surfaced separately.
+- "total" MUST equal the final payable grand total printed on the receipt. It should equal SUM(price × quantity) − discount within ±0.05.
+  If grand total is not printed, compute total = SUM(price × quantity) − discount.
 - Handle Indian receipts: ₹ symbol, GST/CGST/SGST lines, MRP formats
 - The image may be a phone photo: handle perspective skew, glare, shadows,
   crumpled paper, low light, motion blur and partially cut edges. Use column
@@ -84,7 +79,7 @@ CRITICAL RULES:
             content: [
               {
                 type: 'text',
-                text: 'Extract all items from this receipt with accurate prices and quantities. The image may be a phone photo with skew, glare, shadows or low light — extract everything you can read. Auto-apply any discounts, removed items and taxes/fees into the per-item prices so the items sum to the final printed total. Do NOT return separate discount or tax rows.'
+                text: 'Extract all items from this receipt at their ORIGINAL printed prices and quantities. Exclude any returned/removed/voided items. Sum any discounts/offers/coupons into a single "discount" number. Fold taxes/fees into item prices. "total" = sum(items) − discount.'
               },
               {
                 type: 'image_url',
