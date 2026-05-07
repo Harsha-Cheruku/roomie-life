@@ -6,6 +6,63 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const toMoney = (value: unknown) => {
+  const n = typeof value === 'number' ? value : Number(String(value ?? '').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(n) ? Math.round(Math.abs(n) * 100) / 100 : 0;
+};
+
+const extractJSON = (raw: string) => {
+  let cleaned = raw.replace(/^```json\s*/im, '').replace(/^```\s*/im, '').replace(/```\s*$/im, '').trim();
+  if (!cleaned.startsWith('{')) {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end <= start) throw new Error('No valid JSON object found');
+    cleaned = cleaned.slice(start, end + 1);
+  }
+  return JSON.parse(cleaned);
+};
+
+const normalizeReceipt = (result: any) => {
+  const items = Array.isArray(result.items) ? result.items
+    .map((item: any, index: number) => ({
+      name: String(item?.name || `Item ${index + 1}`).trim(),
+      price: toMoney(item?.price),
+      quantity: Math.max(1, Math.round(Number(item?.quantity) || 1)),
+    }))
+    .filter((item: any) => item.price > 0) : [];
+
+  const adjustments = Array.isArray(result.adjustments) ? result.adjustments
+    .map((adj: any) => {
+      const rawType = String(adj?.type || '').toLowerCase();
+      const label = String(adj?.label || 'Adjustment').trim();
+      const type = rawType === 'tax' || rawType === 'discount' || rawType === 'fee'
+        ? rawType
+        : /gst|vat|tax/i.test(label) ? 'tax'
+          : /discount|coupon|promo|offer|save|off|loyalty|round.*down/i.test(label) ? 'discount'
+            : 'fee';
+      return { label, amount: toMoney(adj?.amount), type };
+    })
+    .filter((adj: any) => adj.amount > 0) : [];
+
+  const subtotal = items.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
+  const added = adjustments.filter((a: any) => a.type !== 'discount').reduce((sum: number, a: any) => sum + a.amount, 0);
+  const removed = adjustments.filter((a: any) => a.type === 'discount').reduce((sum: number, a: any) => sum + a.amount, 0);
+  const computedTotal = Math.max(0, Math.round((subtotal + added - removed) * 100) / 100);
+  const printedTotal = toMoney(result.total);
+
+  if (printedTotal > 0 && Math.abs(printedTotal - computedTotal) > 0.05 && subtotal > 0) {
+    const diff = Math.round((printedTotal - computedTotal) * 100) / 100;
+    adjustments.push({ label: 'Total correction', amount: Math.abs(diff), type: diff > 0 ? 'fee' : 'discount' });
+  }
+
+  return {
+    title: String(result.title || 'Scanned Receipt').trim(),
+    items,
+    adjustments,
+    total: printedTotal > 0 ? printedTotal : computedTotal,
+  };
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
