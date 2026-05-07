@@ -96,11 +96,11 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
+        model: 'google/gemini-2.5-flash',
         messages: [
           {
             role: 'system',
-            content: `You are a highly accurate receipt/bill OCR assistant. Images are pre-processed (grayscale, contrast-stretched, sharpened) for optimal reading. You MUST extract items regardless of image quality.
+            content: `You are a highly accurate receipt/bill OCR assistant for grocery, restaurant, delivery, supermarket and Indian GST bills. Images may be skewed, shadowed, blurry, folded, cropped, thermal/faded, or low light. Carefully read columns and totals; do not invent unreadable lines.
 
 Return ONLY a valid JSON object with this exact structure:
 {
@@ -117,12 +117,14 @@ Return ONLY a valid JSON object with this exact structure:
 }
 
 CRITICAL RULES:
-- Extract ALL line items visible at their ORIGINAL printed prices (MRP/list price). Do NOT bake discounts or taxes into item prices.
+- Extract ALL visible bill detail rows: item name, original printed unit price, quantity, taxes, fees, discounts, round off, packing/delivery/service charges, tips and final payable total.
+- Extract line items at their ORIGINAL printed prices. Do NOT bake discounts, taxes or fees into item prices.
 - Use EXACT item names as printed. If unreadable, use descriptive placeholder like "Item 1"
 - Prices MUST be decimal numbers: 12.99 not "12.99" or "₹12.99"
 - Remove currency symbols and commas: "1,299.00" → 1299.00
-- If quantity shown (e.g., "2 x ₹50"), set quantity=2 and price=50 (per-unit)
+- If quantity shown (e.g., "2 x ₹50", "2 @ 50", "QTY 2 RATE 50 AMT 100"), set quantity=2 and price=50 per unit.
 - EXCLUDE returned / voided / removed / cancelled items entirely from items[].
+- Do not treat subtotal, total, amount paid, balance, cash/card, payment reference or invoice number as an item.
 - "adjustments" MUST list every separately-printed charge or deduction so the user can review/delete/edit them. Each entry:
     • "label": exact text printed on the receipt (e.g. "CGST 9%", "Service Charge", "Tip", "Round Off", "Coupon SAVE10").
     • "amount": positive decimal magnitude (never negative — the sign is implied by "type").
@@ -147,7 +149,7 @@ CRITICAL RULES:
             content: [
               {
                 type: 'text',
-                text: 'Extract all items from this receipt at their ORIGINAL printed prices and quantities. Exclude any returned/removed/voided items. Sum any discounts/offers/coupons into a single "discount" number. Fold taxes/fees into item prices. "total" = sum(items) − discount.'
+                text: 'Extract every visible bill detail into JSON. Keep items editable by returning item name, per-unit original price, and quantity. Return each tax, fee, discount, coupon, service charge, delivery/packing charge, tip and round-off as a separate adjustments entry. Do not fold taxes or discounts into item prices. Final total must be the printed payable total.'
               },
               {
                 type: 'image_url',
@@ -158,7 +160,8 @@ CRITICAL RULES:
             ]
           }
         ],
-        max_tokens: 1500,
+        response_format: { type: 'json_object' },
+        max_tokens: 2500,
       }),
     });
 
