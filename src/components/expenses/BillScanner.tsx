@@ -99,15 +99,18 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const [captureError, setCaptureError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const cameraCapturePendingRef = useRef(false);
   const { toast } = useToast();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) {
+      cameraCapturePendingRef.current = false;
       setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
       return;
     }
 
+    cameraCapturePendingRef.current = false;
     setCaptureError(null);
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Invalid file', description: 'Please select an image file', variant: 'destructive' });
@@ -194,6 +197,16 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     setCaptureError(null);
     setScanError(null);
     if (cameraInputRef.current) cameraInputRef.current.value = '';
+    cameraCapturePendingRef.current = true;
+    const detectCancelledCapture = () => {
+      window.setTimeout(() => {
+        if (cameraCapturePendingRef.current && !cameraInputRef.current?.files?.length) {
+          cameraCapturePendingRef.current = false;
+          setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
+        }
+      }, 900);
+    };
+    window.addEventListener('focus', detectCancelledCapture, { once: true });
     cameraInputRef.current?.click();
   };
 
