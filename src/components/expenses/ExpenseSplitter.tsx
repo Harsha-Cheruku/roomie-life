@@ -206,6 +206,12 @@ export const ExpenseSplitter = ({
     ));
   };
 
+  const updateItemQuantityValue = (index: number, quantity: number) => {
+    setItems(prev => prev.map((item, i) =>
+      i === index ? { ...item, quantity: Math.max(1, Math.round(quantity || 1)) } : item
+    ));
+  };
+
   const removeItem = (index: number) => {
     setItems(prev => prev.filter((_, i) => i !== index));
     setAssignments(prev => {
@@ -279,6 +285,26 @@ export const ExpenseSplitter = ({
   const addAdjustment = (type: AdjustmentType) => {
     const defaults: Record<AdjustmentType, string> = { tax: 'Tax', fee: 'Service Charge', discount: 'Discount' };
     setAdjustments(prev => [...prev, { label: defaults[type], amount: 0, type }]);
+  };
+
+  const updateFinalTotal = (nextTotal: number) => {
+    const desired = Math.max(0, Math.round((nextTotal || 0) * 100) / 100);
+    const baseAdjustments = adjustments.filter(a => a.label !== 'Total correction');
+    const baseSubtotal = calculateSubtotal();
+    const baseTaxes = baseAdjustments.filter(a => a.type === 'tax').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseFees = baseAdjustments.filter(a => a.type === 'fee').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseDiscounts = baseAdjustments.filter(a => a.type === 'discount').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseTotal = Math.max(0, Math.round((baseSubtotal + baseTaxes + baseFees - baseDiscounts) * 100) / 100);
+    const diff = Math.round((desired - baseTotal) * 100) / 100;
+
+    if (Math.abs(diff) < 0.01) {
+      setAdjustments(baseAdjustments);
+      return;
+    }
+    setAdjustments([
+      ...baseAdjustments,
+      { label: 'Total correction', amount: Math.abs(diff), type: diff > 0 ? 'fee' : 'discount' },
+    ]);
   };
 
   const calculateMemberOwes = (userId: string) => {
