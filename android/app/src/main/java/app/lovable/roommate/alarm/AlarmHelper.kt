@@ -34,6 +34,9 @@ object AlarmHelper {
         else
             getNextTriggerTimeMillis(alarm.hour, alarm.minute)
 
+        // Replace any existing PendingIntent first so edited/deleted old alarms cannot fire late.
+        cancelAlarm(context, alarm.id)
+
         val triggerIntent = Intent(context, AlarmActivity::class.java).apply {
             action = "app.lovable.roommate.ALARM_TRIGGER"
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
