@@ -190,8 +190,7 @@ CRITICAL RULES:
 
     let parsedResult;
     try {
-      const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      parsedResult = JSON.parse(cleanContent);
+      parsedResult = normalizeReceipt(extractJSON(content));
     } catch (parseError) {
       logError('scan-receipt:parse', parseError);
       return new Response(JSON.stringify({ error: 'Failed to parse receipt data' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -199,6 +198,10 @@ CRITICAL RULES:
 
     if (parsedResult.error) {
       return new Response(JSON.stringify({ error: parsedResult.error }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    if (!parsedResult.items || parsedResult.items.length === 0) {
+      return new Response(JSON.stringify({ error: 'Could not read receipt items. Try again with a clearer photo or upload from gallery.' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     console.log('Extracted receipt data:', parsedResult);
