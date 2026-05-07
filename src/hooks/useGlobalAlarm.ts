@@ -24,8 +24,9 @@ interface Alarm {
   owner_device_id?: string | null;
 }
 
-// Ignore very old triggers on app open, but never stop an already ringing alarm by age.
-const FRESH_TRIGGER_WINDOW_MS = 30 * 60_000;
+// Ignore old triggers on app open. If an alarm starts while the app is open,
+// keep it ringing until dismissed; only stale triggers from before app open are suppressed.
+const FRESH_TRIGGER_WINDOW_MS = 90_000;
 
 export function useGlobalAlarm() {
   const { user, currentRoom } = useAuth();
@@ -61,10 +62,9 @@ export function useGlobalAlarm() {
 
       if (triggers && triggers.length > 0) {
         const t = triggers[0];
-        // Check freshness — ignore stale triggers
+        // Check freshness — ignore stale triggers so old alarms don't ring when reopening the app.
         const triggerAge = Date.now() - new Date(t.triggered_at).getTime();
-        if (triggerAge > FRESH_TRIGGER_WINDOW_MS && activeTrigger?.id !== t.id) {
-          // Auto-dismiss stale trigger
+        if ((triggerAge < -30_000 || triggerAge > FRESH_TRIGGER_WINDOW_MS) && activeTrigger?.id !== t.id) {
           setActiveTrigger(null);
           setActiveAlarm(null);
           return;
