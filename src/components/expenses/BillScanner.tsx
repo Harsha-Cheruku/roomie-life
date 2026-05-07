@@ -13,6 +13,7 @@ interface ExtractedItem {
 interface ScanResult {
   title: string;
   items: ExtractedItem[];
+  adjustments?: Array<{ label: string; amount: number; type: 'tax' | 'fee' | 'discount' }>;
   total: number;
 }
 
@@ -95,14 +96,22 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [captureError, setCaptureError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const cameraCapturePendingRef = useRef(false);
   const { toast } = useToast();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file) {
+      cameraCapturePendingRef.current = false;
+      setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
+      return;
+    }
 
+    cameraCapturePendingRef.current = false;
+    setCaptureError(null);
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Invalid file', description: 'Please select an image file', variant: 'destructive' });
       return;
@@ -180,19 +189,44 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     setIsScanning(false);
     setIsProcessing(false);
     setScanError(null);
+    setCaptureError(null);
     onOpenChange(false);
+  };
+
+  const startCameraCapture = () => {
+    setCaptureError(null);
+    setScanError(null);
+    if (cameraInputRef.current) cameraInputRef.current.value = '';
+    cameraCapturePendingRef.current = true;
+    const detectCancelledCapture = () => {
+      window.setTimeout(() => {
+        if (cameraCapturePendingRef.current && !cameraInputRef.current?.files?.length) {
+          cameraCapturePendingRef.current = false;
+          setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
+        }
+      }, 900);
+    };
+    window.addEventListener('focus', detectCancelledCapture, { once: true });
+    cameraInputRef.current?.click();
+  };
+
+  const startUpload = () => {
+    setCaptureError(null);
+    setScanError(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    fileInputRef.current?.click();
   };
 
   const retakePhoto = () => {
     setImagePreview(null);
     setScanError(null);
-    cameraInputRef.current?.click();
+    startCameraCapture();
   };
 
   const chooseDifferent = () => {
     setImagePreview(null);
     setScanError(null);
-    fileInputRef.current?.click();
+    startUpload();
   };
 
   return (
@@ -207,7 +241,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
             <div className="space-y-4">
               <div 
                 className="border-2 border-dashed border-primary/30 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={startUpload}
               >
                 <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
                   <Upload className="w-8 h-8 text-primary" />
@@ -225,9 +259,24 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
                 <div className="flex-1 h-px bg-border" />
               </div>
 
-              <Button variant="outline" className="w-full h-14 rounded-xl gap-3 press-effect" onClick={() => cameraInputRef.current?.click()}>
+              {captureError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                  <div className="text-sm">
+                    <p className="font-medium text-destructive">Camera did not return a photo</p>
+                    <p className="text-muted-foreground text-xs mt-0.5">{captureError}</p>
+                  </div>
+                </div>
+              )}
+
+              <Button variant="outline" className="w-full h-14 rounded-xl gap-3 press-effect" onClick={startCameraCapture}>
                 <Camera className="w-5 h-5" /> Take Photo
               </Button>
+              {captureError && (
+                <Button variant="secondary" className="w-full h-12 rounded-xl gap-2" onClick={startUpload}>
+                  <Upload className="w-4 h-4" /> Use Upload Option
+                </Button>
+              )}
 
               <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/jpg" className="hidden" onChange={handleFileSelect} />
               <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFileSelect} />

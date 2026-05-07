@@ -206,6 +206,12 @@ export const ExpenseSplitter = ({
     ));
   };
 
+  const updateItemQuantityValue = (index: number, quantity: number) => {
+    setItems(prev => prev.map((item, i) =>
+      i === index ? { ...item, quantity: Math.max(1, Math.round(quantity || 1)) } : item
+    ));
+  };
+
   const removeItem = (index: number) => {
     setItems(prev => prev.filter((_, i) => i !== index));
     setAssignments(prev => {
@@ -279,6 +285,26 @@ export const ExpenseSplitter = ({
   const addAdjustment = (type: AdjustmentType) => {
     const defaults: Record<AdjustmentType, string> = { tax: 'Tax', fee: 'Service Charge', discount: 'Discount' };
     setAdjustments(prev => [...prev, { label: defaults[type], amount: 0, type }]);
+  };
+
+  const updateFinalTotal = (nextTotal: number) => {
+    const desired = Math.max(0, Math.round((nextTotal || 0) * 100) / 100);
+    const baseAdjustments = adjustments.filter(a => a.label !== 'Total correction');
+    const baseSubtotal = calculateSubtotal();
+    const baseTaxes = baseAdjustments.filter(a => a.type === 'tax').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseFees = baseAdjustments.filter(a => a.type === 'fee').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseDiscounts = baseAdjustments.filter(a => a.type === 'discount').reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    const baseTotal = Math.max(0, Math.round((baseSubtotal + baseTaxes + baseFees - baseDiscounts) * 100) / 100);
+    const diff = Math.round((desired - baseTotal) * 100) / 100;
+
+    if (Math.abs(diff) < 0.01) {
+      setAdjustments(baseAdjustments);
+      return;
+    }
+    setAdjustments([
+      ...baseAdjustments,
+      { label: 'Total correction', amount: Math.abs(diff), type: diff > 0 ? 'fee' : 'discount' },
+    ]);
   };
 
   const calculateMemberOwes = (userId: string) => {
@@ -529,9 +555,9 @@ export const ExpenseSplitter = ({
                           step="0.01"
                         />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="w-32">
                         <label className="text-xs text-muted-foreground">Qty</label>
-                        <div className="flex items-center gap-1 mt-1">
+                        <div className="grid grid-cols-[32px_1fr_32px] items-center gap-1 mt-1">
                           <Button 
                             size="icon" 
                             variant="outline" 
@@ -540,7 +566,14 @@ export const ExpenseSplitter = ({
                           >
                             <Minus className="w-3 h-3" />
                           </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantityValue(index, parseInt(e.target.value, 10) || 1)}
+                            className="h-8 rounded-lg text-center px-1"
+                          />
                           <Button 
                             size="icon" 
                             variant="outline" 
@@ -731,7 +764,16 @@ export const ExpenseSplitter = ({
               ))}
               <div className="flex items-center justify-between pt-1">
                 <span className="font-semibold">Total</span>
-                <span className="text-lg font-bold text-primary">₹{calculateTotal().toFixed(2)}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-lg font-bold text-primary">₹</span>
+                  <Input
+                    type="number"
+                    value={calculateTotal()}
+                    onChange={(e) => updateFinalTotal(parseFloat(e.target.value) || 0)}
+                    className="h-9 w-28 rounded-lg text-right font-bold text-primary"
+                    step="0.01"
+                  />
+                </div>
               </div>
             </div>
           </div>

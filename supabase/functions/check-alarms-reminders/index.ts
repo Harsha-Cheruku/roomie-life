@@ -23,14 +23,14 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     const now = new Date();
-    const staleBefore = new Date(now.getTime() - 30 * 60 * 1000);
+    const staleBefore = new Date(now.getTime() - 2 * 60 * 1000);
     let staleDismissed = 0;
     let alarmsTriggered = 0;
     let oneTimeDeactivated = 0;
 
     console.log(`[check-alarms] Running at UTC: ${now.toISOString()}`);
 
-    // Cleanup stale ringing triggers (>30 min old)
+    // Cleanup stale ringing triggers quickly so old alarms don't ring when users reopen the app.
     const { data: staleTriggers, error: staleErr } = await supabase
       .from("alarm_triggers")
       .select("id")
@@ -71,8 +71,9 @@ Deno.serve(async (req) => {
         if (!alarm.days_of_week || !alarm.days_of_week.includes(localDay)) continue;
 
         const alarmMinutes = timeToMinutes(alarm.alarm_time);
-        const diffMinutes = localMinutes - alarmMinutes;
-        if (diffMinutes < 0 || diffMinutes > 2) continue;
+        const localSeconds = localNow.getUTCSeconds();
+        const diffSeconds = (localMinutes - alarmMinutes) * 60 + localSeconds;
+        if (diffSeconds < 0 || diffSeconds > 75) continue;
 
         console.log(`[check-alarms] Alarm "${alarm.title}" (${alarm.id}) is due!`);
 

@@ -16,6 +16,7 @@ import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { useNotifications } from "@/hooks/useNotifications";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AlarmAuditLog } from "@/components/alarms/AlarmAuditLog";
+import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 
 interface Alarm {
   id: string;
@@ -66,6 +67,7 @@ export default function Alarms() {
     try { return localStorage.getItem("alarm_ringtone") || "default"; } catch { return "default"; }
   });
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const { isNative, deleteAlarm: deleteNativeAlarm } = useNativeAlarm();
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -90,13 +92,22 @@ export default function Alarms() {
     setLoading(false);
   };
 
+  const cancelNativeAlarmCopies = async (alarm: Alarm) => {
+    if (!isNative || alarm.created_by !== user?.id) return;
+    await deleteNativeAlarm(alarm.id);
+    await Promise.all((alarm.days_of_week || []).map((day) => deleteNativeAlarm(`${alarm.id}_d${day}`)));
+  };
+
   const toggleAlarm = async (alarm: Alarm) => {
     const { error } = await supabase.from("alarms").update({ is_active: !alarm.is_active }).eq("id", alarm.id);
     if (error) { toast.error("Failed to update alarm"); return; }
+    if (alarm.is_active) await cancelNativeAlarmCopies(alarm);
     setAlarms((prev) => prev.map((a) => a.id === alarm.id ? { ...a, is_active: !a.is_active } : a));
   };
 
   const deleteAlarm = async (alarmId: string) => {
+    const alarm = alarms.find((a) => a.id === alarmId);
+    if (alarm) await cancelNativeAlarmCopies(alarm);
     await supabase.from("alarm_triggers").update({ status: "dismissed", dismissed_by: user?.id, dismissed_at: new Date().toISOString() }).eq("alarm_id", alarmId).eq("status", "ringing");
     const { error } = await supabase.from("alarms").delete().eq("id", alarmId);
     if (error) { toast.error("Failed to delete alarm"); return; }
