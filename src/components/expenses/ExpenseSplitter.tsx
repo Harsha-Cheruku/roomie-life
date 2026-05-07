@@ -555,9 +555,9 @@ export const ExpenseSplitter = ({
                           step="0.01"
                         />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="w-32">
                         <label className="text-xs text-muted-foreground">Qty</label>
-                        <div className="flex items-center gap-1 mt-1">
+                        <div className="grid grid-cols-[32px_1fr_32px] items-center gap-1 mt-1">
                           <Button 
                             size="icon" 
                             variant="outline" 
@@ -566,7 +566,14 @@ export const ExpenseSplitter = ({
                           >
                             <Minus className="w-3 h-3" />
                           </Button>
-                          <span className="w-8 text-center font-medium">{item.quantity}</span>
+                          <Input
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItemQuantityValue(index, parseInt(e.target.value, 10) || 1)}
+                            className="h-8 rounded-lg text-center px-1"
+                          />
                           <Button 
                             size="icon" 
                             variant="outline" 
@@ -757,7 +764,16 @@ export const ExpenseSplitter = ({
               ))}
               <div className="flex items-center justify-between pt-1">
                 <span className="font-semibold">Total</span>
-                <span className="text-lg font-bold text-primary">₹{calculateTotal().toFixed(2)}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-lg font-bold text-primary">₹</span>
+                  <Input
+                    type="number"
+                    value={calculateTotal()}
+                    onChange={(e) => updateFinalTotal(parseFloat(e.target.value) || 0)}
+                    className="h-9 w-28 rounded-lg text-right font-bold text-primary"
+                    step="0.01"
+                  />
+                </div>
               </div>
             </div>
           </div>
