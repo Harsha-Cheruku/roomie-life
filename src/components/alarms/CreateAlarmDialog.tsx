@@ -66,9 +66,13 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
     if (!roomId || !userId) { toast.error("Please join a room first"); return; }
     if (!title.trim()) { toast.error("Please enter an alarm title"); return; }
 
+    const [hours, minutes] = time.split(":").map(Number);
+    const nextOnceDate = new Date();
+    nextOnceDate.setHours(hours, minutes, 0, 0);
+    if (nextOnceDate.getTime() <= Date.now()) nextOnceDate.setDate(nextOnceDate.getDate() + 1);
     const daysToUse =
       scheduleMode === "once"
-        ? [new Date().getDay()]
+        ? [nextOnceDate.getDay()]
         : scheduleMode === "daily"
           ? DAYS.map((day) => day.value)
           : selectedDays;
@@ -77,7 +81,6 @@ export function CreateAlarmDialog({ open, onOpenChange, roomId, userId, onCreate
 
     setCreating(true);
     const timezoneOffset = new Date().getTimezoneOffset();
-    const [hours, minutes] = time.split(":").map(Number);
 
     // Save to Supabase for shared room state
     const { data: insertedAlarm, error } = await supabase.from("alarms").insert({
