@@ -39,6 +39,30 @@ export interface NativeAlarmPlugin {
   requestExactAlarmPermission(): Promise<{ success: boolean }>;
 
   getAlarmPermissionStatus(): Promise<{ exactAlarmGranted: boolean }>;
+
+  getDiagnostics(): Promise<{
+    notificationsEnabled: boolean;
+    channelImportance: number; // 0=none,1=min,2=low,3=default,4=high,5=max
+    channelSoundOk: boolean;
+    channelBypassDnd: boolean;
+    exactAlarmGranted: boolean;
+    ignoringBatteryOptimization: boolean;
+    canDrawOverlays: boolean;
+    scheduledAlarmCount: number;
+    manufacturer: string;
+    brand: string;
+    model: string;
+    sdkInt: number;
+    packageName: string;
+    hasAutostartIntent: boolean;
+  }>;
+
+  openNotificationSettings(): Promise<{ success: boolean }>;
+  openChannelSettings(): Promise<{ success: boolean }>;
+  openOverlaySettings(): Promise<{ success: boolean }>;
+  openAppSettings(): Promise<{ success: boolean }>;
+  openAutostartSettings(): Promise<{ success: boolean; fallback?: boolean }>;
+  scheduleTestAlarm(options: { minutes?: number }): Promise<{ success: boolean; alarmId: string; hour: number; minute: number }>;
 }
 
 const NativeAlarm = registerPlugin<NativeAlarmPlugin>('NativeAlarm');
