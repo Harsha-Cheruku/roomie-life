@@ -24,7 +24,11 @@ class AlarmService : Service() {
         const val TAG = "AlarmService"
         const val ACTION_START = "app.lovable.roommate.alarm.START"
         const val ACTION_STOP = "app.lovable.roommate.alarm.STOP"
-        const val CHANNEL_ID = "roommate_continuous_alarm_channel"
+        // v2: bump channel id so users on old installs get a fresh, sound-less channel.
+        // Android caches NotificationChannel settings forever; the only way to fix a
+        // misbehaving channel (e.g. that still produces a single system "beep") is to
+        // create a new one with a different id.
+        const val CHANNEL_ID = "roommate_continuous_alarm_channel_v2"
         const val NOTIFICATION_ID = 9999
 
         fun createNotificationChannel(context: Context) {
@@ -259,7 +263,10 @@ class AlarmService : Service() {
                 setDataSource(this@AlarmService, uri)
                 isLooping = true  // CRITICAL: continuous ring, never stops
                 setWakeMode(this@AlarmService, PowerManager.PARTIAL_WAKE_LOCK)
-                setVolume(0.3f, 0.3f)
+                // Start near full volume so the very first second is clearly audible.
+                // The previous 0.3f start often felt like "one quiet beep" before the
+                // ramp brought it up.
+                setVolume(0.85f, 0.85f)
                 setOnCompletionListener { player ->
                     try {
                         player.seekTo(0)
@@ -354,20 +361,20 @@ class AlarmService : Service() {
     private fun startVolumeRamp() {
         volumeRampHandler = Handler(Looper.getMainLooper())
         val startTime = System.currentTimeMillis()
-        val rampDuration = 30_000L
+        val rampDuration = 5_000L
 
         val rampRunnable = object : Runnable {
             override fun run() {
                 val elapsed = System.currentTimeMillis() - startTime
                 val progress = (elapsed.toFloat() / rampDuration).coerceIn(0f, 1f)
-                val volume = 0.3f + (0.7f * progress)
+                val volume = 0.85f + (0.15f * progress)
                 try { mediaPlayer?.setVolume(volume, volume) } catch (_: Exception) {}
                 if (progress < 1f) {
-                    volumeRampHandler?.postDelayed(this, 500)
+                    volumeRampHandler?.postDelayed(this, 250)
                 }
             }
         }
-        volumeRampHandler?.postDelayed(rampRunnable, 500)
+        volumeRampHandler?.postDelayed(rampRunnable, 250)
     }
 
     private fun startVibration() {

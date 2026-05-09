@@ -135,12 +135,26 @@ class AlarmActivity : Activity() {
 
             setOnClickListener {
                 Log.d(TAG, "STOP pressed — killing alarm instantly")
-                // Stop foreground service immediately — no JS, no network
+                // Send STOP synchronously — startService dispatches on the main
+                // looper before returning, but the service may not run for a few
+                // hundred ms. To make dismiss feel instant, we also fire the
+                // foreground-service variant + finish() right away. The user
+                // perceives the screen closing as "alarm stopped".
                 val stopIntent = Intent(this@AlarmActivity, AlarmService::class.java).apply {
                     action = AlarmService.ACTION_STOP
                     putExtra("alarm_id", alarmId)
                 }
-                startService(stopIntent)
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(stopIntent)
+                    } else {
+                        startService(stopIntent)
+                    }
+                } catch (_: Exception) {
+                    startService(stopIntent)
+                }
+                isEnabled = false
+                text = "Stopping…"
                 finish()
             }
         }
