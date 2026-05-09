@@ -15,6 +15,10 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   /** Called once user passes all critical checks. */
   onReady?: () => void;
+  /** Called when the user finishes the setup flow (after success screen). */
+  onComplete?: () => void;
+  /** When true, on first reaching all-green show a success screen with auto test alarm. */
+  showSuccessScreen?: boolean;
 }
 
 const importanceLabel = (n: number) => ["None", "Min", "Low", "Default", "High", "Urgent"][n] ?? "Unknown";
@@ -68,12 +72,15 @@ function StatusRow({
   );
 }
 
-export function AlarmSetupWizard({ open, onOpenChange, onReady }: Props) {
+export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, showSuccessScreen = false }: Props) {
   const isAndroid = Capacitor.getPlatform() === "android";
   const [diag, setDiag] = useState<Diag | null>(null);
   const [loading, setLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [successShown, setSuccessShown] = useState(false);
+  const [reachedOkInSession, setReachedOkInSession] = useState(false);
+  const [autoTestScheduled, setAutoTestScheduled] = useState<{ hour: number; minute: number } | null>(null);
 
   const refresh = useCallback(async () => {
     if (!isAndroid) return;
@@ -105,6 +112,31 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady }: Props) {
     diag.exactAlarmGranted &&
     diag.ignoringBatteryOptimization;
 
+  // Track when user transitions from "not ok" to "ok" within this session.
+  useEffect(() => {
+    if (!open) return;
+    if (criticalOk && !successShown && showSuccessScreen) {
+      setReachedOkInSession(true);
+    }
+  }, [criticalOk, open, showSuccessScreen, successShown]);
+
+  // Auto-schedule a 2-min verification alarm the first time we reach success.
+  useEffect(() => {
+    if (!open || !showSuccessScreen) return;
+    if (criticalOk && reachedOkInSession && !successShown && !autoTestScheduled) {
+      (async () => {
+        try {
+          const r = await NativeAlarm.scheduleTestAlarm({ minutes: 2 });
+          setAutoTestScheduled({ hour: r.hour, minute: r.minute });
+        } catch {
+          /* non-fatal */
+        } finally {
+          setSuccessShown(true);
+        }
+      })();
+    }
+  }, [criticalOk, reachedOkInSession, open, showSuccessScreen, successShown, autoTestScheduled]);
+
   const handleTest = async () => {
     if (!isAndroid) { toast.info("Test alarm only works on the installed Android app."); return; }
     setTesting(true);
@@ -133,7 +165,45 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady }: Props) {
               Native alarm hardening only applies to the installed Android app. Web/iOS use the system scheduler.
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={() => { onOpenChange(false); onReady?.(); }}>Continue</Button>
+          <Button onClick={() => { onOpenChange(false); onReady?.(); onComplete?.(); }}>Continue</Button>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  // Success screen: shown after all checks pass within this session.
+  if (successShown && criticalOk) {
+    const hh = autoTestScheduled ? String(autoTestScheduled.hour).padStart(2, "0") : "--";
+    const mm = autoTestScheduled ? String(autoTestScheduled.minute).padStart(2, "0") : "--";
+    return (
+      <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) onComplete?.(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" /> You're all set!
+            </DialogTitle>
+            <DialogDescription>
+              RoomMate alarms are configured to ring as reliably as your phone's built-in alarm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {autoTestScheduled && (
+              <div className="rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-sm">
+                <p className="font-semibold text-emerald-900 dark:text-emerald-200">
+                  ⏰ Test alarm scheduled for {hh}:{mm}
+                </p>
+                <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-1">
+                  Lock your phone & swipe RoomMate out of recents. It should ring within 2 minutes.
+                </p>
+              </div>
+            )}
+            <Button
+              className="w-full"
+              onClick={() => { onOpenChange(false); onReady?.(); onComplete?.(); }}
+            >
+              Done
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     );
@@ -253,7 +323,10 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady }: Props) {
             <Button
               className="w-full"
               variant={criticalOk ? "default" : "outline"}
-              onClick={() => { onOpenChange(false); if (criticalOk) onReady?.(); }}
+              onClick={() => {
+                onOpenChange(false);
+                if (criticalOk) { onReady?.(); onComplete?.(); }
+              }}
             >
               {criticalOk ? "All set — continue" : "Close (some checks still failing)"}
             </Button>
