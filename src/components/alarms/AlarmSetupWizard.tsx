@@ -5,10 +5,24 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { CheckCircle2, AlertTriangle, Loader2, RefreshCw, ChevronDown, ChevronUp, Bug, BellRing, Battery, Layers, Zap, ShieldAlert, Smartphone, PlayCircle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Loader2, RefreshCw, ChevronDown, ChevronUp, Bug, BellRing, Battery, Layers, Zap, ShieldAlert, Smartphone, PlayCircle, ExternalLink, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 
 type Diag = Awaited<ReturnType<typeof NativeAlarm.getDiagnostics>>;
+
+/** Definition of one permission/setting step. */
+interface StepDef {
+  key: "notifications" | "channel" | "exact" | "battery" | "overlay" | "autostart";
+  title: string;
+  why: string;
+  /** Plain-language steps the user will see on the system settings screen. */
+  steps: string[];
+  buttonLabel: string;
+  /** Open the relevant native settings screen. */
+  open: () => Promise<unknown>;
+  /** Determines whether this step now passes after re-check. */
+  isOk: (d: Diag) => boolean;
+}
 
 interface Props {
   open: boolean;
@@ -81,6 +95,11 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
   const [successShown, setSuccessShown] = useState(false);
   const [reachedOkInSession, setReachedOkInSession] = useState(false);
   const [autoTestScheduled, setAutoTestScheduled] = useState<{ hour: number; minute: number } | null>(null);
+  const [activeStep, setActiveStep] = useState<StepDef | null>(null);
+  // Phase: 'instructions' = explain before opening; 'confirm' = user returned, ask if done.
+  const [stepPhase, setStepPhase] = useState<"instructions" | "confirm">("instructions");
+  const [stepOpening, setStepOpening] = useState(false);
+  const [stepRechecking, setStepRechecking] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!isAndroid) return;
@@ -101,10 +120,22 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
   // Re-check whenever the user returns from a system settings screen.
   useEffect(() => {
     if (!open) return;
-    const onVis = () => { if (document.visibilityState === "visible") refresh(); };
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      refresh();
+      // If a step is in-flight and we just came back from system settings,
+      // automatically move to the confirm phase.
+      setActiveStep((s) => {
+        if (s && stepPhase === "instructions" && stepOpening) {
+          setStepPhase("confirm");
+          setStepOpening(false);
+        }
+        return s;
+      });
+    };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-  }, [open, refresh]);
+  }, [open, refresh, stepPhase, stepOpening]);
 
   const criticalOk = !!diag &&
     diag.notificationsEnabled &&
@@ -153,6 +184,138 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
     } finally {
       setTesting(false);
     }
+  };
+
+  const STEPS: StepDef[] = [
+    {
+      key: "notifications",
+      title: "Allow notifications",
+      why: "Android needs permission to show the full-screen alarm. Without this, alarms stay silent.",
+      steps: [
+        "We'll open RoomMate's Notification settings.",
+        "Turn the main 'Allow notifications' toggle ON.",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Notification settings",
+      open: () => NativeAlarm.openNotificationSettings(),
+      isOk: (d) => d.notificationsEnabled,
+    },
+    {
+      key: "channel",
+      title: "Set alarm importance to Urgent",
+      why: "The alarm channel must be Urgent (or High) so it bypasses Do Not Disturb and pops up over the lock screen.",
+      steps: [
+        "We'll open the 'Alarms' notification channel.",
+        "Set Importance to 'Urgent' (or 'High').",
+        "Make sure Sound is enabled and 'Override Do Not Disturb' is ON if available.",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Alarm channel settings",
+      open: () => NativeAlarm.openChannelSettings(),
+      isOk: (d) => d.channelImportance >= 4,
+    },
+    {
+      key: "exact",
+      title: "Allow exact alarms",
+      why: "Without this, Android may delay alarms by minutes — they won't ring at the exact time.",
+      steps: [
+        "We'll open the 'Alarms & reminders' permission screen.",
+        "Turn 'Allow setting alarms and reminders' ON for RoomMate.",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Alarms & reminders",
+      open: () => NativeAlarm.requestExactAlarmPermission(),
+      isOk: (d) => d.exactAlarmGranted,
+    },
+    {
+      key: "battery",
+      title: "Disable battery optimization",
+      why: "If RoomMate is battery-optimized, Android can kill it in deep sleep and your alarm won't ring.",
+      steps: [
+        "We'll show the battery-optimization prompt.",
+        "Choose 'Allow' (or set RoomMate to 'Unrestricted' / 'Don't optimize').",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Battery settings",
+      open: () => NativeAlarm.requestDisableBatteryOptimization(),
+      isOk: (d) => d.ignoringBatteryOptimization,
+    },
+    {
+      key: "overlay",
+      title: "Display over other apps",
+      why: "Lets the full-screen alarm appear above the lock screen, just like the system clock.",
+      steps: [
+        "We'll open the 'Display over other apps' screen.",
+        "Turn the toggle ON for RoomMate.",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Overlay settings",
+      open: () => NativeAlarm.openOverlaySettings(),
+      isOk: (d) => d.canDrawOverlays,
+    },
+    {
+      key: "autostart",
+      title: "Enable Autostart (OEM)",
+      why: "On Xiaomi/Oppo/Vivo/Realme/Huawei, autostart must be ON or the system blocks alarms when the app is closed.",
+      steps: [
+        "We'll try to open your phone's Autostart screen.",
+        "Find RoomMate in the list and turn Autostart ON.",
+        "If the screen doesn't open, follow the manufacturer tip shown below.",
+        "Come back to RoomMate when you're done.",
+      ],
+      buttonLabel: "Open Autostart settings",
+      open: () => NativeAlarm.openAutostartSettings(),
+      isOk: () => true, // We can't verify autostart from app code; user confirms.
+    },
+  ];
+
+  const startStep = (key: StepDef["key"]) => {
+    const def = STEPS.find((s) => s.key === key);
+    if (!def) return;
+    setActiveStep(def);
+    setStepPhase("instructions");
+    setStepOpening(false);
+  };
+
+  const openStepSettings = async () => {
+    if (!activeStep) return;
+    setStepOpening(true);
+    try {
+      await activeStep.open();
+      // If the OS doesn't background us (e.g. autostart fallback),
+      // still let the user confirm manually.
+    } catch {
+      toast.error("Couldn't open that settings screen automatically.");
+      setStepPhase("confirm");
+      setStepOpening(false);
+    }
+  };
+
+  const confirmStepDone = async () => {
+    if (!activeStep) return;
+    setStepRechecking(true);
+    try {
+      const d = await NativeAlarm.getDiagnostics();
+      setDiag(d);
+      const ok = activeStep.isOk(d);
+      if (ok) {
+        toast.success(`${activeStep.title} — done`);
+        setActiveStep(null);
+      } else {
+        toast.warning("Still not enabled. Try the steps again.");
+        setStepPhase("instructions");
+      }
+    } catch {
+      toast.error("Couldn't re-check status. Try again.");
+    } finally {
+      setStepRechecking(false);
+    }
+  };
+
+  const closeStep = () => {
+    setActiveStep(null);
+    setStepPhase("instructions");
+    setStepOpening(false);
   };
 
   if (!isAndroid) {
@@ -242,35 +405,35 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
                   icon={<BellRing className="h-5 w-5" />}
                   label="Notifications allowed"
                   ok={diag.notificationsEnabled}
-                  onFix={() => NativeAlarm.openNotificationSettings()}
+                  onFix={() => startStep("notifications")}
                   hint="Required to show the alarm screen."
                 />
                 <StatusRow
                   icon={<Layers className="h-5 w-5" />}
                   label={`Alarm channel importance (${importanceLabel(diag.channelImportance)})`}
                   ok={diag.channelImportance >= 4}
-                  onFix={() => NativeAlarm.openChannelSettings()}
+                  onFix={() => startStep("channel")}
                   hint="Must be High/Urgent so it bypasses Do Not Disturb."
                 />
                 <StatusRow
                   icon={<Zap className="h-5 w-5" />}
                   label="Exact alarms permission"
                   ok={diag.exactAlarmGranted}
-                  onFix={() => NativeAlarm.requestExactAlarmPermission()}
+                  onFix={() => startStep("exact")}
                   hint="Lets RoomMate ring at the exact minute, not delayed."
                 />
                 <StatusRow
                   icon={<Battery className="h-5 w-5" />}
                   label="Battery: unrestricted"
                   ok={diag.ignoringBatteryOptimization}
-                  onFix={() => NativeAlarm.requestDisableBatteryOptimization()}
+                  onFix={() => startStep("battery")}
                   hint="Stops Android from killing the alarm in deep sleep."
                 />
                 <StatusRow
                   icon={<Smartphone className="h-5 w-5" />}
                   label="Display over other apps"
                   ok={diag.canDrawOverlays}
-                  onFix={() => NativeAlarm.openOverlaySettings()}
+                  onFix={() => startStep("overlay")}
                   required={false}
                   hint="Helps the full-screen alarm appear above the lock screen."
                 />
@@ -280,7 +443,7 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
                   ok={false}
                   required={false}
                   fixLabel={diag.hasAutostartIntent ? "Open" : "How to"}
-                  onFix={() => NativeAlarm.openAutostartSettings()}
+                  onFix={() => startStep("autostart")}
                   hint={tipFor(diag.manufacturer) ?? "On Xiaomi/Oppo/Vivo/Realme/Huawei: enable Autostart in system settings."}
                 />
               </CardContent>
@@ -332,6 +495,69 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
             </Button>
           </div>
         ) : null}
+
+        {/* Per-step instruction & confirm dialog */}
+        <Dialog open={!!activeStep} onOpenChange={(v) => { if (!v) closeStep(); }}>
+          <DialogContent className="max-w-md">
+            {activeStep && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{activeStep.title}</DialogTitle>
+                  <DialogDescription>{activeStep.why}</DialogDescription>
+                </DialogHeader>
+
+                {stepPhase === "instructions" ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl bg-muted/40 p-3">
+                      <p className="text-xs font-semibold text-foreground mb-2">What you'll do</p>
+                      <ol className="list-decimal pl-4 space-y-1 text-sm text-muted-foreground">
+                        {activeStep.steps.map((s, i) => (<li key={i}>{s}</li>))}
+                      </ol>
+                    </div>
+                    {activeStep.key === "autostart" && diag && tipFor(diag.manufacturer) && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
+                        <p className="font-semibold text-foreground mb-1">Tip for your phone ({diag.manufacturer})</p>
+                        <p className="text-muted-foreground">{tipFor(diag.manufacturer)}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={closeStep} className="flex-1">Cancel</Button>
+                      <Button onClick={openStepSettings} className="flex-1" disabled={stepOpening}>
+                        {stepOpening ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-1" />}
+                        {activeStep.buttonLabel}
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStepPhase("confirm")}
+                      className="text-xs text-muted-foreground hover:text-foreground underline w-full text-center"
+                    >
+                      I've already enabled this →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-sm">
+                      <p className="font-semibold text-emerald-900 dark:text-emerald-200">Did you enable it?</p>
+                      <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-1">
+                        Tap "Yes, I enabled it" so we can verify the setting on your device.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setStepPhase("instructions")} className="flex-1">
+                        Try again
+                      </Button>
+                      <Button onClick={confirmStepDone} className="flex-1" disabled={stepRechecking}>
+                        {stepRechecking ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-1" />}
+                        Yes, I enabled it
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
