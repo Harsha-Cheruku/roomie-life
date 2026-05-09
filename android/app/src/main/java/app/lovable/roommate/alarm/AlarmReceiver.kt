@@ -23,54 +23,56 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "roommate:alarm_recv")
-        try { wl.acquire(60_000L) } catch (_: Exception) {}
+        try {
+            try { wl.acquire(60_000L) } catch (_: Exception) {}
 
-        val alarmId = intent.getStringExtra("alarm_id") ?: return
-        val title = intent.getStringExtra("alarm_title") ?: "Alarm"
-        val hour = intent.getIntExtra("alarm_hour", 0)
-        val minute = intent.getIntExtra("alarm_minute", 0)
-        val repeatDaily = intent.getBooleanExtra("repeat_daily", false)
-        val repeatWeekly = intent.getBooleanExtra("repeat_weekly", false)
-        val dayOfWeek = intent.getIntExtra("day_of_week", -1)
-        val ringtoneUri = intent.getStringExtra("ringtone_uri") ?: ""
-        val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
-        val createdBy = intent.getStringExtra("created_by") ?: ""
+            val alarmId = intent.getStringExtra("alarm_id") ?: return
+            val title = intent.getStringExtra("alarm_title") ?: "Alarm"
+            val hour = intent.getIntExtra("alarm_hour", 0)
+            val minute = intent.getIntExtra("alarm_minute", 0)
+            val repeatDaily = intent.getBooleanExtra("repeat_daily", false)
+            val repeatWeekly = intent.getBooleanExtra("repeat_weekly", false)
+            val dayOfWeek = intent.getIntExtra("day_of_week", -1)
+            val ringtoneUri = intent.getStringExtra("ringtone_uri") ?: ""
+            val stopCondition = intent.getStringExtra("stop_condition") ?: "anyone"
+            val createdBy = intent.getStringExtra("created_by") ?: ""
 
-        // Start the foreground alarm service immediately
-        val serviceIntent = Intent(context, AlarmService::class.java).apply {
-            action = AlarmService.ACTION_START
-            putExtra("alarm_id", alarmId)
-            putExtra("alarm_title", title)
-            putExtra("ringtone_uri", ringtoneUri)
-            putExtra("stop_condition", stopCondition)
-            putExtra("created_by", createdBy)
+            val serviceIntent = Intent(context, AlarmService::class.java).apply {
+                action = AlarmService.ACTION_START
+                putExtra("alarm_id", alarmId)
+                putExtra("alarm_title", title)
+                putExtra("ringtone_uri", ringtoneUri)
+                putExtra("stop_condition", stopCondition)
+                putExtra("created_by", createdBy)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+
+            if (repeatDaily || repeatWeekly) {
+                val alarm = AlarmData(
+                    id = alarmId,
+                    title = title,
+                    hour = hour,
+                    minute = minute,
+                    repeatDaily = repeatDaily,
+                    ringtoneUri = ringtoneUri,
+                    stopCondition = stopCondition,
+                    createdBy = createdBy,
+                    isActive = true,
+                    repeatWeekly = repeatWeekly,
+                    dayOfWeek = dayOfWeek
+                )
+                AlarmHelper.scheduleAlarm(context, alarm)
+                Log.d(TAG, "Alarm rescheduled (daily=$repeatDaily, weekly=$repeatWeekly)")
+            } else {
+                AlarmHelper.removeAlarm(context, alarmId)
+            }
+        } finally {
+            try { if (wl.isHeld) wl.release() } catch (_: Exception) {}
         }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
-
-        // If repeating daily/weekly, reschedule for next occurrence
-        if (repeatDaily || repeatWeekly) {
-            val alarm = AlarmData(
-                id = alarmId,
-                title = title,
-                hour = hour,
-                minute = minute,
-                repeatDaily = repeatDaily,
-                ringtoneUri = ringtoneUri,
-                stopCondition = stopCondition,
-                createdBy = createdBy,
-                isActive = true,
-                repeatWeekly = repeatWeekly,
-                dayOfWeek = dayOfWeek
-            )
-            AlarmHelper.scheduleAlarm(context, alarm)
-            Log.d(TAG, "Alarm rescheduled (daily=$repeatDaily, weekly=$repeatWeekly)")
-        }
-
-        try { if (wl.isHeld) wl.release() } catch (_: Exception) {}
     }
 }
