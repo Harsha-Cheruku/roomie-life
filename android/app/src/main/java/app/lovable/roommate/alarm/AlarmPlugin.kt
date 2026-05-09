@@ -3,10 +3,14 @@ package app.lovable.roommate.alarm
 import android.content.Intent
 import android.net.Uri
 import android.app.AlarmManager
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
@@ -174,5 +178,214 @@ class AlarmPlugin : Plugin() {
             result.put("exactAlarmGranted", true)
         }
         call.resolve(result)
+    }
+
+    @PluginMethod
+    fun getDiagnostics(call: PluginCall) {
+        val result = JSObject()
+        val pkg = context.packageName
+
+        // Notifications enabled (app-level)
+        val notifsEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        result.put("notificationsEnabled", notifsEnabled)
+
+        // Notification channel state
+        var channelImportance = -1
+        var channelSoundOk = true
+        var channelBypassDnd = false
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // Ensure channel exists so we can read its real settings
+            AlarmService.createNotificationChannel(context)
+            val nm = context.getSystemService(NotificationManager::class.java)
+            val ch: NotificationChannel? = nm.getNotificationChannel(AlarmService.CHANNEL_ID)
+            if (ch != null) {
+                channelImportance = ch.importance
+                channelBypassDnd = ch.canBypassDnd()
+                // Channel is intentionally silent (service plays sound). Only flag if user manually disabled.
+                channelSoundOk = ch.importance >= NotificationManager.IMPORTANCE_DEFAULT
+            }
+        } else {
+            channelImportance = 4
+        }
+        result.put("channelImportance", channelImportance)
+        result.put("channelSoundOk", channelSoundOk)
+        result.put("channelBypassDnd", channelBypassDnd)
+
+        // Exact alarm
+        var exactAlarm = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            exactAlarm = am.canScheduleExactAlarms()
+        }
+        result.put("exactAlarmGranted", exactAlarm)
+
+        // Battery optimization
+        var ignoringBattery = true
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            ignoringBattery = pm.isIgnoringBatteryOptimizations(pkg)
+        }
+        result.put("ignoringBatteryOptimization", ignoringBattery)
+
+        // Overlay
+        val canOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M)
+            Settings.canDrawOverlays(context) else true
+        result.put("canDrawOverlays", canOverlay)
+
+        // Scheduled alarm count
+        result.put("scheduledAlarmCount", AlarmHelper.getAllAlarms(context).count { it.isActive })
+
+        result.put("manufacturer", Build.MANUFACTURER ?: "")
+        result.put("brand", Build.BRAND ?: "")
+        result.put("model", Build.MODEL ?: "")
+        result.put("sdkInt", Build.VERSION.SDK_INT)
+        result.put("packageName", pkg)
+        result.put("hasAutostartIntent", resolveAutostartIntent() != null)
+
+        call.resolve(result)
+    }
+
+    @PluginMethod
+    fun openNotificationSettings(call: PluginCall) {
+        try {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            call.resolve(JSObject().put("success", true))
+        } catch (e: Exception) {
+            openAppDetails()
+            call.resolve(JSObject().put("success", true).put("fallback", true))
+        }
+    }
+
+    @PluginMethod
+    fun openChannelSettings(call: PluginCall) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                AlarmService.createNotificationChannel(context)
+                val intent = Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS).apply {
+                    putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                    putExtra(Settings.EXTRA_CHANNEL_ID, AlarmService.CHANNEL_ID)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(intent)
+            } else {
+                openAppDetails()
+            }
+            call.resolve(JSObject().put("success", true))
+        } catch (e: Exception) {
+            openAppDetails()
+            call.resolve(JSObject().put("success", true).put("fallback", true))
+        }
+    }
+
+    @PluginMethod
+    fun openOverlaySettings(call: PluginCall) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:${context.packageName}")
+                ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                context.startActivity(intent)
+            }
+            call.resolve(JSObject().put("success", true))
+        } catch (e: Exception) {
+            openAppDetails()
+            call.resolve(JSObject().put("success", true).put("fallback", true))
+        }
+    }
+
+    @PluginMethod
+    fun openAppSettings(call: PluginCall) {
+        openAppDetails()
+        call.resolve(JSObject().put("success", true))
+    }
+
+    @PluginMethod
+    fun openAutostartSettings(call: PluginCall) {
+        val intent = resolveAutostartIntent()
+        if (intent != null) {
+            try {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                call.resolve(JSObject().put("success", true))
+                return
+            } catch (_: Exception) { /* fall through */ }
+        }
+        openAppDetails()
+        call.resolve(JSObject().put("success", true).put("fallback", true))
+    }
+
+    @PluginMethod
+    fun scheduleTestAlarm(call: PluginCall) {
+        val minutes = call.getInt("minutes", 2) ?: 2
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.MINUTE, minutes)
+        val id = "test_alarm_${System.currentTimeMillis()}"
+        val alarm = AlarmData(
+            id = id,
+            title = "🔔 RoomMate Test Alarm",
+            hour = cal.get(java.util.Calendar.HOUR_OF_DAY),
+            minute = cal.get(java.util.Calendar.MINUTE),
+            repeatDaily = false,
+            ringtoneUri = null,
+            stopCondition = "anyone",
+            createdBy = "wizard_test",
+            isActive = true,
+            repeatWeekly = false,
+            dayOfWeek = -1
+        )
+        AlarmHelper.saveAlarm(context, alarm)
+        AlarmHelper.scheduleAlarm(context, alarm)
+        val result = JSObject()
+        result.put("success", true)
+        result.put("alarmId", id)
+        result.put("hour", alarm.hour)
+        result.put("minute", alarm.minute)
+        call.resolve(result)
+    }
+
+    private fun openAppDetails() {
+        try {
+            val i = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(i)
+        } catch (_: Exception) {}
+    }
+
+    /** Best-effort autostart screens for OEM skins that aggressively kill background apps. */
+    private fun resolveAutostartIntent(): Intent? {
+        val candidates = listOf(
+            // Xiaomi / MIUI
+            ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"),
+            // Oppo / ColorOS
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.permission.startup.StartupAppListActivity"),
+            ComponentName("com.coloros.safecenter", "com.coloros.safecenter.startupapp.StartupAppListActivity"),
+            ComponentName("com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity"),
+            // Vivo / Funtouch / OriginOS
+            ComponentName("com.vivo.permissionmanager", "com.vivo.permissionmanager.activity.BgStartUpManagerActivity"),
+            ComponentName("com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager"),
+            // Realme
+            ComponentName("com.coloros.safecenter", "com.coloros.privacypermissionsentry.PermissionTopActivity"),
+            // Huawei / Honor
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"),
+            ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.optimize.process.ProtectActivity"),
+            // Samsung
+            ComponentName("com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity"),
+            // Letv / Asus / Honor extras
+            ComponentName("com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity"),
+            ComponentName("com.asus.mobilemanager", "com.asus.mobilemanager.entry.FunctionActivity")
+        )
+        val pm = context.packageManager
+        for (cn in candidates) {
+            val intent = Intent().apply { component = cn; addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            if (intent.resolveActivity(pm) != null) return intent
+        }
+        return null
     }
 }
