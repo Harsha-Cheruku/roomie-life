@@ -405,35 +405,35 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
                   icon={<BellRing className="h-5 w-5" />}
                   label="Notifications allowed"
                   ok={diag.notificationsEnabled}
-                  onFix={() => NativeAlarm.openNotificationSettings()}
+                  onFix={() => startStep("notifications")}
                   hint="Required to show the alarm screen."
                 />
                 <StatusRow
                   icon={<Layers className="h-5 w-5" />}
                   label={`Alarm channel importance (${importanceLabel(diag.channelImportance)})`}
                   ok={diag.channelImportance >= 4}
-                  onFix={() => NativeAlarm.openChannelSettings()}
+                  onFix={() => startStep("channel")}
                   hint="Must be High/Urgent so it bypasses Do Not Disturb."
                 />
                 <StatusRow
                   icon={<Zap className="h-5 w-5" />}
                   label="Exact alarms permission"
                   ok={diag.exactAlarmGranted}
-                  onFix={() => NativeAlarm.requestExactAlarmPermission()}
+                  onFix={() => startStep("exact")}
                   hint="Lets RoomMate ring at the exact minute, not delayed."
                 />
                 <StatusRow
                   icon={<Battery className="h-5 w-5" />}
                   label="Battery: unrestricted"
                   ok={diag.ignoringBatteryOptimization}
-                  onFix={() => NativeAlarm.requestDisableBatteryOptimization()}
+                  onFix={() => startStep("battery")}
                   hint="Stops Android from killing the alarm in deep sleep."
                 />
                 <StatusRow
                   icon={<Smartphone className="h-5 w-5" />}
                   label="Display over other apps"
                   ok={diag.canDrawOverlays}
-                  onFix={() => NativeAlarm.openOverlaySettings()}
+                  onFix={() => startStep("overlay")}
                   required={false}
                   hint="Helps the full-screen alarm appear above the lock screen."
                 />
@@ -443,7 +443,7 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
                   ok={false}
                   required={false}
                   fixLabel={diag.hasAutostartIntent ? "Open" : "How to"}
-                  onFix={() => NativeAlarm.openAutostartSettings()}
+                  onFix={() => startStep("autostart")}
                   hint={tipFor(diag.manufacturer) ?? "On Xiaomi/Oppo/Vivo/Realme/Huawei: enable Autostart in system settings."}
                 />
               </CardContent>
@@ -495,6 +495,69 @@ export function AlarmSetupWizard({ open, onOpenChange, onReady, onComplete, show
             </Button>
           </div>
         ) : null}
+
+        {/* Per-step instruction & confirm dialog */}
+        <Dialog open={!!activeStep} onOpenChange={(v) => { if (!v) closeStep(); }}>
+          <DialogContent className="max-w-md">
+            {activeStep && (
+              <>
+                <DialogHeader>
+                  <DialogTitle>{activeStep.title}</DialogTitle>
+                  <DialogDescription>{activeStep.why}</DialogDescription>
+                </DialogHeader>
+
+                {stepPhase === "instructions" ? (
+                  <div className="space-y-4">
+                    <div className="rounded-xl bg-muted/40 p-3">
+                      <p className="text-xs font-semibold text-foreground mb-2">What you'll do</p>
+                      <ol className="list-decimal pl-4 space-y-1 text-sm text-muted-foreground">
+                        {activeStep.steps.map((s, i) => (<li key={i}>{s}</li>))}
+                      </ol>
+                    </div>
+                    {activeStep.key === "autostart" && diag && tipFor(diag.manufacturer) && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs">
+                        <p className="font-semibold text-foreground mb-1">Tip for your phone ({diag.manufacturer})</p>
+                        <p className="text-muted-foreground">{tipFor(diag.manufacturer)}</p>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={closeStep} className="flex-1">Cancel</Button>
+                      <Button onClick={openStepSettings} className="flex-1" disabled={stepOpening}>
+                        {stepOpening ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ExternalLink className="h-4 w-4 mr-1" />}
+                        {activeStep.buttonLabel}
+                      </Button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setStepPhase("confirm")}
+                      className="text-xs text-muted-foreground hover:text-foreground underline w-full text-center"
+                    >
+                      I've already enabled this →
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 p-3 text-sm">
+                      <p className="font-semibold text-emerald-900 dark:text-emerald-200">Did you enable it?</p>
+                      <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80 mt-1">
+                        Tap "Yes, I enabled it" so we can verify the setting on your device.
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setStepPhase("instructions")} className="flex-1">
+                        Try again
+                      </Button>
+                      <Button onClick={confirmStepDone} className="flex-1" disabled={stepRechecking}>
+                        {stepRechecking ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <ArrowRight className="h-4 w-4 mr-1" />}
+                        Yes, I enabled it
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
