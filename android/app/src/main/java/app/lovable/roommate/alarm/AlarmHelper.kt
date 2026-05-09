@@ -37,9 +37,13 @@ object AlarmHelper {
         // Replace any existing PendingIntent first so edited/deleted old alarms cannot fire late.
         cancelAlarm(context, alarm.id)
 
-        val triggerIntent = Intent(context, AlarmActivity::class.java).apply {
+        // Trigger a BroadcastReceiver. This is the Android-recommended pattern:
+        // it runs even when the app process is dead, isn't blocked by background-
+        // activity-launch restrictions, and lets us start the foreground service
+        // + post a full-screen notification — exactly like the system Clock app.
+        val triggerIntent = Intent(context, AlarmReceiver::class.java).apply {
             action = "app.lovable.roommate.ALARM_TRIGGER"
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            setPackage(context.packageName)
             putExtra("alarm_id", alarm.id)
             putExtra("alarm_title", alarm.title)
             putExtra("alarm_hour", alarm.hour)
@@ -53,7 +57,7 @@ object AlarmHelper {
         }
 
         val requestCode = alarm.id.hashCode()
-        val pendingIntent = PendingIntent.getActivity(
+        val pendingIntent = PendingIntent.getBroadcast(
             context, requestCode, triggerIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -92,27 +96,29 @@ object AlarmHelper {
 
     fun cancelAlarm(context: Context, alarmId: String) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val activityIntent = Intent(context, AlarmActivity::class.java).apply {
+        // Cancel the broadcast PendingIntent (current pattern).
+        val broadcastIntent = Intent(context, AlarmReceiver::class.java).apply {
             action = "app.lovable.roommate.ALARM_TRIGGER"
+            setPackage(context.packageName)
         }
-        val activityPendingIntent = PendingIntent.getActivity(
-            context, alarmId.hashCode(), activityIntent,
+        val broadcastPI = PendingIntent.getBroadcast(
+            context, alarmId.hashCode(), broadcastIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
-        activityPendingIntent?.let {
+        broadcastPI?.let {
             alarmManager.cancel(it)
             it.cancel()
         }
 
-        // Cancel alarms created by older app versions that used BroadcastReceiver directly.
-        val legacyIntent = Intent(context, AlarmReceiver::class.java).apply {
+        // Cancel any leftover Activity-style PendingIntent from older app versions.
+        val legacyActivityIntent = Intent(context, AlarmActivity::class.java).apply {
             action = "app.lovable.roommate.ALARM_TRIGGER"
         }
-        val legacyPendingIntent = PendingIntent.getBroadcast(
-            context, alarmId.hashCode(), legacyIntent,
+        val legacyActivityPI = PendingIntent.getActivity(
+            context, alarmId.hashCode(), legacyActivityIntent,
             PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
         )
-        legacyPendingIntent?.let {
+        legacyActivityPI?.let {
             alarmManager.cancel(it)
             it.cancel()
         }
