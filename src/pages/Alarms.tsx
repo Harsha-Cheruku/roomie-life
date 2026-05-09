@@ -191,7 +191,10 @@ export default function Alarms() {
                 <Bell className="h-4 w-4 mr-1" /> Enable
               </Button>
             )}
-            <Button onClick={() => setShowCreateDialog(true)} size="sm">
+            <Button onClick={() => setShowWizard(true)} variant="outline" size="sm">
+              <ShieldCheck className="h-4 w-4 mr-1" /> Setup
+            </Button>
+            <Button onClick={requestCreateAlarm} size="sm">
               <Plus className="h-4 w-4 mr-1" /> Add
             </Button>
           </div>
@@ -199,6 +202,8 @@ export default function Alarms() {
       />
 
       <div className="p-4 space-y-4">
+        <AlarmSetupBanner onOpen={() => setShowWizard(true)} />
+
         {/* Ringtone selector */}
         <Card>
           <CardContent className="p-3">
@@ -293,6 +298,12 @@ export default function Alarms() {
         roomId={roomId}
         userId={user?.id}
         onCreated={fetchAlarms}
+      />
+
+      <AlarmSetupWizard
+        open={showWizard}
+        onOpenChange={setShowWizard}
+        onReady={() => setShowCreateDialog(true)}
       />
 
       <BottomNav activeTab="home" onTabChange={handleTabChange} />
