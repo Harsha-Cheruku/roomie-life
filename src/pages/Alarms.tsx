@@ -10,13 +10,16 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
-import { AlarmClock, Plus, Trash2, Users, Bell, Volume2 } from "lucide-react";
+import { AlarmClock, Plus, Trash2, Users, Bell, Volume2, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { CreateAlarmDialog } from "@/components/alarms/CreateAlarmDialog";
 import { useNotifications } from "@/hooks/useNotifications";
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 import { AlarmAuditLog } from "@/components/alarms/AlarmAuditLog";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
+import { AlarmSetupWizard, AlarmSetupBanner } from "@/components/alarms/AlarmSetupWizard";
+import { Capacitor } from "@capacitor/core";
+import NativeAlarm from "@/plugins/NativeAlarmPlugin";
 
 interface Alarm {
   id: string;
@@ -60,6 +63,7 @@ export default function Alarms() {
   const roomId = currentRoom?.id || null;
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [loading, setLoading] = useState(true);
   const [deleteAlarmId, setDeleteAlarmId] = useState<string | null>(null);
   const { requestPermission, hasPermission } = useNotifications();
@@ -68,6 +72,23 @@ export default function Alarms() {
   });
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const { isNative, deleteAlarm: deleteNativeAlarm } = useNativeAlarm();
+
+  const requestCreateAlarm = async () => {
+    if (Capacitor.getPlatform() !== "android") {
+      setShowCreateDialog(true);
+      return;
+    }
+    try {
+      const d = await NativeAlarm.getDiagnostics();
+      const ok = d.notificationsEnabled && d.channelImportance >= 4 && d.exactAlarmGranted && d.ignoringBatteryOptimization;
+      if (!ok) {
+        toast.warning("Finish alarm setup so it rings reliably.");
+        setShowWizard(true);
+        return;
+      }
+    } catch { /* fall through */ }
+    setShowCreateDialog(true);
+  };
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
