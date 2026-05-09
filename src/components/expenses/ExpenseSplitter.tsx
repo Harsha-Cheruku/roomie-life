@@ -659,6 +659,10 @@ export const ExpenseSplitter = ({
               <p className="text-xs text-muted-foreground">No taxes or discounts detected. Add one if needed.</p>
             )}
 
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              Taxes & fees are <span className="font-medium text-foreground">added to each share</span>. Only discounts <span className="font-medium text-emerald-600 dark:text-emerald-400">reduce the split</span>.
+            </p>
+
             <div className="space-y-2">
               {adjustments.map((adj, idx) => {
                 const isDiscount = adj.type === 'discount';
