@@ -2,6 +2,8 @@ package app.lovable.roommate.alarm
 
 import android.content.Intent
 import android.net.Uri
+import android.app.AlarmManager
+import android.content.Context
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
@@ -62,7 +64,7 @@ class AlarmPlugin : Plugin() {
             action = AlarmService.ACTION_STOP
             if (alarmId != null) putExtra("alarm_id", alarmId)
         }
-        context.startService(intent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
 
         val result = JSObject()
         result.put("success", true)
@@ -143,6 +145,11 @@ class AlarmPlugin : Plugin() {
     fun requestExactAlarmPermission(call: PluginCall) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
+                val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+                if (alarmManager.canScheduleExactAlarms()) {
+                    call.resolve(JSObject().put("success", true).put("alreadyGranted", true))
+                    return
+                }
                 val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
                     data = Uri.parse("package:${context.packageName}")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -155,5 +162,17 @@ class AlarmPlugin : Plugin() {
         } else {
             call.resolve(JSObject().put("success", true))
         }
+    }
+
+    @PluginMethod
+    fun getAlarmPermissionStatus(call: PluginCall) {
+        val result = JSObject()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            result.put("exactAlarmGranted", alarmManager.canScheduleExactAlarms())
+        } else {
+            result.put("exactAlarmGranted", true)
+        }
+        call.resolve(result)
     }
 }

@@ -308,7 +308,7 @@ export const useGameLobby = () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void fetchLobbyState(lobby.id);
       void fetchPlayers(lobby.id);
-    }, lobby.status === "waiting" ? 4000 : 6000);
+    }, lobby.status === "waiting" ? 2500 : 1500);
 
     return () => window.clearInterval(interval);
   }, [fetchLobbyState, fetchPlayers, lobby?.id, lobby?.status]);
@@ -474,12 +474,12 @@ export const useGameLobby = () => {
           .from("game_lobbies")
           .select("*")
           .eq("join_code", joinCode.toUpperCase().trim())
-          .eq("status", "waiting")
+          .in("status", ["waiting", "playing"])
           .limit(1);
 
         if (findError) throw findError;
         if (!lobbies?.length) {
-          toast.error("No open game found with that code");
+          toast.error("No game found with that code");
           return null;
         }
 
@@ -502,7 +502,13 @@ export const useGameLobby = () => {
 
           setLobby(foundLobby);
           await fetchPlayers(foundLobby.id);
+          if (foundLobby.status === "playing") toast.success("Game is already live — opening now.");
           return foundLobby;
+        }
+
+        if (foundLobby.status === "playing") {
+          toast.error("This game already started. Ask the host to create a new game.");
+          return null;
         }
 
         await supabase

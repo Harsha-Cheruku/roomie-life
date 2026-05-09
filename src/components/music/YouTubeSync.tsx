@@ -97,6 +97,10 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   const isHostRef = useRef(false);
   const ignoreBroadcastRef = useRef(false);
   const lastHostSyncRef = useRef<{ time: number; hostTime: number; rate: number } | null>(null);
+  const activeVideoIdRef = useRef<string | null>(null);
+  const activePlaylistIdRef = useRef<string | null>(null);
+  const lastPlaylistUrlRef = useRef<string | null>(null);
+  const sharedByRef = useRef("");
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -104,6 +108,10 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
   }, []);
 
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
+  useEffect(() => { activeVideoIdRef.current = activeVideoId; }, [activeVideoId]);
+  useEffect(() => { activePlaylistIdRef.current = activePlaylistId; }, [activePlaylistId]);
+  useEffect(() => { lastPlaylistUrlRef.current = lastPlaylistUrl; }, [lastPlaylistUrl]);
+  useEffect(() => { sharedByRef.current = sharedBy; }, [sharedBy]);
 
   // Initialize YouTube player when video becomes active
   useEffect(() => {
@@ -271,6 +279,27 @@ export const YouTubeSync = ({ className }: YouTubeSyncProps) => {
             });
           });
           setSyncedUsers(users);
+          if (isHostRef.current && activeVideoIdRef.current) {
+            const player = playerRef.current;
+            channel.send({
+              type: "broadcast",
+              event: "youtube_play",
+              payload: {
+                video_id: activeVideoIdRef.current.startsWith('playlist-') ? "" : activeVideoIdRef.current,
+                sender_id: user.id,
+                sender_name: sharedByRef.current || profile.display_name || "Someone",
+                playlist_url: lastPlaylistUrlRef.current,
+                playlist_id: activePlaylistIdRef.current,
+              },
+            }).catch(() => {});
+            if (player && typeof player.getCurrentTime === "function") {
+              broadcastPlaybackState(
+                player.getPlayerState?.() === (window as any).YT?.PlayerState?.PAUSED ? "paused" : "playing",
+                player.getCurrentTime(),
+                player.getPlaybackRate?.() || 1
+              );
+            }
+          }
         })
         .on("broadcast", { event: "youtube_play" }, (payload) => {
           if (!isMountedRef.current) return;

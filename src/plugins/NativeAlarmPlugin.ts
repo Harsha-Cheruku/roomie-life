@@ -37,6 +37,8 @@ export interface NativeAlarmPlugin {
   requestDisableBatteryOptimization(): Promise<{ success: boolean }>;
 
   requestExactAlarmPermission(): Promise<{ success: boolean }>;
+
+  getAlarmPermissionStatus(): Promise<{ exactAlarmGranted: boolean }>;
 }
 
 const NativeAlarm = registerPlugin<NativeAlarmPlugin>('NativeAlarm');
