@@ -45,6 +45,35 @@ export const RoomSettings = () => {
 
   const { nickname, setNickname } = useRoomNickname(currentRoom?.id, currentRoom?.name || "");
   const [nicknameDraft, setNicknameDraft] = useState(nickname);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(profile?.display_name || "");
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  useEffect(() => {
+    setNameDraft(profile?.display_name || "");
+  }, [profile?.display_name]);
+
+  const handleSaveName = async () => {
+    const trimmed = nameDraft.trim();
+    if (!trimmed || !user) return;
+    if (trimmed.length > 40) {
+      toast({ title: "Name too long", description: "Keep it under 40 characters", variant: "destructive" });
+      return;
+    }
+    setIsSavingName(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ display_name: trimmed })
+      .eq("user_id", user.id);
+    setIsSavingName(false);
+    if (error) {
+      toast({ title: "Failed to update name", description: error.message, variant: "destructive" });
+      return;
+    }
+    await refreshProfile();
+    setEditingName(false);
+    toast({ title: "Name updated" });
+  };
 
   useEffect(() => {
     setNicknameDraft(nickname);
@@ -273,10 +302,42 @@ export const RoomSettings = () => {
               </div>
             </button>
             <div>
-              <p className="font-medium text-foreground">{profile?.display_name || "User"}</p>
+              {editingName ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    placeholder="Your name"
+                    maxLength={40}
+                    autoFocus
+                    className="h-9 w-44"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveName();
+                      if (e.key === "Escape") {
+                        setEditingName(false);
+                        setNameDraft(profile?.display_name || "");
+                      }
+                    }}
+                  />
+                  <Button size="sm" onClick={handleSaveName} disabled={isSavingName} className="h-9">
+                    {isSavingName ? "…" : "Save"}
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditingName(true)}
+                  className="flex items-center gap-1.5 group"
+                  title="Edit name"
+                >
+                  <p className="font-medium text-foreground group-hover:text-primary transition-colors">
+                    {profile?.display_name || "User"}
+                  </p>
+                  <Pencil className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors" />
+                </button>
+              )}
               <button
                 onClick={() => setShowAvatarPicker(true)}
-                className="text-sm text-primary hover:text-primary/80 transition-colors"
+                className="text-sm text-primary hover:text-primary/80 transition-colors block mt-0.5"
               >
                 Change DP
               </button>
