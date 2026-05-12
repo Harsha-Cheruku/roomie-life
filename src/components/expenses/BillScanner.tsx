@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Loader2, Scan, AlertTriangle, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -101,6 +101,19 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const cameraCapturePendingRef = useRef(false);
   const { toast } = useToast();
+
+  // If the BillScanner was opened from a Share-Target flow, pick up the
+  // pending image and use it as the preview right away.
+  useEffect(() => {
+    if (!open) return;
+    try {
+      const pending = sessionStorage.getItem('roommate_pending_bill_image');
+      if (pending) {
+        sessionStorage.removeItem('roommate_pending_bill_image');
+        setImagePreview(pending);
+      }
+    } catch {/* ignore */}
+  }, [open]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

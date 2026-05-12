@@ -30,6 +30,24 @@ export default defineConfig(({ mode }) => ({
         orientation: "portrait",
         scope: "/",
         start_url: "/",
+        id: "/",
+        categories: ["lifestyle", "productivity", "social"],
+        share_target: {
+          action: "/share-import",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            title: "title",
+            text: "text",
+            url: "url",
+            files: [
+              {
+                name: "files",
+                accept: ["image/*", "application/pdf"],
+              },
+            ],
+          },
+        },
         icons: [
           {
             src: "/icon-192.png",
