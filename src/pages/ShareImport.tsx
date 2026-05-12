@@ -29,6 +29,13 @@ const blobToDataUrl = (blob: Blob): Promise<string> =>
     r.readAsDataURL(blob);
   });
 
+const base64ToBlob = (b64: string, type: string): Blob => {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type });
+};
+
 export default function ShareImport() {
   const navigate = useNavigate();
   const { user, currentRoom } = useAuth();
@@ -40,6 +47,39 @@ export default function ShareImport() {
   useEffect(() => {
     (async () => {
       try {
+        // 1) Native Android share-intent payload injected by MainActivity
+        const nativePayload = (window as unknown as {
+          __roommateSharedIntent?: {
+            files: { name: string; type: string; dataBase64: string }[];
+            title?: string;
+            text?: string;
+            ts: number;
+          };
+        }).__roommateSharedIntent;
+
+        if (nativePayload && nativePayload.files?.length) {
+          const meta: SharedFileMeta[] = [];
+          const out: { url: string; name: string; type: string }[] = [];
+          for (let i = 0; i < nativePayload.files.length; i++) {
+            const f = nativePayload.files[i];
+            const blob = base64ToBlob(f.dataBase64, f.type);
+            const url = URL.createObjectURL(blob);
+            // Persist into the same cache so existing handlers keep working
+            try {
+              const cache = await caches.open("shared-files");
+              await cache.put(`/__shared/${i}`, new Response(blob, { headers: { "content-type": f.type } }));
+              meta.push({ name: f.name, type: f.type, size: blob.size, url: `/__shared/${i}` });
+            } catch {/* cache may not be available */}
+            out.push({ url, name: f.name, type: f.type });
+          }
+          delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
+          setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
+          setPreviews(out);
+          setLoading(false);
+          return;
+        }
+
+        // 2) PWA Web Share Target — files cached by service worker
         const metaRes = await fetch("/__shared/meta", { cache: "no-store" });
         if (!metaRes.ok) {
           setLoading(false);
