@@ -15,7 +15,7 @@ import { MonthlyExpenseChart } from "@/components/expenses/MonthlyExpenseChart";
 import { ReminderBellIcon } from "@/components/reminders/ReminderBellIcon";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { SettledBillsSection } from "@/components/expenses/SettledBillsSection";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/layout/BottomNav";
 import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
@@ -72,6 +72,7 @@ interface Balance {
 export const Expenses = () => {
   const { user, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { isOnline, pendingCount, syncQueue } = useOfflineExpenses();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
@@ -88,6 +89,16 @@ export const Expenses = () => {
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
   const [showExpenseDetail, setShowExpenseDetail] = useState(false);
   const [memberProfiles, setMemberProfiles] = useState<Map<string, { user_id: string; display_name: string; avatar: string }>>(new Map());
+
+  // Auto-open scanner when arriving from share-target with a pending image
+  useEffect(() => {
+    if (searchParams.get("shareBill") === "1") {
+      setShowScanner(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("shareBill");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
   const [rejectingExpenseTitle, setRejectingExpenseTitle] = useState<string>('');
