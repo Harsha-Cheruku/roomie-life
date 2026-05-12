@@ -35,6 +35,7 @@ const Install = lazy(() => import("./pages/Install"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
+const ShareImport = lazy(() => import("./pages/ShareImport"));
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { AlarmSetupAutoLauncher } from "@/components/alarms/AlarmSetupAutoLauncher";
@@ -287,6 +288,7 @@ const App = () => (
               }
             />
             <Route path="/install" element={<Install />} />
+            <Route path="/share-import" element={<ShareImport />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
             <Route
