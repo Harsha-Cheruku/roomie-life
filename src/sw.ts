@@ -136,3 +136,59 @@ self.addEventListener("message", (event) => {
     self.skipWaiting();
   }
 });
+
+// ----- Web Share Target handler -----
+// Receives images/files shared from other apps when RoomMate is installed as PWA.
+// Stores them in a Cache so the /share-import page can read them.
+self.addEventListener("fetch", (event: FetchEvent) => {
+  const url = new URL(event.request.url);
+
+  if (event.request.method === "POST" && url.pathname === "/share-import") {
+    event.respondWith((async () => {
+      try {
+        const formData = await event.request.formData();
+        const files = formData.getAll("files").filter((f): f is File => f instanceof File);
+        const title = (formData.get("title") as string) || "";
+        const text = (formData.get("text") as string) || "";
+
+        const cache = await caches.open("shared-files");
+        const oldKeys = await cache.keys();
+        await Promise.all(oldKeys.map((k) => cache.delete(k)));
+
+        const meta = files.map((f, i) => ({
+          name: f.name || `shared-${i}`,
+          type: f.type || "application/octet-stream",
+          size: f.size,
+          url: `/__shared/${i}`,
+        }));
+
+        for (let i = 0; i < files.length; i++) {
+          await cache.put(
+            `/__shared/${i}`,
+            new Response(files[i], {
+              headers: { "content-type": files[i].type || "application/octet-stream" },
+            })
+          );
+        }
+        await cache.put(
+          "/__shared/meta",
+          new Response(JSON.stringify({ files: meta, title, text, ts: Date.now() }), {
+            headers: { "content-type": "application/json" },
+          })
+        );
+      } catch (e) {
+        // swallow — still redirect so user lands on the page
+      }
+      return Response.redirect("/share-import?from=share", 303);
+    })());
+    return;
+  }
+
+  if (event.request.method === "GET" && url.pathname.startsWith("/__shared/")) {
+    event.respondWith((async () => {
+      const cache = await caches.open("shared-files");
+      const match = await cache.match(url.pathname);
+      return match || new Response("Not found", { status: 404 });
+    })());
+  }
+});
