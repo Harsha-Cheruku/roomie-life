@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
+// VAPID public key (safe to expose). Pair lives in Supabase secrets:
+// VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT — used by the
+// `send-push` edge function to deliver real background notifications.
+const VAPID_PUBLIC_KEY =
+  'BE4XDG5rqOZ0Ez5rF-5Wu3JDN9WJkBGBlpTv_ZKYt1aeO7WHzz4pkwcWv3Op1XIZj08vMKP61iKqgv0gjElOSK0';
+
+const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const out = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) out[i] = rawData.charCodeAt(i);
+  return out;
+};
+
 interface PushNotificationState {
   isSupported: boolean;
   isEnabled: boolean;
@@ -69,6 +84,32 @@ export const usePushNotifications = () => {
     }
   }, [user]);
 
+  /**
+   * Get or create a real PushManager subscription tied to our VAPID key, so
+   * the browser/OS can deliver notifications even when the app is closed.
+   */
+  const ensurePushSubscription = useCallback(
+    async (registration: ServiceWorkerRegistration) => {
+      const pm = (registration as any).pushManager as PushManager | undefined;
+      if (!pm) return null;
+      try {
+        let sub = await pm.getSubscription();
+        if (!sub) {
+          sub = await pm.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+          });
+        }
+        if (sub) await savePushSubscription(sub);
+        return sub;
+      } catch (e) {
+        console.warn('PushManager.subscribe failed:', e);
+        return null;
+      }
+    },
+    [savePushSubscription],
+  );
+
   const requestPermission = useCallback(async () => {
     if (!state.isSupported) return false;
     setIsLoading(true);
@@ -83,19 +124,7 @@ export const usePushNotifications = () => {
 
       if (permission === 'granted') {
         const registration = await registerServiceWorker();
-        // Try to create a PushManager subscription if supported
-        if ((registration as any)?.pushManager) {
-          try {
-            const existingSub = await (registration as any).pushManager.getSubscription();
-            if (existingSub) {
-              await savePushSubscription(existingSub);
-            }
-            // Note: Full PushManager.subscribe() requires VAPID applicationServerKey.
-            // Without it, we still get local notification capability via showNotification().
-          } catch (e) {
-            console.warn('PushManager subscription not available:', e);
-          }
-        }
+        if (registration) await ensurePushSubscription(registration);
         return true;
       }
       return false;
@@ -105,7 +134,7 @@ export const usePushNotifications = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [state.isSupported, registerServiceWorker, savePushSubscription]);
+  }, [state.isSupported, registerServiceWorker, ensurePushSubscription]);
 
   const showNotification = useCallback(async (title: string, options?: NotificationOptions & { vibrate?: number[] }) => {
     if (!state.isEnabled) return false;
@@ -134,18 +163,11 @@ export const usePushNotifications = () => {
   // Auto-register SW + save subscription on mount if already granted
   useEffect(() => {
     if (state.isEnabled && user) {
-      registerServiceWorker().then(async (reg) => {
-        if ((reg as any)?.pushManager) {
-          try {
-            const sub = await (reg as any).pushManager.getSubscription();
-            if (sub) await savePushSubscription(sub);
-          } catch (e) {
-            // Ignore
-          }
-        }
+      registerServiceWorker().then((reg) => {
+        if (reg) ensurePushSubscription(reg);
       });
     }
-  }, [state.isEnabled, user, registerServiceWorker, savePushSubscription]);
+  }, [state.isEnabled, user, registerServiceWorker, ensurePushSubscription]);
 
   return {
     ...state,
