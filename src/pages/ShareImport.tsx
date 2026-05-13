@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -38,11 +38,13 @@ const base64ToBlob = (b64: string, type: string): Blob => {
 
 export default function ShareImport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user, currentRoom } = useAuth();
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [previews, setPreviews] = useState<{ url: string; name: string; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [autoHandled, setAutoHandled] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -219,6 +221,20 @@ export default function ShareImport() {
       setBusy(false);
     }
   };
+
+  // Auto-route when launched from a dedicated share-target alias (Android).
+  useEffect(() => {
+    if (loading || autoHandled || busy || previews.length === 0) return;
+    const as = searchParams.get("as");
+    if (as === "bill" && previews.some((p) => p.type.startsWith("image/"))) {
+      setAutoHandled(true);
+      handleCreateBill();
+    } else if (as === "chat" && currentRoom) {
+      setAutoHandled(true);
+      handleSendToRoom();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, previews, searchParams, currentRoom]);
 
   if (loading) {
     return (

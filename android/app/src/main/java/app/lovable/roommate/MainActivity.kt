@@ -83,15 +83,24 @@ class MainActivity : BridgeActivity() {
             put("ts", System.currentTimeMillis())
         }
 
+        // Detect which share-target alias the user picked from the system
+        // share sheet so we can route to the correct in-app destination
+        // (bill scanner / room chat) instead of always showing the chooser.
+        val componentName = intent.component?.className ?: ""
+        val target = when {
+            componentName.endsWith("ShareToBillActivity") -> "bill"
+            componentName.endsWith("ShareToChatActivity") -> "chat"
+            else -> "choose"
+        }
+        val targetParam = "?from=intent&as=$target"
+
         // Stash the payload on window so the JS bootstrap can pick it up,
         // then navigate the web app to /share-import.
         val js = """
             (function(){
               try {
                 window.__roommateSharedIntent = ${payload};
-                if (window.location.pathname !== '/share-import') {
-                  window.location.replace('/share-import?from=intent');
-                }
+                window.location.replace('/share-import$targetParam');
               } catch(e) { console.error('share-intent inject failed', e); }
             })();
         """.trimIndent()
