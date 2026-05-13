@@ -13,6 +13,38 @@ import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useCurrency } from '@/hooks/useCurrency';
 
+function NotesImagePreview({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.storage
+          .from('chat-attachments')
+          .createSignedUrl(path, 60 * 60);
+        if (!cancelled && data?.signedUrl) setUrl(data.signedUrl);
+      } catch {/* ignore */}
+    })();
+    return () => { cancelled = true; };
+  }, [path]);
+  if (!url) {
+    return (
+      <div className="w-full h-40 rounded-xl bg-muted flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+      <img
+        src={url}
+        alt="Notes attachment"
+        className="rounded-xl max-h-72 w-full object-contain border border-border bg-muted"
+      />
+    </a>
+  );
+}
+
 interface ExpenseSplit {
   id: string;
   user_id: string;
