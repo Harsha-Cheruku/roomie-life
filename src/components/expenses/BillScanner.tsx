@@ -119,7 +119,6 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     const file = e.target.files?.[0];
     if (!file) {
       cameraCapturePendingRef.current = false;
-      setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
       return;
     }
 
@@ -211,15 +210,10 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     setScanError(null);
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     cameraCapturePendingRef.current = true;
-    const detectCancelledCapture = () => {
-      window.setTimeout(() => {
-        if (cameraCapturePendingRef.current && !cameraInputRef.current?.files?.length) {
-          cameraCapturePendingRef.current = false;
-          setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
-        }
-      }, 900);
-    };
-    window.addEventListener('focus', detectCancelledCapture, { once: true });
+    // Removed window-focus + timeout heuristic: on Android the camera intent
+    // often returns the photo AFTER focus fires, producing a false
+    // "capture failed" banner even when the user successfully took a photo.
+    // We now rely solely on the input's change event.
     cameraInputRef.current?.click();
   };
 
