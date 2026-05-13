@@ -119,7 +119,6 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     const file = e.target.files?.[0];
     if (!file) {
       cameraCapturePendingRef.current = false;
-      setCaptureError('Photo capture was cancelled or failed. Try again or upload an image instead.');
       return;
     }
 
