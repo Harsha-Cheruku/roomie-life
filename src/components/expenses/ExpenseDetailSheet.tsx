@@ -566,10 +566,15 @@ export const ExpenseDetailSheet = ({
               </div>
             )}
 
-            {expense.notes && (
-              <div className="bg-card rounded-2xl p-4 shadow-card">
-                <h3 className="font-semibold text-foreground mb-2">Notes</h3>
-                <p className="text-sm text-muted-foreground">{expense.notes}</p>
+            {(expense.notes || expense.notes_image_url) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card space-y-3">
+                <h3 className="font-semibold text-foreground">Notes</h3>
+                {expense.notes && (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{expense.notes}</p>
+                )}
+                {expense.notes_image_url && (
+                  <NotesImagePreview path={expense.notes_image_url} />
+                )}
               </div>
             )}
 
