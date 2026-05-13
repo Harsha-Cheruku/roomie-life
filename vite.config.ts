@@ -32,6 +32,22 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         id: "/",
         categories: ["lifestyle", "productivity", "social"],
+        shortcuts: [
+          {
+            name: "Add Expense",
+            short_name: "Expense",
+            description: "Scan a receipt and add a new bill",
+            url: "/expenses?shareBill=1",
+            icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+          {
+            name: "Open Room Chat",
+            short_name: "Chat",
+            description: "Jump straight into your room chat",
+            url: "/chat",
+            icons: [{ src: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+          },
+        ],
         share_target: {
           action: "/share-import",
           method: "POST",
