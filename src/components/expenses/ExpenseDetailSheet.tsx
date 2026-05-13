@@ -13,6 +13,38 @@ import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useCurrency } from '@/hooks/useCurrency';
 
+function NotesImagePreview({ path }: { path: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await supabase.storage
+          .from('chat-attachments')
+          .createSignedUrl(path, 60 * 60);
+        if (!cancelled && data?.signedUrl) setUrl(data.signedUrl);
+      } catch {/* ignore */}
+    })();
+    return () => { cancelled = true; };
+  }, [path]);
+  if (!url) {
+    return (
+      <div className="w-full h-40 rounded-xl bg-muted flex items-center justify-center">
+        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="block">
+      <img
+        src={url}
+        alt="Notes attachment"
+        className="rounded-xl max-h-72 w-full object-contain border border-border bg-muted"
+      />
+    </a>
+  );
+}
+
 interface ExpenseSplit {
   id: string;
   user_id: string;
@@ -32,6 +64,7 @@ interface Expense {
   created_at: string;
   category?: string;
   notes?: string;
+  notes_image_url?: string | null;
   receipt_url?: string;
   creator_profile?: {
     display_name: string;
@@ -565,10 +598,15 @@ export const ExpenseDetailSheet = ({
               </div>
             )}
 
-            {expense.notes && (
-              <div className="bg-card rounded-2xl p-4 shadow-card">
-                <h3 className="font-semibold text-foreground mb-2">Notes</h3>
-                <p className="text-sm text-muted-foreground">{expense.notes}</p>
+            {(expense.notes || expense.notes_image_url) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card space-y-3">
+                <h3 className="font-semibold text-foreground">Notes</h3>
+                {expense.notes && (
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{expense.notes}</p>
+                )}
+                {expense.notes_image_url && (
+                  <NotesImagePreview path={expense.notes_image_url} />
+                )}
               </div>
             )}
 

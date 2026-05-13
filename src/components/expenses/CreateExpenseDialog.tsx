@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Save, Loader2, Users, Percent, Calculator, Equal, Bell, Calendar, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { useOfflineExpenses } from '@/hooks/useOfflineExpenses';
 import { useCurrency } from '@/hooks/useCurrency';
+import { NotesImageAttacher } from './NotesImageAttacher';
 
 interface RoomMember {
   user_id: string;
@@ -65,6 +66,8 @@ export const CreateExpenseDialog = ({
   const [paidBy, setPaidBy] = useState<string>('');
   const [splitType, setSplitType] = useState<'equal' | 'percentage' | 'custom'>('equal');
   const [notes, setNotes] = useState('');
+  const [notesImagePath, setNotesImagePath] = useState<string | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
   const [roomMembers, setRoomMembers] = useState<RoomMember[]>([]);
   const [memberSplits, setMemberSplits] = useState<MemberSplit[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -327,6 +330,7 @@ export const CreateExpenseDialog = ({
           category,
           split_type: isSoloMode ? 'equal' : splitType,
           notes: notes.trim() || null,
+          notes_image_url: notesImagePath,
           status: isSoloMode ? 'settled' : 'pending', // Solo mode expenses are auto-settled
         })
         .select()
@@ -401,6 +405,7 @@ export const CreateExpenseDialog = ({
       setAmount('');
       setCategory('general');
       setNotes('');
+      setNotesImagePath(null);
       setSplitType('equal');
       setEnableReminder(false);
       setReminderDate('');
@@ -422,6 +427,7 @@ export const CreateExpenseDialog = ({
           category,
           split_type: isSoloMode ? 'equal' : splitType,
           notes: notes.trim() || null,
+          notes_image_url: notesImagePath,
           status: isSoloMode ? 'settled' : 'pending',
           created_at: new Date().toISOString(),
           splits: selectedSplits.map(s => ({
@@ -719,11 +725,17 @@ export const CreateExpenseDialog = ({
           <div>
             <label className="text-sm font-medium text-muted-foreground">Notes (optional)</label>
             <Textarea
+              ref={notesRef}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="mt-1 rounded-xl resize-none"
               placeholder="Add any notes..."
               rows={2}
+            />
+            <NotesImageAttacher
+              value={notesImagePath}
+              onChange={setNotesImagePath}
+              textareaRef={notesRef}
             />
           </div>
         </div>

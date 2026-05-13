@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Save, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { NotesImageAttacher } from './NotesImageAttacher';
 
 interface EditExpenseDialogProps {
   open: boolean;
@@ -17,6 +18,7 @@ interface EditExpenseDialogProps {
     total_amount: number;
     category?: string;
     notes?: string;
+    notes_image_url?: string | null;
     status?: string;
     splits?: Array<{ is_paid: boolean; status: string }>;
   } | null;
@@ -47,6 +49,8 @@ export const EditExpenseDialog = ({
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('general');
   const [notes, setNotes] = useState('');
+  const [notesImagePath, setNotesImagePath] = useState<string | null>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
 
@@ -56,6 +60,7 @@ export const EditExpenseDialog = ({
       setAmount(expense.total_amount.toString());
       setCategory(expense.category || 'general');
       setNotes(expense.notes || '');
+      setNotesImagePath(expense.notes_image_url || null);
       
       // Check if expense is settled or all splits are paid - make read-only
       const allPaid = expense.splits?.every(s => s.is_paid || s.status === 'rejected') ?? false;
@@ -127,6 +132,7 @@ export const EditExpenseDialog = ({
           total_amount: totalAmount,
           category,
           notes: notes.trim() || null,
+          notes_image_url: notesImagePath,
         })
         .eq('id', expense.id);
 
@@ -240,11 +246,17 @@ export const EditExpenseDialog = ({
           <div>
             <label className="text-sm font-medium text-muted-foreground">Notes (optional)</label>
             <Textarea
+              ref={notesRef}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="mt-1 rounded-xl resize-none"
               rows={3}
               placeholder="Add any extra details..."
+            />
+            <NotesImageAttacher
+              value={notesImagePath}
+              onChange={setNotesImagePath}
+              textareaRef={notesRef}
             />
           </div>
         </div>

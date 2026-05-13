@@ -13,6 +13,7 @@ interface OfflineExpense {
   category: string;
   split_type: string;
   notes: string | null;
+  notes_image_url?: string | null;
   status: string;
   created_at: string;
   splits: Array<{
