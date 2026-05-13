@@ -12,7 +12,11 @@ export const useRealtimePushNotifications = () => {
   const { showNotification, isEnabled } = usePushNotifications();
 
   useEffect(() => {
-    if (!user || !currentRoom || !isEnabled) return;
+    // Only run as a FOREGROUND fallback when system push is NOT enabled.
+    // When push is enabled, the database trigger -> send-push edge function
+    // -> Service Worker pipeline already delivers a real OS notification,
+    // so showing one again from here would just duplicate it.
+    if (!user || !currentRoom || isEnabled) return;
 
     const channel = supabase
       .channel(`realtime-push-${user.id}`)
