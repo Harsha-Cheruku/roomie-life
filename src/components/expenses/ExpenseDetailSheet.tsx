@@ -32,6 +32,7 @@ interface Expense {
   created_at: string;
   category?: string;
   notes?: string;
+  notes_image_url?: string | null;
   receipt_url?: string;
   creator_profile?: {
     display_name: string;
