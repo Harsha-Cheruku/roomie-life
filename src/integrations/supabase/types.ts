@@ -275,6 +275,7 @@ export type Database = {
           created_by: string
           id: string
           notes: string | null
+          notes_image_url: string | null
           paid_by: string
           receipt_url: string | null
           room_id: string
@@ -290,6 +291,7 @@ export type Database = {
           created_by: string
           id?: string
           notes?: string | null
+          notes_image_url?: string | null
           paid_by: string
           receipt_url?: string | null
           room_id: string
@@ -305,6 +307,7 @@ export type Database = {
           created_by?: string
           id?: string
           notes?: string | null
+          notes_image_url?: string | null
           paid_by?: string
           receipt_url?: string | null
           room_id?: string

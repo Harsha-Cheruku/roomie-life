@@ -1,0 +1,1 @@
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS notes_image_url text;
