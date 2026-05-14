@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, MessageSquare, Receipt, FolderOpen, Loader2, Check, AlertCircle } from "lucide-react";
+import { ArrowLeft, MessageSquare, Receipt, FolderOpen, Loader2, Check, AlertCircle, Wallet } from "lucide-react";
 import { toast } from "sonner";
 
 interface SharedFileMeta {
@@ -45,10 +45,29 @@ export default function ShareImport() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [autoHandled, setAutoHandled] = useState(false);
+  // Hold blobs in memory so we don't re-fetch from cache for upload — much faster on mobile.
+  const blobsRef = useRef<File[]>([]);
+  const [pendingPayment, setPendingPayment] = useState<{
+    splitId: string; expenseId: string; expenseTitle: string; amount: number; expensePaidBy: string; ts: number;
+  } | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
+        // Detect a pending "Mark as Paid" handoff so we can offer "Use as payment proof"
+        try {
+          const raw = sessionStorage.getItem('roommate_pending_payment_split');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            // Drop after 30 minutes to avoid stale handoffs
+            if (parsed?.ts && Date.now() - parsed.ts < 30 * 60 * 1000) {
+              setPendingPayment(parsed);
+            } else {
+              sessionStorage.removeItem('roommate_pending_payment_split');
+            }
+          }
+        } catch {/* ignore */}
+
         // 1) Native Android share-intent payload injected by MainActivity
         const nativePayload = (window as unknown as {
           __roommateSharedIntent?: {
@@ -66,12 +85,9 @@ export default function ShareImport() {
             const f = nativePayload.files[i];
             const blob = base64ToBlob(f.dataBase64, f.type);
             const url = URL.createObjectURL(blob);
-            // Persist into the same cache so existing handlers keep working
-            try {
-              const cache = await caches.open("shared-files");
-              await cache.put(`/__shared/${i}`, new Response(blob, { headers: { "content-type": f.type } }));
-              meta.push({ name: f.name, type: f.type, size: blob.size, url: `/__shared/${i}` });
-            } catch {/* cache may not be available */}
+            // Skip the cache round-trip — we keep blobs in memory for upload (faster).
+            meta.push({ name: f.name, type: f.type, size: blob.size, url });
+            blobsRef.current.push(new File([blob], f.name, { type: f.type || blob.type }));
             out.push({ url, name: f.name, type: f.type });
           }
           delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
@@ -94,6 +110,7 @@ export default function ShareImport() {
           try {
             const r = await fetch(f.url, { cache: "no-store" });
             const b = await r.blob();
+            blobsRef.current.push(new File([b], f.name, { type: f.type || b.type }));
             out.push({ url: URL.createObjectURL(b), name: f.name, type: f.type });
           } catch {/* skip */}
         }
@@ -106,11 +123,14 @@ export default function ShareImport() {
     })();
     return () => {
       previews.forEach((p) => URL.revokeObjectURL(p.url));
+      blobsRef.current = [];
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSharedBlobs = async (): Promise<File[]> => {
+    // Prefer in-memory blobs (no re-decode, no cache fetch)
+    if (blobsRef.current.length) return blobsRef.current;
     if (!payload) return [];
     const out: File[] = [];
     for (const f of payload.files) {
@@ -222,10 +242,45 @@ export default function ShareImport() {
     }
   };
 
+  const handleAttachToPayment = async () => {
+    if (!pendingPayment) return;
+    const imageFile = previews.find((p) => p.type.startsWith("image/"));
+    if (!imageFile) {
+      toast.error("Pick an image to attach as payment proof");
+      return;
+    }
+    setBusy(true);
+    try {
+      const blobRes = await fetch(imageFile.url);
+      const blob = await blobRes.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      // Tell Expenses to re-open the Mark-as-Paid dialog for this split
+      sessionStorage.setItem(
+        "roommate_resume_mark_paid",
+        JSON.stringify(pendingPayment),
+      );
+      sessionStorage.removeItem("roommate_pending_payment_split");
+      await clearShared();
+      navigate(`/expenses?resumePayment=${pendingPayment.splitId}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to prepare proof");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Auto-route when launched from a dedicated share-target alias (Android).
   useEffect(() => {
     if (loading || autoHandled || busy || previews.length === 0) return;
     const as = searchParams.get("as");
+    // If a Mark-as-Paid is waiting, jump straight back into it.
+    if (pendingPayment && previews.some((p) => p.type.startsWith("image/"))) {
+      setAutoHandled(true);
+      handleAttachToPayment();
+      return;
+    }
     if (as === "bill" && previews.some((p) => p.type.startsWith("image/"))) {
       setAutoHandled(true);
       handleCreateBill();
@@ -234,7 +289,7 @@ export default function ShareImport() {
       handleSendToRoom();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, previews, searchParams, currentRoom]);
+  }, [loading, previews, searchParams, currentRoom, pendingPayment]);
 
   if (loading) {
     return (
@@ -307,6 +362,22 @@ export default function ShareImport() {
 
         <div className="space-y-2">
           <p className="text-sm font-medium text-foreground">Where should this go?</p>
+
+          {pendingPayment && (
+            <Button
+              onClick={handleAttachToPayment}
+              disabled={busy || !previews.some((p) => p.type.startsWith("image/"))}
+              className="w-full justify-start gap-3 h-14"
+            >
+              <Wallet className="w-5 h-5" />
+              <div className="text-left">
+                <p className="font-medium">Use as payment proof</p>
+                <p className="text-xs opacity-90">
+                  Attach to "{pendingPayment.expenseTitle}" (₹{pendingPayment.amount.toFixed(0)})
+                </p>
+              </div>
+            </Button>
+          )}
 
           <Button
             onClick={handleSendToRoom}
