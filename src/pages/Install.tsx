@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, Download, Share, MoreVertical, Plus, Check, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logoImg from "@/assets/logo.jpg";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 // Direct APK download URL for Android users. Replace with the hosted APK URL
 // (e.g. GitHub Releases asset). Kept as a constant so it's easy to update.
@@ -22,6 +24,7 @@ export default function Install() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [platform, setPlatform] = useState<"ios" | "android" | "desktop">("desktop");
+  const [downloadingFcm, setDownloadingFcm] = useState(false);
 
   useEffect(() => {
     const ua = navigator.userAgent.toLowerCase();
@@ -50,6 +53,38 @@ export default function Install() {
       setIsInstalled(true);
     }
     setDeferredPrompt(null);
+  };
+
+  const handleDownloadGoogleServices = async () => {
+    setDownloadingFcm(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({ title: "Sign in required", description: "Please sign in to download Firebase config.", variant: "destructive" });
+        return;
+      }
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/download-firebase-config`;
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({} as any));
+        throw new Error(j.error || `Download failed (${resp.status})`);
+      }
+      const blob = await resp.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "google-services.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(a.href);
+      toast({ title: "Downloaded", description: "Place this file in android/app/ before building." });
+    } catch (e: any) {
+      toast({ title: "Download failed", description: e?.message ?? String(e), variant: "destructive" });
+    } finally {
+      setDownloadingFcm(false);
+    }
   };
 
   return (
@@ -181,6 +216,33 @@ export default function Install() {
                     <p className="text-[11px] text-muted-foreground mt-2">
                       After download, open the file and allow install from your browser if prompted.
                     </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Firebase google-services.json download (for native builders) */}
+              <div className="bg-muted/40 border border-border rounded-xl p-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center shrink-0">
+                    <Download className="w-5 h-5 text-foreground/70" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-foreground text-sm">
+                      Firebase config (for developers)
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Download <code className="text-[11px]">google-services.json</code> and place it in
+                      <code className="text-[11px]"> android/app/</code> before running
+                      <code className="text-[11px]"> npx cap sync</code>.
+                    </p>
+                    <button
+                      onClick={handleDownloadGoogleServices}
+                      disabled={downloadingFcm}
+                      className="inline-flex items-center gap-2 mt-3 h-9 px-3 rounded-lg bg-foreground text-background text-xs font-medium hover:opacity-90 transition disabled:opacity-50"
+                    >
+                      <Download className="w-4 h-4" />
+                      {downloadingFcm ? "Downloading…" : "Download google-services.json"}
+                    </button>
                   </div>
                 </div>
               </div>
