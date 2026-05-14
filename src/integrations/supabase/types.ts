@@ -225,6 +225,7 @@ export type Database = {
           expense_item_id: string | null
           id: string
           is_paid: boolean
+          payment_screenshot_url: string | null
           rejection_comment: string | null
           status: string
           user_id: string
@@ -236,6 +237,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          payment_screenshot_url?: string | null
           rejection_comment?: string | null
           status?: string
           user_id: string
@@ -247,6 +249,7 @@ export type Database = {
           expense_item_id?: string | null
           id?: string
           is_paid?: boolean
+          payment_screenshot_url?: string | null
           rejection_comment?: string | null
           status?: string
           user_id?: string
