@@ -99,6 +99,31 @@ export const Expenses = () => {
       setSearchParams(next, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  // Resume Mark-as-Paid after the user shared a screenshot from another app
+  useEffect(() => {
+    if (!searchParams.get("resumePayment")) return;
+    try {
+      const raw = sessionStorage.getItem("roommate_resume_mark_paid");
+      if (raw) {
+        const p = JSON.parse(raw) as {
+          splitId: string; expenseId: string; expenseTitle: string; amount: number; expensePaidBy: string;
+        };
+        sessionStorage.removeItem("roommate_resume_mark_paid");
+        setMarkingPaidSplit({
+          id: p.splitId,
+          amount: p.amount,
+          title: p.expenseTitle,
+          expense_id: p.expenseId,
+          paid_by: p.expensePaidBy,
+        });
+        setShowMarkPaidDialog(true);
+      }
+    } catch {/* ignore */}
+    const next = new URLSearchParams(searchParams);
+    next.delete("resumePayment");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectingSplitId, setRejectingSplitId] = useState<string | null>(null);
   const [rejectingExpenseTitle, setRejectingExpenseTitle] = useState<string>('');
