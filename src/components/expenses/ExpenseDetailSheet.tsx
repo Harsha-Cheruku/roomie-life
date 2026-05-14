@@ -52,6 +52,7 @@ interface ExpenseSplit {
   is_paid: boolean;
   status: string;
   rejection_comment?: string | null;
+  payment_screenshot_url?: string | null;
 }
 
 interface Expense {
@@ -503,6 +504,13 @@ export const ExpenseDetailSheet = ({
                   <div className="mt-2 p-2 bg-coral/10 rounded-lg">
                     <p className="text-xs text-coral font-medium">Your rejection reason:</p>
                     <p className="text-xs text-foreground">{mySplit.rejection_comment}</p>
+                  </div>
+                )}
+
+                {mySplit.is_paid && mySplit.payment_screenshot_url && (
+                  <div className="mt-3 pt-3 border-t border-border">
+                    <p className="text-xs text-muted-foreground mb-2">Payment proof</p>
+                    <NotesImagePreview path={mySplit.payment_screenshot_url} />
                   </div>
                 )}
 

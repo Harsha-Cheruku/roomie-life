@@ -1,0 +1,1 @@
+ALTER TABLE public.expense_splits ADD COLUMN IF NOT EXISTS payment_screenshot_url text;
