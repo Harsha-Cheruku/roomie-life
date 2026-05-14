@@ -169,7 +169,8 @@ export const Expenses = () => {
             amount,
             is_paid,
             status,
-            rejection_comment
+            rejection_comment,
+            payment_screenshot_url
           )
         `)
         .eq('room_id', currentRoom.id)
