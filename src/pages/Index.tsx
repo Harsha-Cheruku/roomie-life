@@ -6,6 +6,7 @@ import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { useRealtimePushNotifications } from "@/hooks/useRealtimePushNotifications";
 import { PushNotificationPrompt } from "@/components/notifications/PushNotificationPrompt";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { useNativeFcm } from "@/hooks/useNativeFcm";
 
 const Index = () => {
   const { activeTab, navigateToTab } = useNavigation();
@@ -18,6 +19,9 @@ const Index = () => {
   
   // Initialize realtime push notifications listener
   useRealtimePushNotifications();
+
+  // Native Android/iOS FCM token registration (no-op on web)
+  useNativeFcm();
 
   useEffect(() => {
     if (isSupported && !isEnabled && permission === 'default') {
