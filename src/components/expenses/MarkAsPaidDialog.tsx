@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Check, Loader2, Upload, X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Check, Loader2, Upload, X, ClipboardPaste, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
+import { useNavigate } from 'react-router-dom';
 
 interface MarkAsPaidDialogProps {
   open: boolean;
@@ -36,75 +37,118 @@ export const MarkAsPaidDialog = ({
   onComplete,
 }: MarkAsPaidDialogProps) => {
   const { toast } = useToast();
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const navigate = useNavigate();
   const { createExpensePaidNotification } = useCreateNotification();
   const [isLoading, setIsLoading] = useState(false);
-  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [pendingBlob, setPendingBlob] = useState<Blob | null>(null);
   const [uploadingScreenshot, setUploadingScreenshot] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Cleanup object URLs
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const acceptBlob = (blob: Blob) => {
+    if (!blob.type.startsWith('image/')) {
+      toast({ title: 'Pick an image', variant: 'destructive' });
+      return;
+    }
+    if (blob.size > 10 * 1024 * 1024) {
+      toast({ title: 'Too large', description: 'Max 10MB', variant: 'destructive' });
+      return;
+    }
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(URL.createObjectURL(blob));
+    setPendingBlob(blob);
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setScreenshot(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    acceptBlob(file);
   };
+
+  const pasteFromClipboard = async () => {
+    try {
+      const items = await (navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> }).read?.();
+      if (items) {
+        for (const item of items) {
+          const imgType = item.types.find((t) => t.startsWith('image/'));
+          if (imgType) {
+            const blob = await item.getType(imgType);
+            acceptBlob(blob);
+            return;
+          }
+        }
+      }
+      toast({ title: 'No image in clipboard' });
+    } catch {
+      toast({
+        title: 'Clipboard blocked',
+        description: 'Tap Upload, or share a screenshot to RoomMate from another app.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const shareFromOtherApp = () => {
+    // Stash the target split so ShareImport can hand the image straight back to us
+    sessionStorage.setItem(
+      'roommate_pending_payment_split',
+      JSON.stringify({ splitId, expenseId, expenseTitle, amount, expensePaidBy, ts: Date.now() })
+    );
+    onOpenChange(false);
+    toast({
+      title: 'Switch to the other app',
+      description: 'Open the screenshot, tap Share → RoomMate. We\'ll bring it back here.',
+    });
+  };
+
+  // Pick up an image stashed by ShareImport (user shared a screenshot from another app)
+  useEffect(() => {
+    if (!open) return;
+    const dataUrl = sessionStorage.getItem('roommate_pending_payment_image');
+    if (!dataUrl) return;
+    sessionStorage.removeItem('roommate_pending_payment_image');
+    fetch(dataUrl)
+      .then((r) => r.blob())
+      .then(acceptBlob)
+      .catch(() => {/* ignore */});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const handleConfirm = async () => {
     setIsLoading(true);
     try {
-      let screenshotUrl: string | null = null;
-      if (screenshot && fileInputRef.current?.files?.[0]) {
+      let screenshotPath: string | null = null;
+      if (pendingBlob && user) {
         setUploadingScreenshot(true);
-        const file = fileInputRef.current.files[0];
-        
-        // Validate file type and size
-        if (!file.type.startsWith('image/')) {
-          toast({ title: 'Invalid file type', description: 'Please select an image file', variant: 'destructive' });
-          setUploadingScreenshot(false);
-          setIsLoading(false);
-          return;
-        }
-        
-        const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-        if (file.size > MAX_SIZE) {
-          toast({ title: 'File too large', description: 'Maximum file size is 10MB', variant: 'destructive' });
-          setUploadingScreenshot(false);
-          setIsLoading(false);
-          return;
-        }
-        
-        const fileName = `payment_${splitId}_${Date.now()}.${file.name.split('.').pop()}`;
-        
+        const ext = (pendingBlob.type.split('/')[1] || 'jpg').toLowerCase();
+        const path = `${user.id}/payments/${splitId}-${Date.now()}.${ext}`;
         const { error: uploadError } = await supabase
           .storage
           .from('chat-attachments')
-          .upload(fileName, file);
-
+          .upload(path, pendingBlob, { contentType: pendingBlob.type, upsert: false });
         if (uploadError) {
           console.error('Upload error:', uploadError);
         } else {
-          // Fix: Use signed URL instead of public URL for private bucket
-          const { data: signedUrlData, error: signedError } = await supabase
-            .storage
-            .from('chat-attachments')
-            .createSignedUrl(fileName, 3600 * 24 * 7); // 7 days expiry
-          
-          if (!signedError && signedUrlData) {
-            screenshotUrl = signedUrlData.signedUrl;
-          }
+          screenshotPath = path;
         }
         setUploadingScreenshot(false);
       }
 
-      // Mark split as paid
+      // Mark split as paid (and store screenshot path if we have one)
+      const updatePayload: { is_paid: boolean; payment_screenshot_url?: string | null } = { is_paid: true };
+      if (screenshotPath) updatePayload.payment_screenshot_url = screenshotPath;
       const { error } = await supabase
         .from('expense_splits')
-        .update({ is_paid: true })
+        .update(updatePayload)
         .eq('id', splitId);
 
       if (error) throw error;
@@ -135,14 +179,16 @@ export const MarkAsPaidDialog = ({
 
       toast({
         title: 'Payment confirmed! ✓',
-        description: screenshotUrl 
+        description: screenshotPath
           ? 'Payment screenshot saved.' 
           : 'Expense marked as paid.',
       });
 
       onComplete();
       onOpenChange(false);
-      setScreenshot(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setPendingBlob(null);
     } catch (error) {
       console.error('Error marking as paid:', error);
       toast({
@@ -157,7 +203,9 @@ export const MarkAsPaidDialog = ({
   const handleClose = () => {
     if (!isLoading) {
       onOpenChange(false);
-      setScreenshot(null);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+      setPendingBlob(null);
     }
   };
 
@@ -184,16 +232,18 @@ export const MarkAsPaidDialog = ({
             onChange={handleFileSelect}
           />
 
-          {screenshot ? (
+          {previewUrl ? (
             <div className="relative">
               <img 
-                src={screenshot} 
+                src={previewUrl}
                 alt="Payment screenshot" 
                 className="w-full h-40 object-cover rounded-xl border border-border"
               />
               <button
                 onClick={() => {
-                  setScreenshot(null);
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
+                  setPreviewUrl(null);
+                  setPendingBlob(null);
                   if (fileInputRef.current) fileInputRef.current.value = '';
                 }}
                 className="absolute top-2 right-2 w-8 h-8 rounded-full bg-background/80 flex items-center justify-center"
@@ -202,13 +252,26 @@ export const MarkAsPaidDialog = ({
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-full h-24 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-2 text-muted-foreground hover:bg-muted/50 transition-colors"
-            >
-              <Upload className="w-6 h-6" />
-              <span className="text-sm">Upload Screenshot (Optional)</span>
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full h-20 border-2 border-dashed border-border rounded-xl flex flex-col items-center justify-center gap-1 text-muted-foreground hover:bg-muted/50 transition-colors"
+              >
+                <Upload className="w-5 h-5" />
+                <span className="text-xs">Pick from gallery / files</span>
+              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={pasteFromClipboard}>
+                  <ClipboardPaste className="w-4 h-4" /> Paste
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5" onClick={shareFromOtherApp}>
+                  <Share2 className="w-4 h-4" /> From other app
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground text-center">
+                Tip: in any app, share a screenshot to RoomMate — it'll come straight back here.
+              </p>
+            </div>
           )}
         </div>
 
