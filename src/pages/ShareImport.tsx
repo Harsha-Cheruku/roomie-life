@@ -5,6 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, MessageSquare, Receipt, FolderOpen, Loader2, Check, AlertCircle, Wallet } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 interface SharedFileMeta {
@@ -50,6 +57,11 @@ export default function ShareImport() {
   const [pendingPayment, setPendingPayment] = useState<{
     splitId: string; expenseId: string; expenseTitle: string; amount: number; expensePaidBy: string; ts: number;
   } | null>(null);
+  const [showSplitPicker, setShowSplitPicker] = useState(false);
+  const [unpaidSplits, setUnpaidSplits] = useState<{
+    id: string; amount: number; expense_id: string; title: string; paid_by: string;
+  }[]>([]);
+  const [loadingSplits, setLoadingSplits] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -271,6 +283,83 @@ export default function ShareImport() {
     }
   };
 
+  const openSplitPicker = async () => {
+    if (!user) {
+      toast.error("Sign in first");
+      navigate("/auth");
+      return;
+    }
+    if (!currentRoom) {
+      toast.error("Join a room first");
+      return;
+    }
+    setLoadingSplits(true);
+    setShowSplitPicker(true);
+    try {
+      const { data, error } = await supabase
+        .from("expense_splits")
+        .select("id, amount, expense_id, expenses!inner(id, title, paid_by, room_id, status)")
+        .eq("user_id", user.id)
+        .eq("is_paid", false)
+        .neq("status", "rejected")
+        .eq("expenses.room_id", currentRoom.id)
+        .neq("expenses.status", "settled")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      const rows = (data || [])
+        .filter((r: { expenses: { paid_by: string } }) => r.expenses?.paid_by !== user.id)
+        .map((r: { id: string; amount: number; expense_id: string; expenses: { title: string; paid_by: string } }) => ({
+          id: r.id,
+          amount: Number(r.amount),
+          expense_id: r.expense_id,
+          title: r.expenses.title,
+          paid_by: r.expenses.paid_by,
+        }));
+      setUnpaidSplits(rows);
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not load your bills");
+    } finally {
+      setLoadingSplits(false);
+    }
+  };
+
+  const pickSplitForProof = async (s: { id: string; amount: number; expense_id: string; title: string; paid_by: string }) => {
+    const imageFile = previews.find((p) => p.type.startsWith("image/"));
+    if (!imageFile) {
+      toast.error("Pick an image to attach as payment proof");
+      return;
+    }
+    setBusy(true);
+    try {
+      const blobRes = await fetch(imageFile.url);
+      const blob = await blobRes.blob();
+      const dataUrl = await blobToDataUrl(blob);
+      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      sessionStorage.setItem(
+        "roommate_resume_mark_paid",
+        JSON.stringify({
+          splitId: s.id,
+          expenseId: s.expense_id,
+          expenseTitle: s.title,
+          amount: s.amount,
+          expensePaidBy: s.paid_by,
+          ts: Date.now(),
+        }),
+      );
+      sessionStorage.removeItem("roommate_pending_payment_split");
+      await clearShared();
+      setShowSplitPicker(false);
+      navigate(`/expenses?resumePayment=${s.id}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to prepare proof");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Auto-route when launched from a dedicated share-target alias (Android).
   useEffect(() => {
     if (loading || autoHandled || busy || previews.length === 0) return;
@@ -379,6 +468,20 @@ export default function ShareImport() {
             </Button>
           )}
 
+          {!pendingPayment && (
+            <Button
+              onClick={openSplitPicker}
+              disabled={busy || !previews.some((p) => p.type.startsWith("image/"))}
+              className="w-full justify-start gap-3 h-14"
+            >
+              <Wallet className="w-5 h-5" />
+              <div className="text-left">
+                <p className="font-medium">Send to Mark as Paid</p>
+                <p className="text-xs opacity-90">Pick a bill to settle with this screenshot</p>
+              </div>
+            </Button>
+          )}
+
           <Button
             onClick={handleSendToRoom}
             disabled={busy || !currentRoom}
@@ -427,6 +530,45 @@ export default function ShareImport() {
           </div>
         )}
       </div>
+
+      <Dialog open={showSplitPicker} onOpenChange={setShowSplitPicker}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Settle which bill?</DialogTitle>
+            <DialogDescription>
+              Pick a bill you owe. We'll attach this screenshot as proof and mark it paid.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-2 py-1">
+            {loadingSplits ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              </div>
+            ) : unpaidSplits.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No unpaid bills found.
+              </p>
+            ) : (
+              unpaidSplits.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => pickSplitForProof(s)}
+                  disabled={busy}
+                  className="w-full text-left p-3 rounded-xl border border-border hover:bg-muted/50 transition-colors flex items-center justify-between gap-3"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{s.title}</p>
+                    <p className="text-xs text-muted-foreground">Tap to mark as paid</p>
+                  </div>
+                  <span className="font-semibold text-primary whitespace-nowrap">
+                    ₹{s.amount.toFixed(0)}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
