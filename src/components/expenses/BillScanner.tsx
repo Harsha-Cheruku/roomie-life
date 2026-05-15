@@ -29,7 +29,9 @@ interface BillScannerProps {
  * The AI model handles colour, contrast and noise on its own — heavy
  * grayscale/histogram/unsharp passes added seconds without improving accuracy.
  */
-const preprocessForOCR = (dataUrl: string): Promise<string> => {
+const preprocessForOCR = (
+  dataUrl: string
+): Promise<{ dataUrl: string; blob: Blob }> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -61,11 +63,22 @@ const preprocessForOCR = (dataUrl: string): Promise<string> => {
       // shadow and contrast well on its own.
       //
       // JPEG @ 0.82 — visually identical to 0.9 for receipts but ~40%
-      // smaller payload, which is the difference between a 5s upload and
-      // a 15s upload on patchy mobile data.
-      resolve(canvas.toDataURL('image/jpeg', 0.82));
+      // smaller payload. Emit a Blob (binary) for upload to avoid the
+      // 33% base64 overhead and the giant string allocation that caused
+      // OOM/timeouts on low-end Android WebViews.
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.82), blob });
+          } else {
+            resolve({ dataUrl, blob: new Blob() });
+          }
+        },
+        'image/jpeg',
+        0.82
+      );
     };
-    img.onerror = () => resolve(dataUrl);
+    img.onerror = () => resolve({ dataUrl, blob: new Blob() });
     img.src = dataUrl;
   });
 };
@@ -79,6 +92,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const cameraCapturePendingRef = useRef(false);
+  const imageBlobRef = useRef<Blob | null>(null);
   const { toast } = useToast();
 
   // If the BillScanner was opened from a Share-Target flow, pick up the
@@ -121,10 +135,14 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
       // Show preview immediately so the UI is responsive,
       // then run heavy preprocessing without blocking.
       setImagePreview(raw);
+      // Fallback blob = the original file so scan can run even if
+      // preprocessing fails or is still pending.
+      imageBlobRef.current = file;
       const runHeavy = async () => {
         try {
-          const optimized = await preprocessForOCR(raw);
-          setImagePreview(optimized);
+          const { dataUrl, blob } = await preprocessForOCR(raw);
+          setImagePreview(dataUrl);
+          if (blob && blob.size > 0) imageBlobRef.current = blob;
         } catch {
           // keep raw preview
         } finally {
@@ -140,6 +158,11 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
   const scanReceipt = async () => {
     if (!imagePreview) return;
+    const blob = imageBlobRef.current;
+    if (!blob || blob.size === 0) {
+      setScanError('Image not ready yet, try again in a moment.');
+      return;
+    }
 
     setIsScanning(true);
     setScanError(null);
@@ -149,15 +172,20 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60_000);
       try {
+        // Upload the image as a binary file via FormData instead of a
+        // base64 JSON payload — base64 inflates the request by ~33% and
+        // forces both client and edge runtime to materialize the whole
+        // string in memory, which caused timeouts/OOM on low-end Android.
+        const form = new FormData();
+        form.append('image', blob, 'receipt.jpg');
         const r = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-receipt`,
           {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
               'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             },
-            body: JSON.stringify({ imageBase64: imagePreview }),
+            body: form,
             signal: controller.signal,
           }
         );
@@ -203,6 +231,7 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
   const handleClose = () => {
     setImagePreview(null);
+    imageBlobRef.current = null;
     setIsScanning(false);
     setIsProcessing(false);
     setScanError(null);
