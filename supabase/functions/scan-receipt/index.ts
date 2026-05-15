@@ -69,8 +69,36 @@ serve(async (req) => {
   }
 
   try {
-    const { imageBase64 } = await req.json();
-    
+    let imageBase64: string | undefined;
+    let imageMime = 'image/jpeg';
+    const contentType = req.headers.get('content-type') || '';
+
+    if (contentType.includes('multipart/form-data')) {
+      // Preferred path: binary upload via FormData — avoids the 33%
+      // base64 inflation and the giant JSON string that was causing
+      // timeouts/OOM on mobile networks.
+      const form = await req.formData();
+      const file = form.get('image');
+      if (!(file instanceof File)) {
+        return new Response(
+          JSON.stringify({ error: 'No image file provided' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      imageMime = file.type || 'image/jpeg';
+      const buf = new Uint8Array(await file.arrayBuffer());
+      // Chunked base64 encode to keep peak memory low for large images.
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < buf.length; i += chunk) {
+        binary += String.fromCharCode(...buf.subarray(i, i + chunk));
+      }
+      imageBase64 = `data:${imageMime};base64,${btoa(binary)}`;
+    } else {
+      const body = await req.json().catch(() => ({} as { imageBase64?: string }));
+      imageBase64 = body.imageBase64;
+    }
+
     if (!imageBase64) {
       return new Response(
         JSON.stringify({ error: 'No image provided' }),
