@@ -102,7 +102,7 @@ class MainActivity : BridgeActivity() {
             componentName.endsWith("ShareToChatActivity") -> "chat"
             else -> "choose"
         }
-        val targetParam = "?from=intent&as=$target"
+        val targetParam = "?from=intent&as=$target&shareTs=${System.currentTimeMillis()}"
 
         // Stash the payload on window so the JS bootstrap can pick it up,
         // then navigate the web app to /share-import.
@@ -112,6 +112,7 @@ class MainActivity : BridgeActivity() {
                 window.__roommateSharedIntent = ${payload};
                 try { sessionStorage.setItem('roommate_native_shared_intent', JSON.stringify(window.__roommateSharedIntent)); } catch (_) {}
                 var target = '/share-import$targetParam';
+                if (window.location.pathname === '/share-import') { window.location.replace(target); return 'reload'; }
                 window.history.pushState({ roommateShare: true }, '', target);
                 try { window.dispatchEvent(new PopStateEvent('popstate', { state: { roommateShare: true } })); }
                 catch (_) { window.dispatchEvent(new Event('popstate')); }
