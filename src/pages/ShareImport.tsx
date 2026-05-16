@@ -203,7 +203,7 @@ export default function ShareImport() {
     for (const f of payload.files) {
       const r = await fetch(f.url, { cache: "no-store" });
       const b = await r.blob();
-      out.push(new File([b], f.name, { type: f.type || b.type }));
+      out.push(await compressImageFile(new File([b], f.name, { type: f.type || b.type })));
     }
     return out;
   };
@@ -215,7 +215,7 @@ export default function ShareImport() {
     if (!imageFile) return null;
     const blobRes = await fetch(imageFile.url, { cache: "no-store" });
     const blob = await blobRes.blob();
-    return new File([blob], imageFile.name, { type: imageFile.type || blob.type });
+    return compressImageFile(new File([blob], imageFile.name, { type: imageFile.type || blob.type }));
   };
 
   const stashPaymentProof = async (): Promise<boolean> => {
