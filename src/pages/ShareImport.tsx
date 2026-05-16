@@ -450,7 +450,7 @@ export default function ShareImport() {
     if (as === "bill" && previews.some((p) => p.type.startsWith("image/"))) {
       setAutoHandled(true);
       handleCreateBill();
-    } else if (as === "payment" && previews.some((p) => p.type.startsWith("image/"))) {
+    } else if (as === "payment" && currentRoom && previews.some((p) => p.type.startsWith("image/"))) {
       setAutoHandled(true);
       openSplitPicker();
     } else if (as === "chat" && currentRoom) {
