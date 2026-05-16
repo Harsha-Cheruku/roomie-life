@@ -67,6 +67,40 @@ export default function ShareImport() {
   const [loadingSplits, setLoadingSplits] = useState(false);
 
   useEffect(() => {
+    type NativeSharedPayload = {
+      files: { name: string; type: string; dataBase64: string }[];
+      title?: string;
+      text?: string;
+      ts: number;
+    };
+
+    const applyNativePayload = (nativePayload?: NativeSharedPayload) => {
+      if (!nativePayload?.files?.length) return false;
+      const meta: SharedFileMeta[] = [];
+      const out: { url: string; name: string; type: string }[] = [];
+      blobsRef.current = [];
+      for (let i = 0; i < nativePayload.files.length; i++) {
+        const f = nativePayload.files[i];
+        const blob = base64ToBlob(f.dataBase64, f.type);
+        const url = URL.createObjectURL(blob);
+        meta.push({ name: f.name, type: f.type, size: blob.size, url });
+        blobsRef.current.push(new File([blob], f.name, { type: f.type || blob.type }));
+        out.push({ url, name: f.name, type: f.type });
+      }
+      delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
+      setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
+      setPreviews(out);
+      setLoading(false);
+      return true;
+    };
+
+    const handleNativeShare = (event: Event) => {
+      const detail = (event as CustomEvent<NativeSharedPayload>).detail;
+      applyNativePayload(detail || (window as unknown as { __roommateSharedIntent?: NativeSharedPayload }).__roommateSharedIntent);
+    };
+
+    window.addEventListener("roommate-shared-intent", handleNativeShare as EventListener);
+
     (async () => {
       try {
         // Detect a pending "Mark as Paid" handoff so we can offer "Use as payment proof"
@@ -85,39 +119,19 @@ export default function ShareImport() {
 
         // 1) Native Android share-intent payload injected by MainActivity
         const nativePayload = (window as unknown as {
-          __roommateSharedIntent?: {
-            files: { name: string; type: string; dataBase64: string }[];
-            title?: string;
-            text?: string;
-            ts: number;
-          };
+          __roommateSharedIntent?: NativeSharedPayload;
         }).__roommateSharedIntent || (() => {
           try {
             const raw = sessionStorage.getItem("roommate_native_shared_intent");
             if (!raw) return undefined;
             sessionStorage.removeItem("roommate_native_shared_intent");
-            return JSON.parse(raw) as { files: { name: string; type: string; dataBase64: string }[]; title?: string; text?: string; ts: number };
+            return JSON.parse(raw) as NativeSharedPayload;
           } catch {
             return undefined;
           }
         })();
 
-        if (nativePayload && nativePayload.files?.length) {
-          const meta: SharedFileMeta[] = [];
-          const out: { url: string; name: string; type: string }[] = [];
-          for (let i = 0; i < nativePayload.files.length; i++) {
-            const f = nativePayload.files[i];
-            const blob = base64ToBlob(f.dataBase64, f.type);
-            const url = URL.createObjectURL(blob);
-            // Skip the cache round-trip — we keep blobs in memory for upload (faster).
-            meta.push({ name: f.name, type: f.type, size: blob.size, url });
-            blobsRef.current.push(new File([blob], f.name, { type: f.type || blob.type }));
-            out.push({ url, name: f.name, type: f.type });
-          }
-          delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
-          setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
-          setPreviews(out);
-          setLoading(false);
+        if (applyNativePayload(nativePayload)) {
           return;
         }
 
@@ -146,6 +160,7 @@ export default function ShareImport() {
       }
     })();
     return () => {
+      window.removeEventListener("roommate-shared-intent", handleNativeShare as EventListener);
       previews.forEach((p) => URL.revokeObjectURL(p.url));
       blobsRef.current = [];
     };
