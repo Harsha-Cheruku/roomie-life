@@ -342,7 +342,7 @@ export default function ShareImport() {
         .select("id, amount, expense_id, expenses!inner(id, title, paid_by, room_id, status)")
         .eq("user_id", user.id)
         .eq("is_paid", false)
-        .neq("status", "rejected")
+        .eq("status", "accepted")
         .eq("expenses.room_id", currentRoom.id)
         .neq("expenses.status", "settled")
         .order("created_at", { ascending: false })
