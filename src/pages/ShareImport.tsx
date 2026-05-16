@@ -82,8 +82,7 @@ const PAYMENT_PROOF_URL = `${window.location.origin}/__roommate/payment-proof`;
 export default function ShareImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, currentRoom, loading: authLoading } = useAuth();
-  const { userRooms, switchRoom } = useAuth();
+  const { user, currentRoom, loading: authLoading, userRooms, switchRoom } = useAuth();
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [previews, setPreviews] = useState<{ url: string; name: string; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
