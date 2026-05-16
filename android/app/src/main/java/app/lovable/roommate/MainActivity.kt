@@ -88,6 +88,7 @@ class MainActivity : BridgeActivity() {
                 clipData.getItemAt(i)?.uri?.let { uris.add(it) }
             }
         }
+        intent.data?.let { uris.add(it) }
 
         return uris.distinctBy { it.toString() }
     }
