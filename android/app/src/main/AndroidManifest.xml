@@ -86,6 +86,26 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Dedicated share-target alias for payment screenshots/proofs. -->
+        <activity-alias
+            android:name="app.lovable.roommate.ShareToPaymentActivity"
+            android:targetActivity="app.lovable.roommate.MainActivity"
+            android:label="RoomMate – Settle Payment"
+            android:icon="@mipmap/ic_launcher"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity-alias>
+
         <!--
             Dedicated share-target alias for sending media straight to the
             current room chat.
