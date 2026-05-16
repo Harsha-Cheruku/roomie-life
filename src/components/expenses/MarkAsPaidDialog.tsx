@@ -15,6 +15,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { useNavigate } from 'react-router-dom';
 
+const PAYMENT_PROOF_CACHE = 'roommate-payment-proof';
+
 interface MarkAsPaidDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -113,6 +115,24 @@ export const MarkAsPaidDialog = ({
   // Pick up an image stashed by ShareImport (user shared a screenshot from another app)
   useEffect(() => {
     if (!open) return;
+    const cached = sessionStorage.getItem('roommate_pending_payment_image_cache');
+    if (cached) {
+      sessionStorage.removeItem('roommate_pending_payment_image_cache');
+      try {
+        const parsed = JSON.parse(cached) as { url?: string; ts?: number };
+        if (parsed?.url && (!parsed.ts || Date.now() - parsed.ts < 30 * 60 * 1000)) {
+          caches.open(PAYMENT_PROOF_CACHE)
+            .then((cache) => cache.match(parsed.url!))
+            .then((response) => response?.blob())
+            .then((blob) => {
+              if (blob) acceptBlob(blob);
+            })
+            .catch(() => {/* fall back below if dataUrl exists */});
+          return;
+        }
+      } catch {/* fall through */}
+    }
+
     const dataUrl = sessionStorage.getItem('roommate_pending_payment_image');
     if (!dataUrl) return;
     sessionStorage.removeItem('roommate_pending_payment_image');
