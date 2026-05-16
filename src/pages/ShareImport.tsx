@@ -43,13 +43,39 @@ const base64ToBlob = (b64: string, type: string): Blob => {
   return new Blob([bytes], { type });
 };
 
+const compressImageFile = async (file: File, maxDimension = 1400, quality = 0.82): Promise<File> => {
+  if (!file.type.startsWith("image/")) return file;
+  try {
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = imageUrl;
+    await image.decode();
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    if (scale >= 1 && file.size < 900 * 1024) {
+      URL.revokeObjectURL(imageUrl);
+      return file;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(imageUrl);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+};
+
 const PAYMENT_PROOF_CACHE = "roommate-payment-proof";
 const PAYMENT_PROOF_URL = `${window.location.origin}/__roommate/payment-proof`;
 
 export default function ShareImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, loading: authLoading } = useAuth();
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [previews, setPreviews] = useState<{ url: string; name: string; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,6 +93,41 @@ export default function ShareImport() {
   const [loadingSplits, setLoadingSplits] = useState(false);
 
   useEffect(() => {
+    type NativeSharedPayload = {
+      files: { name: string; type: string; dataBase64: string }[];
+      title?: string;
+      text?: string;
+      ts: number;
+    };
+
+    const applyNativePayload = async (nativePayload?: NativeSharedPayload) => {
+      if (!nativePayload?.files?.length) return false;
+      const meta: SharedFileMeta[] = [];
+      const out: { url: string; name: string; type: string }[] = [];
+      blobsRef.current = [];
+      for (let i = 0; i < nativePayload.files.length; i++) {
+        const f = nativePayload.files[i];
+        const blob = base64ToBlob(f.dataBase64, f.type);
+        const compressed = await compressImageFile(new File([blob], f.name, { type: f.type || blob.type }));
+        const url = URL.createObjectURL(compressed);
+        meta.push({ name: compressed.name, type: compressed.type, size: compressed.size, url });
+        blobsRef.current.push(compressed);
+        out.push({ url, name: compressed.name, type: compressed.type });
+      }
+      delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
+      setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
+      setPreviews(out);
+      setLoading(false);
+      return true;
+    };
+
+    const handleNativeShare = (event: Event) => {
+      const detail = (event as CustomEvent<NativeSharedPayload>).detail;
+      void applyNativePayload(detail || (window as unknown as { __roommateSharedIntent?: NativeSharedPayload }).__roommateSharedIntent);
+    };
+
+    window.addEventListener("roommate-shared-intent", handleNativeShare as EventListener);
+
     (async () => {
       try {
         // Detect a pending "Mark as Paid" handoff so we can offer "Use as payment proof"
@@ -85,39 +146,19 @@ export default function ShareImport() {
 
         // 1) Native Android share-intent payload injected by MainActivity
         const nativePayload = (window as unknown as {
-          __roommateSharedIntent?: {
-            files: { name: string; type: string; dataBase64: string }[];
-            title?: string;
-            text?: string;
-            ts: number;
-          };
+          __roommateSharedIntent?: NativeSharedPayload;
         }).__roommateSharedIntent || (() => {
           try {
             const raw = sessionStorage.getItem("roommate_native_shared_intent");
             if (!raw) return undefined;
             sessionStorage.removeItem("roommate_native_shared_intent");
-            return JSON.parse(raw) as { files: { name: string; type: string; dataBase64: string }[]; title?: string; text?: string; ts: number };
+            return JSON.parse(raw) as NativeSharedPayload;
           } catch {
             return undefined;
           }
         })();
 
-        if (nativePayload && nativePayload.files?.length) {
-          const meta: SharedFileMeta[] = [];
-          const out: { url: string; name: string; type: string }[] = [];
-          for (let i = 0; i < nativePayload.files.length; i++) {
-            const f = nativePayload.files[i];
-            const blob = base64ToBlob(f.dataBase64, f.type);
-            const url = URL.createObjectURL(blob);
-            // Skip the cache round-trip — we keep blobs in memory for upload (faster).
-            meta.push({ name: f.name, type: f.type, size: blob.size, url });
-            blobsRef.current.push(new File([blob], f.name, { type: f.type || blob.type }));
-            out.push({ url, name: f.name, type: f.type });
-          }
-          delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
-          setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
-          setPreviews(out);
-          setLoading(false);
+        if (await applyNativePayload(nativePayload)) {
           return;
         }
 
@@ -134,8 +175,9 @@ export default function ShareImport() {
           try {
             const r = await fetch(f.url, { cache: "no-store" });
             const b = await r.blob();
-            blobsRef.current.push(new File([b], f.name, { type: f.type || b.type }));
-            out.push({ url: URL.createObjectURL(b), name: f.name, type: f.type });
+            const compressed = await compressImageFile(new File([b], f.name, { type: f.type || b.type }));
+            blobsRef.current.push(compressed);
+            out.push({ url: URL.createObjectURL(compressed), name: compressed.name, type: compressed.type });
           } catch {/* skip */}
         }
         setPreviews(out);
@@ -146,6 +188,7 @@ export default function ShareImport() {
       }
     })();
     return () => {
+      window.removeEventListener("roommate-shared-intent", handleNativeShare as EventListener);
       previews.forEach((p) => URL.revokeObjectURL(p.url));
       blobsRef.current = [];
     };
@@ -160,7 +203,7 @@ export default function ShareImport() {
     for (const f of payload.files) {
       const r = await fetch(f.url, { cache: "no-store" });
       const b = await r.blob();
-      out.push(new File([b], f.name, { type: f.type || b.type }));
+      out.push(await compressImageFile(new File([b], f.name, { type: f.type || b.type })));
     }
     return out;
   };
@@ -172,7 +215,7 @@ export default function ShareImport() {
     if (!imageFile) return null;
     const blobRes = await fetch(imageFile.url, { cache: "no-store" });
     const blob = await blobRes.blob();
-    return new File([blob], imageFile.name, { type: imageFile.type || blob.type });
+    return compressImageFile(new File([blob], imageFile.name, { type: imageFile.type || blob.type }));
   };
 
   const stashPaymentProof = async (): Promise<boolean> => {
@@ -396,7 +439,7 @@ export default function ShareImport() {
 
   // Auto-route when launched from a dedicated share-target alias (Android).
   useEffect(() => {
-    if (loading || autoHandled || busy || previews.length === 0) return;
+    if (loading || authLoading || autoHandled || busy || previews.length === 0) return;
     const as = searchParams.get("as");
     // If a Mark-as-Paid is waiting, jump straight back into it.
     if (pendingPayment && previews.some((p) => p.type.startsWith("image/"))) {
@@ -407,12 +450,15 @@ export default function ShareImport() {
     if (as === "bill" && previews.some((p) => p.type.startsWith("image/"))) {
       setAutoHandled(true);
       handleCreateBill();
+    } else if (as === "payment" && currentRoom && previews.some((p) => p.type.startsWith("image/"))) {
+      setAutoHandled(true);
+      openSplitPicker();
     } else if (as === "chat" && currentRoom) {
       setAutoHandled(true);
       handleSendToRoom();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, previews, searchParams, currentRoom, pendingPayment]);
+  }, [loading, authLoading, previews, searchParams, currentRoom, pendingPayment]);
 
   if (loading) {
     return (
