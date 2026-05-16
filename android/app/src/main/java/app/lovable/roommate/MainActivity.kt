@@ -34,26 +34,65 @@ class MainActivity : BridgeActivity() {
         val action = intent.action ?: return
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
 
-        val uris: List<Uri> = when (action) {
+        val title = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+        val uris = collectSharedUris(intent, action)
+        val targetParam = buildShareTargetParam(intent)
+
+        Thread {
+            val payload = buildSharedPayload(intent, uris, title, text)
+            val js = """
+                (function(){
+                  try {
+                    window.__roommateSharedIntent = ${payload};
+                    try { sessionStorage.setItem('roommate_native_shared_intent', JSON.stringify(window.__roommateSharedIntent)); } catch (_) {}
+                    var target = '/share-import$targetParam';
+                    if (window.location.pathname === '/share-import') {
+                      window.history.replaceState({ roommateShare: true }, '', target);
+                    } else {
+                      window.history.pushState({ roommateShare: true }, '', target);
+                    }
+                    try { window.dispatchEvent(new CustomEvent('roommate-shared-intent', { detail: window.__roommateSharedIntent })); } catch (_) {}
+                    try { window.dispatchEvent(new PopStateEvent('popstate', { state: { roommateShare: true } })); }
+                    catch (_) { window.dispatchEvent(new Event('popstate')); }
+                    return 'ok';
+                  } catch(e) { console.error('share-intent inject failed', e); }
+                })();
+            """.trimIndent()
+
+            runOnUiThread { injectWhenReady(js) }
+        }.start()
+    }
+
+    private fun collectSharedUris(intent: Intent, action: String): List<Uri> {
+        val uris = mutableListOf<Uri>()
+        when (action) {
             Intent.ACTION_SEND -> {
                 val uri = if (android.os.Build.VERSION.SDK_INT >= 33)
                     intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else
                     @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
-                listOfNotNull(uri)
+                if (uri != null) uris.add(uri)
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 val list = if (android.os.Build.VERSION.SDK_INT >= 33)
                     intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
                 else
                     @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
-                list?.toList() ?: emptyList()
+                if (list != null) uris.addAll(list)
             }
-            else -> emptyList()
         }
 
-        val title = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
-        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
+        intent.clipData?.let { clipData ->
+            for (i in 0 until clipData.itemCount) {
+                clipData.getItemAt(i)?.uri?.let { uris.add(it) }
+            }
+        }
+
+        return uris.distinctBy { it.toString() }
+    }
+
+    private fun buildSharedPayload(intent: Intent, uris: List<Uri>, title: String, text: String): JSONObject {
 
         val files = JSONArray()
         val resolver: ContentResolver = contentResolver
@@ -93,35 +132,21 @@ class MainActivity : BridgeActivity() {
             put("ts", System.currentTimeMillis())
         }
 
+        return payload
+    }
+
+    private fun buildShareTargetParam(intent: Intent): String {
         // Detect which share-target alias the user picked from the system
         // share sheet so we can route to the correct in-app destination
-        // (bill scanner / room chat) instead of always showing the chooser.
+        // (payment proof / bill scanner / room chat) instead of always showing the chooser.
         val componentName = intent.component?.className ?: ""
         val target = when {
+            componentName.endsWith("ShareToPaymentActivity") -> "payment"
             componentName.endsWith("ShareToBillActivity") -> "bill"
             componentName.endsWith("ShareToChatActivity") -> "chat"
             else -> "choose"
         }
-        val targetParam = "?from=intent&as=$target&shareTs=${System.currentTimeMillis()}"
-
-        // Stash the payload on window so the JS bootstrap can pick it up,
-        // then navigate the web app to /share-import.
-        val js = """
-            (function(){
-              try {
-                window.__roommateSharedIntent = ${payload};
-                try { sessionStorage.setItem('roommate_native_shared_intent', JSON.stringify(window.__roommateSharedIntent)); } catch (_) {}
-                var target = '/share-import$targetParam';
-                if (window.location.pathname === '/share-import') { window.location.replace(target); return 'reload'; }
-                window.history.pushState({ roommateShare: true }, '', target);
-                try { window.dispatchEvent(new PopStateEvent('popstate', { state: { roommateShare: true } })); }
-                catch (_) { window.dispatchEvent(new Event('popstate')); }
-                return 'ok';
-              } catch(e) { console.error('share-intent inject failed', e); }
-            })();
-        """.trimIndent()
-
-        injectWhenReady(js)
+        return "?from=intent&as=$target&shareTs=${System.currentTimeMillis()}"
     }
 
     private fun injectWhenReady(js: String, attempt: Int = 0) {
