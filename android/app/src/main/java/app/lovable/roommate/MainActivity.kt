@@ -128,7 +128,7 @@ class MainActivity : BridgeActivity() {
         bridge.webView.postDelayed({
             try {
                 bridge.webView.evaluateJavascript(
-                    "(function(){ return document.readyState === 'loading' ? 'not-ready' : (function(){ $js })(); })();"
+                    "(function(){ return (document.readyState === 'loading' || !document.getElementById('root')) ? 'not-ready' : (function(){ $js })(); })();"
                 ) { result ->
                     if (result?.contains("not-ready") == true && attempt < 20) {
                         injectWhenReady(js, attempt + 1)
