@@ -2,6 +2,8 @@ package app.lovable.roommate
 
 import android.content.ContentResolver
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.util.Base64
@@ -13,6 +15,8 @@ import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 
 class MainActivity : BridgeActivity() {
+    private val maxSharedImageDimension = 1400
+
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(AlarmPlugin::class.java)
         super.onCreate(savedInstanceState)
@@ -56,21 +60,27 @@ class MainActivity : BridgeActivity() {
         for (uri in uris) {
             try {
                 val mime = resolver.getType(uri)
+                    ?: intent.type?.takeIf { it.isNotBlank() && it != "*/*" }
                     ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
                         MimeTypeMap.getFileExtensionFromUrl(uri.toString())
                     )
                     ?: "application/octet-stream"
 
-                val bytes = resolver.openInputStream(uri).use { input ->
+                val compressedImage = if (mime.startsWith("image/")) compressSharedImage(resolver, uri) else null
+                val bytes = compressedImage ?: resolver.openInputStream(uri).use { input ->
                     val out = ByteArrayOutputStream()
                     input?.copyTo(out)
                     out.toByteArray()
                 }
-                val name = uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
+                val type = if (compressedImage != null) "image/jpeg" else mime
+                val rawName = uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
+                val name = if (compressedImage != null && !rawName.endsWith(".jpg", true) && !rawName.endsWith(".jpeg", true)) {
+                    rawName.substringBeforeLast('.', rawName) + ".jpg"
+                } else rawName
                 val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
                 val obj = JSONObject()
                 obj.put("name", name)
-                obj.put("type", mime)
+                obj.put("type", type)
                 obj.put("dataBase64", b64)
                 files.put(obj)
             } catch (_: Exception) { /* skip unreadable uri */ }
@@ -92,7 +102,7 @@ class MainActivity : BridgeActivity() {
             componentName.endsWith("ShareToChatActivity") -> "chat"
             else -> "choose"
         }
-        val targetParam = "?from=intent&as=$target"
+        val targetParam = "?from=intent&as=$target&shareTs=${System.currentTimeMillis()}"
 
         // Stash the payload on window so the JS bootstrap can pick it up,
         // then navigate the web app to /share-import.
@@ -100,16 +110,56 @@ class MainActivity : BridgeActivity() {
             (function(){
               try {
                 window.__roommateSharedIntent = ${payload};
-                window.location.replace('/share-import$targetParam');
+                try { sessionStorage.setItem('roommate_native_shared_intent', JSON.stringify(window.__roommateSharedIntent)); } catch (_) {}
+                var target = '/share-import$targetParam';
+                if (window.location.pathname === '/share-import') { window.location.replace(target); return 'reload'; }
+                window.history.pushState({ roommateShare: true }, '', target);
+                try { window.dispatchEvent(new PopStateEvent('popstate', { state: { roommateShare: true } })); }
+                catch (_) { window.dispatchEvent(new Event('popstate')); }
+                return 'ok';
               } catch(e) { console.error('share-intent inject failed', e); }
             })();
         """.trimIndent()
 
-        // Defer until WebView is ready
+        injectWhenReady(js)
+    }
+
+    private fun injectWhenReady(js: String, attempt: Int = 0) {
         bridge.webView.postDelayed({
             try {
-                bridge.webView.evaluateJavascript(js, null)
+                bridge.webView.evaluateJavascript(
+                    "(function(){ return (document.readyState === 'loading' || !document.getElementById('root')) ? 'not-ready' : (function(){ $js })(); })();"
+                ) { result ->
+                    if (result?.contains("not-ready") == true && attempt < 20) {
+                        injectWhenReady(js, attempt + 1)
+                    }
+                }
             } catch (_: Exception) { /* ignore */ }
-        }, 600)
+        }, if (attempt == 0) 300 else 500)
+    }
+
+    private fun compressSharedImage(resolver: ContentResolver, uri: Uri): ByteArray? {
+        return try {
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+            var sample = 1
+            while ((bounds.outWidth / sample) > maxSharedImageDimension || (bounds.outHeight / sample) > maxSharedImageDimension) {
+                sample *= 2
+            }
+
+            val options = BitmapFactory.Options().apply {
+                inSampleSize = sample
+                inPreferredConfig = Bitmap.Config.RGB_565
+            }
+            val bitmap = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
+            val out = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 82, out)
+            bitmap.recycle()
+            out.toByteArray()
+        } catch (_: Exception) {
+            null
+        }
     }
 }

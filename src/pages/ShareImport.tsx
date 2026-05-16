@@ -43,6 +43,9 @@ const base64ToBlob = (b64: string, type: string): Blob => {
   return new Blob([bytes], { type });
 };
 
+const PAYMENT_PROOF_CACHE = "roommate-payment-proof";
+const PAYMENT_PROOF_URL = `${window.location.origin}/__roommate/payment-proof`;
+
 export default function ShareImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,7 +91,16 @@ export default function ShareImport() {
             text?: string;
             ts: number;
           };
-        }).__roommateSharedIntent;
+        }).__roommateSharedIntent || (() => {
+          try {
+            const raw = sessionStorage.getItem("roommate_native_shared_intent");
+            if (!raw) return undefined;
+            sessionStorage.removeItem("roommate_native_shared_intent");
+            return JSON.parse(raw) as { files: { name: string; type: string; dataBase64: string }[]; title?: string; text?: string; ts: number };
+          } catch {
+            return undefined;
+          }
+        })();
 
         if (nativePayload && nativePayload.files?.length) {
           const meta: SharedFileMeta[] = [];
@@ -151,6 +163,42 @@ export default function ShareImport() {
       out.push(new File([b], f.name, { type: f.type || b.type }));
     }
     return out;
+  };
+
+  const getFirstSharedImage = async (): Promise<File | null> => {
+    const direct = blobsRef.current.find((file) => file.type.startsWith("image/"));
+    if (direct) return direct;
+    const imageFile = previews.find((p) => p.type.startsWith("image/"));
+    if (!imageFile) return null;
+    const blobRes = await fetch(imageFile.url, { cache: "no-store" });
+    const blob = await blobRes.blob();
+    return new File([blob], imageFile.name, { type: imageFile.type || blob.type });
+  };
+
+  const stashPaymentProof = async (): Promise<boolean> => {
+    const file = await getFirstSharedImage();
+    if (!file) {
+      toast.error("Pick an image to attach as payment proof");
+      return false;
+    }
+
+    try {
+      const cache = await caches.open(PAYMENT_PROOF_CACHE);
+      await cache.put(
+        PAYMENT_PROOF_URL,
+        new Response(file, { headers: { "content-type": file.type || "image/jpeg" } }),
+      );
+      sessionStorage.setItem(
+        "roommate_pending_payment_image_cache",
+        JSON.stringify({ url: PAYMENT_PROOF_URL, name: file.name, type: file.type, ts: Date.now() }),
+      );
+      sessionStorage.removeItem("roommate_pending_payment_image");
+      return true;
+    } catch {
+      const dataUrl = await blobToDataUrl(file);
+      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      return true;
+    }
   };
 
   const clearShared = async () => {
@@ -256,17 +304,10 @@ export default function ShareImport() {
 
   const handleAttachToPayment = async () => {
     if (!pendingPayment) return;
-    const imageFile = previews.find((p) => p.type.startsWith("image/"));
-    if (!imageFile) {
-      toast.error("Pick an image to attach as payment proof");
-      return;
-    }
     setBusy(true);
     try {
-      const blobRes = await fetch(imageFile.url);
-      const blob = await blobRes.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      const stashed = await stashPaymentProof();
+      if (!stashed) return;
       // Tell Expenses to re-open the Mark-as-Paid dialog for this split
       sessionStorage.setItem(
         "roommate_resume_mark_paid",
@@ -301,7 +342,7 @@ export default function ShareImport() {
         .select("id, amount, expense_id, expenses!inner(id, title, paid_by, room_id, status)")
         .eq("user_id", user.id)
         .eq("is_paid", false)
-        .neq("status", "rejected")
+        .eq("status", "accepted")
         .eq("expenses.room_id", currentRoom.id)
         .neq("expenses.status", "settled")
         .order("created_at", { ascending: false })
@@ -326,17 +367,10 @@ export default function ShareImport() {
   };
 
   const pickSplitForProof = async (s: { id: string; amount: number; expense_id: string; title: string; paid_by: string }) => {
-    const imageFile = previews.find((p) => p.type.startsWith("image/"));
-    if (!imageFile) {
-      toast.error("Pick an image to attach as payment proof");
-      return;
-    }
     setBusy(true);
     try {
-      const blobRes = await fetch(imageFile.url);
-      const blob = await blobRes.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      const stashed = await stashPaymentProof();
+      if (!stashed) return;
       sessionStorage.setItem(
         "roommate_resume_mark_paid",
         JSON.stringify({
