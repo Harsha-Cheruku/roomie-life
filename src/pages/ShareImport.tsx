@@ -304,17 +304,10 @@ export default function ShareImport() {
 
   const handleAttachToPayment = async () => {
     if (!pendingPayment) return;
-    const imageFile = previews.find((p) => p.type.startsWith("image/"));
-    if (!imageFile) {
-      toast.error("Pick an image to attach as payment proof");
-      return;
-    }
     setBusy(true);
     try {
-      const blobRes = await fetch(imageFile.url);
-      const blob = await blobRes.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      const stashed = await stashPaymentProof();
+      if (!stashed) return;
       // Tell Expenses to re-open the Mark-as-Paid dialog for this split
       sessionStorage.setItem(
         "roommate_resume_mark_paid",
@@ -374,17 +367,10 @@ export default function ShareImport() {
   };
 
   const pickSplitForProof = async (s: { id: string; amount: number; expense_id: string; title: string; paid_by: string }) => {
-    const imageFile = previews.find((p) => p.type.startsWith("image/"));
-    if (!imageFile) {
-      toast.error("Pick an image to attach as payment proof");
-      return;
-    }
     setBusy(true);
     try {
-      const blobRes = await fetch(imageFile.url);
-      const blob = await blobRes.blob();
-      const dataUrl = await blobToDataUrl(blob);
-      sessionStorage.setItem("roommate_pending_payment_image", dataUrl);
+      const stashed = await stashPaymentProof();
+      if (!stashed) return;
       sessionStorage.setItem(
         "roommate_resume_mark_paid",
         JSON.stringify({
