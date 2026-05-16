@@ -100,7 +100,7 @@ export default function ShareImport() {
       ts: number;
     };
 
-    const applyNativePayload = (nativePayload?: NativeSharedPayload) => {
+    const applyNativePayload = async (nativePayload?: NativeSharedPayload) => {
       if (!nativePayload?.files?.length) return false;
       const meta: SharedFileMeta[] = [];
       const out: { url: string; name: string; type: string }[] = [];
@@ -108,10 +108,11 @@ export default function ShareImport() {
       for (let i = 0; i < nativePayload.files.length; i++) {
         const f = nativePayload.files[i];
         const blob = base64ToBlob(f.dataBase64, f.type);
-        const url = URL.createObjectURL(blob);
-        meta.push({ name: f.name, type: f.type, size: blob.size, url });
-        blobsRef.current.push(new File([blob], f.name, { type: f.type || blob.type }));
-        out.push({ url, name: f.name, type: f.type });
+        const compressed = await compressImageFile(new File([blob], f.name, { type: f.type || blob.type }));
+        const url = URL.createObjectURL(compressed);
+        meta.push({ name: compressed.name, type: compressed.type, size: compressed.size, url });
+        blobsRef.current.push(compressed);
+        out.push({ url, name: compressed.name, type: compressed.type });
       }
       delete (window as unknown as { __roommateSharedIntent?: unknown }).__roommateSharedIntent;
       setPayload({ files: meta, title: nativePayload.title, text: nativePayload.text, ts: nativePayload.ts });
@@ -122,7 +123,7 @@ export default function ShareImport() {
 
     const handleNativeShare = (event: Event) => {
       const detail = (event as CustomEvent<NativeSharedPayload>).detail;
-      applyNativePayload(detail || (window as unknown as { __roommateSharedIntent?: NativeSharedPayload }).__roommateSharedIntent);
+      void applyNativePayload(detail || (window as unknown as { __roommateSharedIntent?: NativeSharedPayload }).__roommateSharedIntent);
     };
 
     window.addEventListener("roommate-shared-intent", handleNativeShare as EventListener);
@@ -157,7 +158,7 @@ export default function ShareImport() {
           }
         })();
 
-        if (applyNativePayload(nativePayload)) {
+        if (await applyNativePayload(nativePayload)) {
           return;
         }
 
@@ -174,8 +175,9 @@ export default function ShareImport() {
           try {
             const r = await fetch(f.url, { cache: "no-store" });
             const b = await r.blob();
-            blobsRef.current.push(new File([b], f.name, { type: f.type || b.type }));
-            out.push({ url: URL.createObjectURL(b), name: f.name, type: f.type });
+            const compressed = await compressImageFile(new File([b], f.name, { type: f.type || b.type }));
+            blobsRef.current.push(compressed);
+            out.push({ url: URL.createObjectURL(compressed), name: compressed.name, type: compressed.type });
           } catch {/* skip */}
         }
         setPreviews(out);
