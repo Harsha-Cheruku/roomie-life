@@ -43,13 +43,39 @@ const base64ToBlob = (b64: string, type: string): Blob => {
   return new Blob([bytes], { type });
 };
 
+const compressImageFile = async (file: File, maxDimension = 1400, quality = 0.82): Promise<File> => {
+  if (!file.type.startsWith("image/")) return file;
+  try {
+    const imageUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.decoding = "async";
+    image.src = imageUrl;
+    await image.decode();
+    const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+    if (scale >= 1 && file.size < 900 * 1024) {
+      URL.revokeObjectURL(imageUrl);
+      return file;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+    URL.revokeObjectURL(imageUrl);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) return file;
+    return new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" });
+  } catch {
+    return file;
+  }
+};
+
 const PAYMENT_PROOF_CACHE = "roommate-payment-proof";
 const PAYMENT_PROOF_URL = `${window.location.origin}/__roommate/payment-proof`;
 
 export default function ShareImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user, currentRoom } = useAuth();
+  const { user, currentRoom, loading: authLoading } = useAuth();
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [previews, setPreviews] = useState<{ url: string; name: string; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
