@@ -60,6 +60,7 @@ class MainActivity : BridgeActivity() {
         for (uri in uris) {
             try {
                 val mime = resolver.getType(uri)
+                    ?: intent.type?.takeIf { it.isNotBlank() && it != "*/*" }
                     ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(
                         MimeTypeMap.getFileExtensionFromUrl(uri.toString())
                     )
