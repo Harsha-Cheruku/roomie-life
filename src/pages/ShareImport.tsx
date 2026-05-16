@@ -439,7 +439,7 @@ export default function ShareImport() {
 
   // Auto-route when launched from a dedicated share-target alias (Android).
   useEffect(() => {
-    if (loading || autoHandled || busy || previews.length === 0) return;
+    if (loading || authLoading || autoHandled || busy || previews.length === 0) return;
     const as = searchParams.get("as");
     // If a Mark-as-Paid is waiting, jump straight back into it.
     if (pendingPayment && previews.some((p) => p.type.startsWith("image/"))) {
@@ -458,7 +458,7 @@ export default function ShareImport() {
       handleSendToRoom();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, previews, searchParams, currentRoom, pendingPayment]);
+  }, [loading, authLoading, previews, searchParams, currentRoom, pendingPayment]);
 
   if (loading) {
     return (
