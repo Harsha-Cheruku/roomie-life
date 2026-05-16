@@ -13,6 +13,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface SharedFileMeta {
   name: string;
@@ -76,6 +83,7 @@ export default function ShareImport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user, currentRoom, loading: authLoading } = useAuth();
+  const { userRooms, switchRoom } = useAuth();
   const [payload, setPayload] = useState<SharedPayload | null>(null);
   const [previews, setPreviews] = useState<{ url: string; name: string; type: string }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -506,6 +514,32 @@ export default function ShareImport() {
       </header>
 
       <div className="p-4 max-w-lg mx-auto space-y-5">
+        {userRooms.length > 1 && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Send to room
+            </label>
+            <Select
+              value={currentRoom?.id ?? ""}
+              onValueChange={(id) => {
+                const r = userRooms.find((x) => x.id === id);
+                if (r) switchRoom(r);
+              }}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue placeholder="Choose a room" />
+              </SelectTrigger>
+              <SelectContent>
+                {userRooms.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-2">
           {previews.map((p, i) => (
             <div key={i} className="aspect-square rounded-xl overflow-hidden bg-muted relative">
