@@ -12,6 +12,7 @@ import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 import { useCreateNotification } from '@/hooks/useCreateNotification';
 import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
 import { useCurrency } from '@/hooks/useCurrency';
+import { DeleteRequestPanel } from '@/components/expenses/DeleteRequestPanel';
 
 function NotesImagePreview({ path }: { path: string }) {
   const [url, setUrl] = useState<string | null>(null);
@@ -273,6 +274,12 @@ export const ExpenseDetailSheet = ({
   const mySplit = expense.splits?.find(s => s.user_id === user?.id);
   const isPayer = expense.paid_by === user?.id;
   const isCreator = expense.created_by === user?.id;
+  const isParticipant = !!mySplit || isCreator;
+  const participantIds = Array.from(new Set([
+    expense.created_by,
+    ...((expense.splits || []).map(s => s.user_id)),
+  ].filter(Boolean) as string[]));
+  const [requestingDelete, setRequestingDelete] = useState(false);
   
   // Check if bill is fully paid/settled - should be read-only
   const isSettled = expense.status === 'settled';
@@ -623,6 +630,39 @@ export const ExpenseDetailSheet = ({
                 <p className="text-sm text-mint font-medium">✓ This bill is settled and locked</p>
                 <p className="text-xs text-muted-foreground mt-1">Settled bills cannot be edited or deleted</p>
               </div>
+            )}
+
+            {!isReadOnly && (
+              <DeleteRequestPanel
+                expenseId={expense.id}
+                participantIds={participantIds}
+                onDeleted={() => { onOpenChange(false); onUpdate(); }}
+              />
+            )}
+
+            {!isReadOnly && !isCreator && isParticipant && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 border-coral text-coral hover:bg-coral/10"
+                disabled={requestingDelete}
+                onClick={async () => {
+                  if (!confirm('Request deletion of this bill? Other participants will vote and the bill is deleted once a majority approves.')) return;
+                  setRequestingDelete(true);
+                  try {
+                    const { error } = await supabase.rpc('request_expense_delete', { _expense_id: expense.id });
+                    if (error) throw error;
+                    toast({ title: 'Delete request sent', description: 'Other participants will be notified to vote.' });
+                    onUpdate();
+                  } catch (e: any) {
+                    toast({ title: 'Failed', description: e?.message || 'Could not send request', variant: 'destructive' });
+                  } finally {
+                    setRequestingDelete(false);
+                  }
+                }}
+              >
+                {requestingDelete ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                Request to delete this bill
+              </Button>
             )}
           </div>
         </SheetContent>
