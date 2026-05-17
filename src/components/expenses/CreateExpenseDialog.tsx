@@ -338,13 +338,14 @@ export const CreateExpenseDialog = ({
 
       if (expenseError) throw expenseError;
 
-      // Create splits for each selected member
+      // Create splits for each selected member.
+      // Creator's own split and the payer's split are auto-accepted (no Accept/Reject needed).
       const splits = selectedSplits.map(split => ({
         expense_id: expense.id,
         user_id: split.user_id,
         amount: split.amount,
-        is_paid: isSoloMode ? true : split.user_id === paidBy, // Solo mode: auto-paid
-        status: isSoloMode ? 'accepted' : (split.user_id === paidBy ? 'accepted' : 'pending'),
+        is_paid: isSoloMode ? true : split.user_id === paidBy,
+        status: isSoloMode || split.user_id === paidBy || split.user_id === user.id ? 'accepted' : 'pending',
       }));
 
       const { error: splitsError } = await supabase
@@ -434,7 +435,7 @@ export const CreateExpenseDialog = ({
             user_id: s.user_id,
             amount: s.amount,
             is_paid: isSoloMode ? true : s.user_id === paidBy,
-            status: isSoloMode ? 'accepted' : (s.user_id === paidBy ? 'accepted' : 'pending'),
+            status: isSoloMode || s.user_id === paidBy || s.user_id === user.id ? 'accepted' : 'pending',
           })),
         });
         
