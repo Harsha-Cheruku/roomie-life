@@ -182,6 +182,68 @@ export type Database = {
           },
         ]
       }
+      expense_delete_requests: {
+        Row: {
+          created_at: string
+          expense_id: string
+          id: string
+          requested_by: string
+          resolved_at: string | null
+          room_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          expense_id: string
+          id?: string
+          requested_by: string
+          resolved_at?: string | null
+          room_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          expense_id?: string
+          id?: string
+          requested_by?: string
+          resolved_at?: string | null
+          room_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      expense_delete_votes: {
+        Row: {
+          approve: boolean
+          created_at: string
+          id: string
+          request_id: string
+          user_id: string
+        }
+        Insert: {
+          approve: boolean
+          created_at?: string
+          id?: string
+          request_id: string
+          user_id: string
+        }
+        Update: {
+          approve?: boolean
+          created_at?: string
+          id?: string
+          request_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_delete_votes_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "expense_delete_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expense_items: {
         Row: {
           created_at: string
@@ -1001,6 +1063,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_expense_delete: {
+        Args: { _request_id: string }
+        Returns: undefined
+      }
+      get_expense_participants: {
+        Args: { _expense_id: string }
+        Returns: string[]
+      }
       get_user_room_ids: { Args: { _user_id: string }; Returns: string[] }
       is_room_admin: {
         Args: { _room_id: string; _user_id: string }
@@ -1029,6 +1099,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      request_expense_delete: { Args: { _expense_id: string }; Returns: string }
       start_game_lobby: {
         Args: { _first_turn_user_id: string; _lobby_id: string; _state: Json }
         Returns: {
@@ -1070,6 +1141,10 @@ export type Database = {
         Returns: undefined
       }
       user_room_ids_array: { Args: { _user_id: string }; Returns: string[] }
+      vote_expense_delete: {
+        Args: { _approve: boolean; _request_id: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
