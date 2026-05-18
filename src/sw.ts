@@ -10,6 +10,10 @@ declare const self: ServiceWorkerGlobalScope;
 self.skipWaiting();
 cleanupOutdatedCaches();
 
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 // Precache injected by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST);
 
