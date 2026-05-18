@@ -39,6 +39,7 @@ const ShareImport = lazy(() => import("./pages/ShareImport"));
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { AlarmSetupAutoLauncher } from "@/components/alarms/AlarmSetupAutoLauncher";
+import { useAppVersionCheck } from "@/hooks/useAppVersionCheck";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -162,6 +163,7 @@ const App = () => (
           <GlobalAlarmLayer />
           <NativeAlarmInit />
           <AlarmSetupAutoLauncher />
+          <AppVersionWatcher />
           <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/auth" element={<AuthRedirect />} />
@@ -309,3 +311,8 @@ const App = () => (
 );
 
 export default App;
+
+function AppVersionWatcher() {
+  useAppVersionCheck();
+  return null;
+}

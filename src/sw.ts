@@ -10,15 +10,30 @@ declare const self: ServiceWorkerGlobalScope;
 self.skipWaiting();
 cleanupOutdatedCaches();
 
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 // Precache injected by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST);
 
-// SPA navigation fallback (deny ~oauth)
+// Never cache the version manifest — we use it to detect new deploys.
+registerRoute(
+  ({ url }) => url.pathname === "/version.json",
+  new NetworkFirst({
+    cacheName: "app-version",
+    networkTimeoutSeconds: 5,
+    plugins: [new ExpirationPlugin({ maxEntries: 1, maxAgeSeconds: 1 })],
+  })
+);
+
+// SPA navigation fallback (deny ~oauth). Always try network first so a
+// freshly-deployed HTML shell is picked up immediately on refresh.
 registerRoute(
   new NavigationRoute(
     async ({ event }) => {
       try {
-        return await fetch((event as FetchEvent).request);
+        return await fetch((event as FetchEvent).request, { cache: "no-store" });
       } catch {
         const cache = await caches.open("workbox-precache");
         const fallback = await cache.match("/index.html");
@@ -134,6 +149,12 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
 self.addEventListener("message", (event) => {
   if (event.data && (event.data as { type?: string }).type === "SKIP_WAITING") {
     self.skipWaiting();
+  }
+  if (event.data && (event.data as { type?: string }).type === "CLEAR_CACHES") {
+    event.waitUntil((async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    })());
   }
 });
 
