@@ -120,6 +120,7 @@ export const ExpenseDetailSheet = ({
   const [items, setItems] = useState<ExpenseItem[]>([]);
   const [loadingItems, setLoadingItems] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [requestingDelete, setRequestingDelete] = useState(false);
 
   // Load itemized breakdown whenever a new expense opens
   useEffect(() => {
@@ -279,7 +280,6 @@ export const ExpenseDetailSheet = ({
     expense.created_by,
     ...((expense.splits || []).map(s => s.user_id)),
   ].filter(Boolean) as string[]));
-  const [requestingDelete, setRequestingDelete] = useState(false);
   
   // Check if bill is fully paid/settled - should be read-only
   const isSettled = expense.status === 'settled';
