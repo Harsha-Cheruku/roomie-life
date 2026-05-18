@@ -3,6 +3,36 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import fs from "fs";
+
+// Emits /version.json at build time so the client can detect new deploys.
+function buildVersionPlugin() {
+  const buildId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return {
+    name: "build-version-json",
+    config() {
+      return { define: { __APP_BUILD_ID__: JSON.stringify(buildId) } };
+    },
+    buildStart() {
+      try {
+        if (!fs.existsSync("public")) fs.mkdirSync("public", { recursive: true });
+        fs.writeFileSync(
+          "public/version.json",
+          JSON.stringify({ buildId, builtAt: new Date().toISOString() }, null, 2)
+        );
+      } catch {}
+    },
+    closeBundle() {
+      try {
+        if (!fs.existsSync("dist")) return;
+        fs.writeFileSync(
+          "dist/version.json",
+          JSON.stringify({ buildId, builtAt: new Date().toISOString() }, null, 2)
+        );
+      } catch {}
+    },
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -13,6 +43,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    buildVersionPlugin(),
     VitePWA({
       registerType: "autoUpdate",
       strategies: "injectManifest",
