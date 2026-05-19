@@ -81,7 +81,6 @@
             android:label="RoomMate – Add as Bill"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
-            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -117,7 +116,6 @@
             android:label="RoomMate – Settle Payment"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
-            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -151,7 +149,6 @@
             android:label="RoomMate – Send to Room Chat"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
-            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
