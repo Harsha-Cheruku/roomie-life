@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Base64
 import android.webkit.MimeTypeMap
 import app.lovable.roommate.alarm.AlarmPlugin
@@ -34,6 +35,7 @@ class MainActivity : BridgeActivity() {
         val action = intent.action ?: return
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
 
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val title = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
         val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
         val uris = collectSharedUris(intent, action)
@@ -73,6 +75,12 @@ class MainActivity : BridgeActivity() {
                 else
                     @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
                 if (uri != null) uris.add(uri)
+
+                val list = if (android.os.Build.VERSION.SDK_INT >= 33)
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else
+                    @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                if (list != null) uris.addAll(list)
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 val list = if (android.os.Build.VERSION.SDK_INT >= 33)
@@ -85,10 +93,16 @@ class MainActivity : BridgeActivity() {
 
         intent.clipData?.let { clipData ->
             for (i in 0 until clipData.itemCount) {
-                clipData.getItemAt(i)?.uri?.let { uris.add(it) }
+                clipData.getItemAt(i)?.uri?.let {
+                    try { contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+                    uris.add(it)
+                }
             }
         }
-        intent.data?.let { uris.add(it) }
+        intent.data?.let {
+            try { contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uris.add(it)
+        }
 
         return uris.distinctBy { it.toString() }
     }
