@@ -18,9 +18,11 @@ import {
   Receipt, 
   Activity,
   Shield,
+  ShieldOff,
   Users,
   ChevronRight,
   Trash2,
+  UserCog,
   AlarmClock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,7 @@ export default function AdminPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [alarmStats, setAlarmStats] = useState({ total: 0, triggeredToday: 0, avgDismissTime: 0 });
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
+  const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
   const [deleteItem, setDeleteItem] = useState<{
@@ -198,8 +201,32 @@ export default function AdminPanel() {
     }
   };
 
+  const handleRemoveAdmin = async (userId: string) => {
+    if (!currentRoom?.id || currentRoom.created_by === userId || user?.id === userId) return;
+    setRoleUpdatingUserId(userId);
+    try {
+      const { error } = await supabase
+        .from('room_members')
+        .update({ role: 'member' })
+        .eq('user_id', userId)
+        .eq('room_id', currentRoom.id);
+      if (error) throw error;
+      toast({ title: "Admin access removed" });
+      refetchMembers();
+    } catch (error: any) {
+      console.error('Error removing admin access:', error);
+      toast({ title: "Failed to remove admin access", description: error?.message || "Check your connection and try again", variant: "destructive" });
+    } finally {
+      setRoleUpdatingUserId(null);
+    }
+  };
+
   const handleRemoveMember = async (userId: string) => {
     if (!currentRoom?.id) return;
+    if (currentRoom.created_by === userId) {
+      toast({ title: "Room creator can't be removed", variant: "destructive" });
+      return;
+    }
     
     try {
       const { error } = await supabase
