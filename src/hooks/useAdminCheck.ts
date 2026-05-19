@@ -27,6 +27,8 @@ export const useAdminCheck = () => {
           _user_id: user.id
         });
 
+      const creatorIsAdmin = currentRoom.created_by === user.id;
+
       if (error) {
         console.error('RPC error checking admin:', error);
         // Fallback to direct query if RPC fails
@@ -41,9 +43,9 @@ export const useAdminCheck = () => {
           throw memberError;
         }
         
-        setIsAdmin(memberData?.role === 'admin');
+        setIsAdmin(creatorIsAdmin || memberData?.role === 'admin');
       } else {
-        setIsAdmin(data === true);
+        setIsAdmin(creatorIsAdmin || data === true);
       }
 
       // Also fetch the room admin ID for transfer purposes
@@ -65,7 +67,7 @@ export const useAdminCheck = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, currentRoom?.id]);
+  }, [user?.id, currentRoom?.id, currentRoom?.created_by]);
 
   useEffect(() => {
     checkAdminStatus();

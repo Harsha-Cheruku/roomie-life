@@ -6,7 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.util.Base64
+import android.util.Log
 import android.webkit.MimeTypeMap
 import app.lovable.roommate.alarm.AlarmPlugin
 import com.getcapacitor.BridgeActivity
@@ -16,6 +18,7 @@ import java.io.ByteArrayOutputStream
 
 class MainActivity : BridgeActivity() {
     private val maxSharedImageDimension = 1400
+    private var lastHandledShareKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(AlarmPlugin::class.java)
@@ -29,14 +32,23 @@ class MainActivity : BridgeActivity() {
         handleSharedIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        handleSharedIntent(intent)
+    }
+
     private fun handleSharedIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action ?: return
         if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
 
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         val title = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
         val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
         val uris = collectSharedUris(intent, action)
+        val shareKey = listOf(action, title, text, uris.joinToString("|")).joinToString("::")
+        if (shareKey == lastHandledShareKey) return
+        lastHandledShareKey = shareKey
         val targetParam = buildShareTargetParam(intent)
 
         Thread {
@@ -73,6 +85,12 @@ class MainActivity : BridgeActivity() {
                 else
                     @Suppress("DEPRECATION") intent.getParcelableExtra(Intent.EXTRA_STREAM)
                 if (uri != null) uris.add(uri)
+
+                val list = if (android.os.Build.VERSION.SDK_INT >= 33)
+                    intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+                else
+                    @Suppress("DEPRECATION") intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+                if (list != null) uris.addAll(list)
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 val list = if (android.os.Build.VERSION.SDK_INT >= 33)
@@ -85,10 +103,16 @@ class MainActivity : BridgeActivity() {
 
         intent.clipData?.let { clipData ->
             for (i in 0 until clipData.itemCount) {
-                clipData.getItemAt(i)?.uri?.let { uris.add(it) }
+                clipData.getItemAt(i)?.uri?.let {
+                    try { contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+                    uris.add(it)
+                }
             }
         }
-        intent.data?.let { uris.add(it) }
+        intent.data?.let {
+            try { contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) {}
+            uris.add(it)
+        }
 
         return uris.distinctBy { it.toString() }
     }
@@ -112,8 +136,8 @@ class MainActivity : BridgeActivity() {
                     input?.copyTo(out)
                     out.toByteArray()
                 }
-                val type = if (compressedImage != null) "image/jpeg" else mime
-                val rawName = uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
+                val type = if (compressedImage != null) "image/jpeg" else normalizeMimeType(uri, mime)
+                val rawName = getDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
                 val name = if (compressedImage != null && !rawName.endsWith(".jpg", true) && !rawName.endsWith(".jpeg", true)) {
                     rawName.substringBeforeLast('.', rawName) + ".jpg"
                 } else rawName
@@ -123,7 +147,9 @@ class MainActivity : BridgeActivity() {
                 obj.put("type", type)
                 obj.put("dataBase64", b64)
                 files.put(obj)
-            } catch (_: Exception) { /* skip unreadable uri */ }
+            } catch (e: Exception) {
+                Log.w("RoomMateShare", "Skipping unreadable shared URI: $uri", e)
+            }
         }
 
         val payload = JSONObject().apply {
@@ -134,6 +160,25 @@ class MainActivity : BridgeActivity() {
         }
 
         return payload
+    }
+
+    private fun getDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun normalizeMimeType(uri: Uri, fallback: String): String {
+        if (fallback.isNotBlank() && fallback != "*/*" && fallback != "application/octet-stream") return fallback
+        val name = getDisplayName(uri) ?: uri.lastPathSegment.orEmpty()
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: fallback.takeIf { it.isNotBlank() && it != "*/*" }
+            ?: "application/octet-stream"
     }
 
     private fun buildShareTargetParam(intent: Intent): String {

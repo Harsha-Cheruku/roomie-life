@@ -7,6 +7,7 @@ export interface RoomMember {
   role: string;
   display_name: string;
   avatar: string;
+  isCreator: boolean;
 }
 
 export const useRoomMembers = () => {
@@ -51,6 +52,7 @@ export const useRoomMembers = () => {
           role: member.role,
           display_name: profile?.display_name || 'Unknown',
           avatar: profile?.avatar || '😊',
+          isCreator: currentRoom.created_by === member.user_id,
         };
       }) || [];
 
@@ -71,7 +73,7 @@ export const useRoomMembers = () => {
     const targetId = userId || user?.id;
     if (!targetId) return false;
     const member = members.find(m => m.user_id === targetId);
-    return member?.role === 'admin';
+    return member?.role === 'admin' || member?.isCreator === true;
   }, [members, user?.id]);
 
   const getMemberById = useCallback((userId: string): RoomMember | undefined => {

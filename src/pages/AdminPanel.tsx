@@ -18,9 +18,11 @@ import {
   Receipt, 
   Activity,
   Shield,
+  ShieldOff,
   Users,
   ChevronRight,
   Trash2,
+  UserCog,
   AlarmClock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,7 @@ export default function AdminPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [alarmStats, setAlarmStats] = useState({ total: 0, triggeredToday: 0, avgDismissTime: 0 });
   const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
+  const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
   const [showCreateTask, setShowCreateTask] = useState(false);
   const [showCreateExpense, setShowCreateExpense] = useState(false);
   const [deleteItem, setDeleteItem] = useState<{
@@ -198,8 +201,32 @@ export default function AdminPanel() {
     }
   };
 
+  const handleRemoveAdmin = async (userId: string) => {
+    if (!currentRoom?.id || currentRoom.created_by === userId || user?.id === userId) return;
+    setRoleUpdatingUserId(userId);
+    try {
+      const { error } = await supabase
+        .from('room_members')
+        .update({ role: 'member' })
+        .eq('user_id', userId)
+        .eq('room_id', currentRoom.id);
+      if (error) throw error;
+      toast({ title: "Admin access removed" });
+      refetchMembers();
+    } catch (error: any) {
+      console.error('Error removing admin access:', error);
+      toast({ title: "Failed to remove admin access", description: error?.message || "Check your connection and try again", variant: "destructive" });
+    } finally {
+      setRoleUpdatingUserId(null);
+    }
+  };
+
   const handleRemoveMember = async (userId: string) => {
     if (!currentRoom?.id) return;
+    if (currentRoom.created_by === userId) {
+      toast({ title: "Room creator can't be removed", variant: "destructive" });
+      return;
+    }
     
     try {
       const { error } = await supabase
@@ -280,13 +307,17 @@ export default function AdminPanel() {
                     <ProfileAvatar avatar={member.avatar} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{member.display_name}{member.user_id === user?.id && <span className="text-muted-foreground text-sm ml-2">(You)</span>}</p>
-                      {member.role === 'admin' && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />Admin</Badge>}
+                      {(member.role === 'admin' || member.isCreator) && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />{member.isCreator ? 'Creator admin' : 'Admin'}</Badge>}
                     </div>
-                    {member.user_id !== user?.id && (
+                    {member.user_id !== user?.id && !member.isCreator && (
                       <div className="flex items-center gap-1">
-                        {member.role !== 'admin' && (
+                        {member.role === 'admin' ? (
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveAdmin(member.user_id)} disabled={roleUpdatingUserId === member.user_id} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove Admin">
+                            <ShieldOff className="h-4 w-4" />
+                          </Button>
+                        ) : (
                           <Button variant="ghost" size="sm" onClick={() => handleMakeAdmin(member.user_id)} className="text-primary hover:text-primary hover:bg-primary/10" title="Make Admin">
-                            <Crown className="h-4 w-4" />
+                            <UserCog className="h-4 w-4" />
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member.user_id)} className="text-destructive hover:text-destructive hover:bg-destructive/10"><UserMinus className="h-4 w-4" /></Button>
