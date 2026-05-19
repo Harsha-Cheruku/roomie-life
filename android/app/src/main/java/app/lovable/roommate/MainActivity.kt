@@ -136,7 +136,7 @@ class MainActivity : BridgeActivity() {
                     out.toByteArray()
                 }
                 val type = if (compressedImage != null) "image/jpeg" else mime
-                val rawName = uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
+                val rawName = getDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
                 val name = if (compressedImage != null && !rawName.endsWith(".jpg", true) && !rawName.endsWith(".jpeg", true)) {
                     rawName.substringBeforeLast('.', rawName) + ".jpg"
                 } else rawName
@@ -157,6 +157,16 @@ class MainActivity : BridgeActivity() {
         }
 
         return payload
+    }
+
+    private fun getDisplayName(uri: Uri): String? {
+        return try {
+            contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun buildShareTargetParam(intent: Intent): String {
