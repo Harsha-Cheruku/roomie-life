@@ -81,6 +81,7 @@
             android:label="RoomMate – Add as Bill"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
+            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -97,6 +98,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity-alias>
 
         <!-- Dedicated share-target alias for payment screenshots/proofs. -->
@@ -106,6 +117,7 @@
             android:label="RoomMate – Settle Payment"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
+            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -116,6 +128,16 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity-alias>
 
@@ -129,6 +151,7 @@
             android:label="RoomMate – Send to Room Chat"
             android:icon="@mipmap/ic_launcher"
             android:exported="true"
+            android:grantUriPermissions="true"
             android:enabled="true">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -144,6 +167,16 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity-alias>
 
