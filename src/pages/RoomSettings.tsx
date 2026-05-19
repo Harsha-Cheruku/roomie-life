@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil, DoorOpen, Pin, PinOff } from "lucide-react";
+import { ArrowLeft, Save, Crown, UserMinus, Users, Copy, Check, RefreshCw, Plus, Circle, Pencil, DoorOpen, Pin, PinOff, ShieldOff, UserCog } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarPicker } from "@/components/profile/AvatarPicker";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
@@ -24,6 +24,7 @@ interface RoomMemberWithProfile {
   role: string;
   display_name: string;
   avatar: string;
+  isCreator: boolean;
 }
 
 export const RoomSettings = () => {
@@ -37,6 +38,7 @@ export const RoomSettings = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [roleUpdatingUserId, setRoleUpdatingUserId] = useState<string | null>(null);
   const [showRoomSwitcher, setShowRoomSwitcher] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [isSavingAvatar, setIsSavingAvatar] = useState(false);
@@ -104,7 +106,7 @@ export const RoomSettings = () => {
 
     // Check if current user is admin
     const currentUserMember = memberData.find(m => m.user_id === user?.id);
-    setIsAdmin(currentUserMember?.role === "admin");
+    setIsAdmin(currentRoom.created_by === user?.id || currentUserMember?.role === "admin");
 
     const userIds = memberData.map(m => m.user_id);
     const { data: profileData } = await supabase
@@ -118,7 +120,8 @@ export const RoomSettings = () => {
         user_id: member.user_id,
         role: member.role,
         display_name: profile?.display_name || "Unknown",
-        avatar: profile?.avatar || "😎"
+        avatar: profile?.avatar || "😎",
+        isCreator: currentRoom.created_by === member.user_id,
       };
     });
 
@@ -175,6 +178,10 @@ export const RoomSettings = () => {
 
   const handleRemoveMember = async (memberId: string) => {
     if (!currentRoom || memberId === user?.id) return;
+    if (currentRoom.created_by === memberId) {
+      toast({ title: "Room creator can't be removed", variant: "destructive" });
+      return;
+    }
 
     setRemovingUserId(memberId);
     const { error } = await supabase
@@ -198,6 +205,31 @@ export const RoomSettings = () => {
       });
       fetchMembers();
     }
+  };
+
+  const handleUpdateMemberRole = async (memberId: string, role: "admin" | "member") => {
+    if (!currentRoom || memberId === user?.id) return;
+    if (currentRoom.created_by === memberId) {
+      toast({ title: "Room creator stays admin", variant: "destructive" });
+      return;
+    }
+
+    setRoleUpdatingUserId(memberId);
+    const { error } = await supabase
+      .from("room_members")
+      .update({ role })
+      .eq("user_id", memberId)
+      .eq("room_id", currentRoom.id);
+
+    setRoleUpdatingUserId(null);
+
+    if (error) {
+      toast({ title: "Failed to update admin access", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    toast({ title: role === "admin" ? "Admin access added" : "Admin access removed" });
+    fetchMembers();
   };
 
   const copyInviteCode = () => {
