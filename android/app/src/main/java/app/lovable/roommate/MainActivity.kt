@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Base64
+import android.util.Log
 import android.webkit.MimeTypeMap
 import app.lovable.roommate.alarm.AlarmPlugin
 import com.getcapacitor.BridgeActivity
@@ -135,7 +136,7 @@ class MainActivity : BridgeActivity() {
                     input?.copyTo(out)
                     out.toByteArray()
                 }
-                val type = if (compressedImage != null) "image/jpeg" else mime
+                val type = if (compressedImage != null) "image/jpeg" else normalizeMimeType(uri, mime)
                 val rawName = getDisplayName(uri) ?: uri.lastPathSegment?.substringAfterLast('/') ?: "shared"
                 val name = if (compressedImage != null && !rawName.endsWith(".jpg", true) && !rawName.endsWith(".jpeg", true)) {
                     rawName.substringBeforeLast('.', rawName) + ".jpg"
@@ -146,7 +147,9 @@ class MainActivity : BridgeActivity() {
                 obj.put("type", type)
                 obj.put("dataBase64", b64)
                 files.put(obj)
-            } catch (_: Exception) { /* skip unreadable uri */ }
+            } catch (e: Exception) {
+                Log.w("RoomMateShare", "Skipping unreadable shared URI: $uri", e)
+            }
         }
 
         val payload = JSONObject().apply {
@@ -167,6 +170,15 @@ class MainActivity : BridgeActivity() {
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun normalizeMimeType(uri: Uri, fallback: String): String {
+        if (fallback.isNotBlank() && fallback != "*/*" && fallback != "application/octet-stream") return fallback
+        val name = getDisplayName(uri) ?: uri.lastPathSegment.orEmpty()
+        val extension = name.substringAfterLast('.', "").lowercase()
+        return MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+            ?: fallback.takeIf { it.isNotBlank() && it != "*/*" }
+            ?: "application/octet-stream"
     }
 
     private fun buildShareTargetParam(intent: Intent): String {
