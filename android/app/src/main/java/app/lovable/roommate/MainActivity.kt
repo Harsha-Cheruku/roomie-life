@@ -17,6 +17,7 @@ import java.io.ByteArrayOutputStream
 
 class MainActivity : BridgeActivity() {
     private val maxSharedImageDimension = 1400
+    private var lastHandledShareKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         registerPlugin(AlarmPlugin::class.java)
@@ -30,6 +31,11 @@ class MainActivity : BridgeActivity() {
         handleSharedIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        handleSharedIntent(intent)
+    }
+
     private fun handleSharedIntent(intent: Intent?) {
         if (intent == null) return
         val action = intent.action ?: return
@@ -39,6 +45,9 @@ class MainActivity : BridgeActivity() {
         val title = intent.getStringExtra(Intent.EXTRA_SUBJECT) ?: ""
         val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: ""
         val uris = collectSharedUris(intent, action)
+        val shareKey = listOf(action, title, text, uris.joinToString("|")).joinToString("::")
+        if (shareKey == lastHandledShareKey) return
+        lastHandledShareKey = shareKey
         val targetParam = buildShareTargetParam(intent)
 
         Thread {
