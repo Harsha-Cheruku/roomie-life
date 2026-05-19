@@ -307,13 +307,17 @@ export default function AdminPanel() {
                     <ProfileAvatar avatar={member.avatar} size="md" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{member.display_name}{member.user_id === user?.id && <span className="text-muted-foreground text-sm ml-2">(You)</span>}</p>
-                      {member.role === 'admin' && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />Admin</Badge>}
+                      {(member.role === 'admin' || member.isCreator) && <Badge variant="secondary" className="text-xs"><Crown className="h-2 w-2 mr-1" />{member.isCreator ? 'Creator admin' : 'Admin'}</Badge>}
                     </div>
-                    {member.user_id !== user?.id && (
+                    {member.user_id !== user?.id && !member.isCreator && (
                       <div className="flex items-center gap-1">
-                        {member.role !== 'admin' && (
+                        {member.role === 'admin' ? (
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveAdmin(member.user_id)} disabled={roleUpdatingUserId === member.user_id} className="text-muted-foreground hover:text-destructive hover:bg-destructive/10" title="Remove Admin">
+                            <ShieldOff className="h-4 w-4" />
+                          </Button>
+                        ) : (
                           <Button variant="ghost" size="sm" onClick={() => handleMakeAdmin(member.user_id)} className="text-primary hover:text-primary hover:bg-primary/10" title="Make Admin">
-                            <Crown className="h-4 w-4" />
+                            <UserCog className="h-4 w-4" />
                           </Button>
                         )}
                         <Button variant="ghost" size="sm" onClick={() => setMemberToRemove(member.user_id)} className="text-destructive hover:text-destructive hover:bg-destructive/10"><UserMinus className="h-4 w-4" /></Button>
