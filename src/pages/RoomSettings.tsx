@@ -606,27 +606,53 @@ export const RoomSettings = () => {
                     )}
                   </p>
                   <div className="flex items-center gap-1">
-                    {member.role === "admin" && (
+                    {(member.role === "admin" || member.isCreator) && (
                       <span className="inline-flex items-center gap-1 text-xs text-accent font-medium">
                         <Crown className="w-3 h-3" />
-                        Admin
+                        {member.isCreator ? "Creator admin" : "Admin"}
                       </span>
                     )}
-                    {member.role === "member" && (
+                    {member.role === "member" && !member.isCreator && (
                       <span className="text-xs text-muted-foreground">Member</span>
                     )}
                   </div>
                 </div>
-                {isAdmin && member.user_id !== user?.id && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveMember(member.user_id)}
-                    disabled={removingUserId === member.user_id}
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  >
-                    <UserMinus className="w-4 h-4" />
-                  </Button>
+                {isAdmin && member.user_id !== user?.id && !member.isCreator && (
+                  <div className="flex items-center gap-1">
+                    {member.role === "admin" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Remove admin access"
+                        onClick={() => handleUpdateMemberRole(member.user_id, "member")}
+                        disabled={roleUpdatingUserId === member.user_id}
+                        className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <ShieldOff className="w-4 h-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Make admin"
+                        onClick={() => handleUpdateMemberRole(member.user_id, "admin")}
+                        disabled={roleUpdatingUserId === member.user_id}
+                        className="text-primary hover:text-primary hover:bg-primary/10"
+                      >
+                        <UserCog className="w-4 h-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Remove member"
+                      onClick={() => handleRemoveMember(member.user_id)}
+                      disabled={removingUserId === member.user_id}
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    >
+                      <UserMinus className="w-4 h-4" />
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
