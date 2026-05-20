@@ -364,6 +364,24 @@ export const ExpenseSplitter = ({
 
     setIsSaving(true);
     try {
+      // If we have a scanned receipt image (data URL from camera/upload),
+      // upload it to storage so it shows up in the bill's Notes section.
+      let notesImagePath: string | null = null;
+      if (receiptImage && receiptImage.startsWith('data:')) {
+        try {
+          const blob = await (await fetch(receiptImage)).blob();
+          const ext = (blob.type.split('/')[1] || 'jpg').toLowerCase();
+          const path = `${user.id}/notes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const { error: upErr } = await supabase.storage
+            .from('chat-attachments')
+            .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
+          if (!upErr) notesImagePath = path;
+          else console.warn('Receipt upload to notes failed:', upErr);
+        } catch (e) {
+          console.warn('Receipt -> notes upload error:', e);
+        }
+      }
+
       // Create the expense
       const { data: expense, error: expenseError } = await supabase
         .from('expenses')
@@ -377,6 +395,8 @@ export const ExpenseSplitter = ({
           status: 'pending',
           category: 'general',
           split_type: 'custom',
+          notes: notesImagePath ? '📷 Scanned receipt attached' : null,
+          notes_image_url: notesImagePath,
         })
         .select()
         .single();
