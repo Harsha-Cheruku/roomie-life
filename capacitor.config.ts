@@ -18,6 +18,10 @@ const config: CapacitorConfig = {
     PushNotifications: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    Camera: {
+      // Permissions prompts handled at runtime by @capacitor/camera
+      androidScaleType: 'CENTER_CROP',
+    },
     SplashScreen: {
       launchShowDuration: 2000,
       launchAutoHide: true,
