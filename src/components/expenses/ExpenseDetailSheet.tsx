@@ -654,7 +654,8 @@ export const ExpenseDetailSheet = ({
                     toast({ title: 'Delete request sent', description: 'Other participants will be notified to vote.' });
                     onUpdate();
                   } catch (e: any) {
-                    toast({ title: 'Failed', description: e?.message || 'Could not send request', variant: 'destructive' });
+                    console.error('Delete request failed:', e);
+                    toast({ title: 'Failed', description: e?.message || e?.error_description || 'Could not send request', variant: 'destructive' });
                   } finally {
                     setRequestingDelete(false);
                   }
@@ -695,15 +696,32 @@ export const ExpenseDetailSheet = ({
         onConfirm={async () => {
           setIsDeleting(true);
           try {
+            // Clean up child rows first so the parent delete cannot be
+            // blocked by leftover references (votes, requests, items, splits).
+            const { data: delReq } = await supabase
+              .from('expense_delete_requests')
+              .select('id')
+              .eq('expense_id', expense.id);
+            const reqIds = (delReq || []).map((r: { id: string }) => r.id);
+            if (reqIds.length) {
+              await supabase.from('expense_delete_votes').delete().in('request_id', reqIds);
+              await supabase.from('expense_delete_requests').delete().in('id', reqIds);
+            }
+            await supabase.from('notifications').delete().eq('reference_id', expense.id).eq('reference_type', 'expense');
             await supabase.from('expense_splits').delete().eq('expense_id', expense.id);
+            await supabase.from('expense_items').delete().eq('expense_id', expense.id);
             const { error } = await supabase.from('expenses').delete().eq('id', expense.id);
             if (error) throw error;
             toast({ title: 'Expense deleted' });
             onOpenChange(false);
             onUpdate();
-          } catch (error) {
+          } catch (error: any) {
             console.error('Error deleting expense:', error);
-            toast({ title: 'Failed to delete', variant: 'destructive' });
+            toast({
+              title: 'Failed to delete',
+              description: error?.message || 'Please try again.',
+              variant: 'destructive',
+            });
           } finally {
             setIsDeleting(false);
           }
