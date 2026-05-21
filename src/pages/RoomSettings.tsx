@@ -682,6 +682,12 @@ export const RoomSettings = () => {
               Terms of Service
             </button>
             <button
+              onClick={() => navigate("/support")}
+              className="w-full text-left p-3 rounded-xl bg-card border border-border text-sm text-foreground hover:bg-muted transition-colors"
+            >
+              Help & Support
+            </button>
+            <button
               onClick={() => navigate("/delete-account")}
               className="w-full text-left p-3 rounded-xl bg-destructive/5 border border-destructive/20 text-sm text-destructive hover:bg-destructive/10 transition-colors"
             >

@@ -9,13 +9,15 @@ interface Stats {
   active_users: number;
   total_rooms: number;
   total_messages: number;
+  open_tickets?: number;
+  total_tickets?: number;
 }
 
 const cards = [
   { key: "total_users", label: "Total Users", icon: Users, accent: "from-violet-500/20 to-violet-500/0" },
   { key: "active_users", label: "Active (7d)", icon: UserCheck, accent: "from-emerald-500/20 to-emerald-500/0" },
-  { key: "total_rooms", label: "Reports", icon: FileWarning, accent: "from-amber-500/20 to-amber-500/0" },
-  { key: "total_messages", label: "Support Tickets", icon: LifeBuoy, accent: "from-sky-500/20 to-sky-500/0" },
+  { key: "total_rooms", label: "Rooms", icon: FileWarning, accent: "from-amber-500/20 to-amber-500/0" },
+  { key: "open_tickets", label: "Open Tickets", icon: LifeBuoy, accent: "from-sky-500/20 to-sky-500/0" },
 ] as const;
 
 export default function AdminDashboard() {
