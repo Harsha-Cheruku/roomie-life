@@ -36,6 +36,10 @@ const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
 const DeleteAccount = lazy(() => import("./pages/DeleteAccount"));
 const ShareImport = lazy(() => import("./pages/ShareImport"));
+const SuperAdminLayout = lazy(() => import("./components/admin/SuperAdminLayout"));
+const SuperAdminLogin = lazy(() => import("./pages/admin/SuperAdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminPlaceholder = lazy(() => import("./pages/admin/AdminPlaceholder"));
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
 import { AlarmSetupAutoLauncher } from "@/components/alarms/AlarmSetupAutoLauncher";
@@ -290,6 +294,14 @@ const App = () => (
               }
             />
             <Route path="/install" element={<Install />} />
+            <Route path="/super-admin/login" element={<SuperAdminLogin />} />
+            <Route path="/super-admin" element={<SuperAdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="users" element={<AdminPlaceholder title="Users" description="Manage platform users and roles" />} />
+              <Route path="reports" element={<AdminPlaceholder title="Reports" description="Review user-submitted reports" />} />
+              <Route path="tickets" element={<AdminPlaceholder title="Support Tickets" description="Respond to support inquiries" />} />
+              <Route path="settings" element={<AdminPlaceholder title="Settings" description="Admin console configuration" />} />
+            </Route>
             <Route path="/share-import" element={<ShareImport />} />
             <Route path="/privacy" element={<PrivacyPolicy />} />
             <Route path="/terms" element={<TermsOfService />} />
