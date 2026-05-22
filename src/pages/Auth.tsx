@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +72,26 @@ export const Auth = () => {
             variant: "destructive",
           });
         } else {
+          // If this user has an admin role, send them to the Super Admin dashboard
+          try {
+            const { data: sess } = await supabase.auth.getUser();
+            const uid = sess?.user?.id;
+            if (uid) {
+              const { data: roles } = await supabase
+                .from("user_roles")
+                .select("role")
+                .eq("user_id", uid);
+              const isAdmin = roles?.some(
+                (r: any) => r.role === "super_admin" || r.role === "admin"
+              );
+              if (isAdmin) {
+                navigate("/super-admin", { replace: true });
+                return;
+              }
+            }
+          } catch {
+            // fall through to normal navigation
+          }
           navigate("/");
         }
       } else {
