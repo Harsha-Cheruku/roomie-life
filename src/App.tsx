@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { lazy, Suspense, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getDeviceId } from "@/hooks/useDeviceId";
@@ -139,13 +140,18 @@ function NativeAlarmInit() {
 
 const AuthRedirect = () => {
   const { user, currentRoom, loading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useSuperAdmin();
   
-  if (loading) {
+  if (loading || (user && adminLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-pulse">Loading...</div>
       </div>
     );
+  }
+
+  if (user && isAdmin) {
+    return <Navigate to="/super-admin" replace />;
   }
   
   if (user && currentRoom) {
@@ -296,6 +302,9 @@ const App = () => (
               }
             />
             <Route path="/install" element={<Install />} />
+            <Route path="/dashboard" element={<Navigate to="/super-admin" replace />} />
+            <Route path="/admin-dashboard" element={<Navigate to="/super-admin" replace />} />
+            <Route path="/admin-login" element={<Navigate to="/super-admin/login" replace />} />
             <Route
               path="/support"
               element={
