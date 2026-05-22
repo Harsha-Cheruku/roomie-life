@@ -42,6 +42,7 @@ const SuperAdminLogin = lazy(() => import("./pages/admin/SuperAdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminPlaceholder = lazy(() => import("./pages/admin/AdminPlaceholder"));
 const AdminTickets = lazy(() => import("./pages/admin/AdminTickets"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const Support = lazy(() => import("./pages/Support"));
 import { GlobalAlarmLayer } from "@/components/alarms/GlobalAlarmLayer";
 import { useNativeAlarm } from "@/hooks/useNativeAlarm";
@@ -317,7 +318,7 @@ const App = () => (
             <Route path="/super-admin" element={<SuperAdminLayout />}>
               <Route index element={<AdminDashboard />} />
               <Route path="users" element={<AdminPlaceholder title="Users" description="Manage platform users and roles" />} />
-              <Route path="reports" element={<AdminPlaceholder title="Reports" description="Review user-submitted reports" />} />
+              <Route path="reports" element={<AdminReports />} />
               <Route path="tickets" element={<AdminTickets />} />
               <Route path="settings" element={<AdminPlaceholder title="Settings" description="Admin console configuration" />} />
             </Route>
