@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useEffect, useState, useRef } from "react";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -9,6 +10,7 @@ interface ProtectedRouteProps {
 
 export const ProtectedRoute = ({ children, requireRoom = true }: ProtectedRouteProps) => {
   const { user, currentRoom, loading, userRooms } = useAuth();
+  const { isAdmin, loading: adminLoading } = useSuperAdmin();
   const location = useLocation();
   const [isStable, setIsStable] = useState(false);
   const hasInitialized = useRef(false);
@@ -30,7 +32,7 @@ export const ProtectedRoute = ({ children, requireRoom = true }: ProtectedRouteP
   }, [loading, user?.id, currentRoom?.id]);
 
   // Show loading state while auth is not stable
-  if (loading || !isStable) {
+  if (loading || !isStable || adminLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center animate-pulse">
@@ -45,6 +47,11 @@ export const ProtectedRoute = ({ children, requireRoom = true }: ProtectedRouteP
 
   if (!user) {
     return <Navigate to="/auth" replace state={{ from: location }} />;
+  }
+
+  // Admin accounts are dashboard-only — never enter the regular app shell.
+  if (isAdmin && !location.pathname.startsWith("/super-admin")) {
+    return <Navigate to="/super-admin" replace />;
   }
 
   // Only redirect to setup if user has no rooms at all
