@@ -8,6 +8,7 @@ import { useRealtimePushNotifications } from "@/hooks/useRealtimePushNotificatio
 import { PushNotificationPrompt } from "@/components/notifications/PushNotificationPrompt";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useNativeFcm } from "@/hooks/useNativeFcm";
+import { useNativeAndroidPermissions } from "@/hooks/useNativeAndroidPermissions";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 
 const Index = () => {
@@ -25,6 +26,9 @@ const Index = () => {
 
   // Native Android/iOS FCM token registration (no-op on web)
   useNativeFcm();
+
+  // Prompt for Camera / Photos / Notification permissions on first native launch
+  useNativeAndroidPermissions();
 
   useEffect(() => {
     if (isSupported && !isEnabled && permission === 'default') {
