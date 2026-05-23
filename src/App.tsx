@@ -41,6 +41,7 @@ const SuperAdminLayout = lazy(() => import("./components/admin/SuperAdminLayout"
 const SuperAdminLogin = lazy(() => import("./pages/admin/SuperAdminLogin"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminPlaceholder = lazy(() => import("./pages/admin/AdminPlaceholder"));
+const AdminNativeSetup = lazy(() => import("./pages/admin/AdminNativeSetup"));
 const AdminTickets = lazy(() => import("./pages/admin/AdminTickets"));
 const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const Support = lazy(() => import("./pages/Support"));
@@ -320,6 +321,7 @@ const App = () => (
               <Route path="users" element={<AdminPlaceholder title="Users" description="Manage platform users and roles" />} />
               <Route path="reports" element={<AdminReports />} />
               <Route path="tickets" element={<AdminTickets />} />
+              <Route path="native-setup" element={<AdminNativeSetup />} />
               <Route path="settings" element={<AdminPlaceholder title="Settings" description="Admin console configuration" />} />
             </Route>
             <Route path="/share-import" element={<ShareImport />} />
