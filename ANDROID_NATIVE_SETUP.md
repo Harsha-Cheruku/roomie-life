@@ -91,6 +91,11 @@ android/app/google-services.json
 
 (Same folder as `build.gradle` — not `android/`, not `android/app/src/`.)
 
+> **Shortcut:** the project already has `FIREBASE_GOOGLE_SERVICES_JSON`
+> stored as a Lovable Cloud secret. Sign in as super-admin and open
+> **Admin Console → Native Setup → Download google-services.json** to grab
+> the exact file with one click, then drop it into `android/app/`.
+
 ### 3c. Wire the Gradle plugin
 
 **`android/build.gradle`** (project-level), inside `buildscript { dependencies { … } }`:

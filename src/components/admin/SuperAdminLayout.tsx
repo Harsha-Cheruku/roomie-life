@@ -11,6 +11,7 @@ import {
   Sun,
   Menu,
   ShieldCheck,
+  Smartphone,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSuperAdmin } from "@/hooks/useSuperAdmin";
@@ -25,6 +26,7 @@ const nav = [
   { to: "/super-admin/users", label: "Users", icon: Users },
   { to: "/super-admin/reports", label: "Reports", icon: FileWarning },
   { to: "/super-admin/tickets", label: "Support Tickets", icon: LifeBuoy },
+  { to: "/super-admin/native-setup", label: "Native Setup", icon: Smartphone },
   { to: "/super-admin/settings", label: "Settings", icon: Settings },
 ];
 
