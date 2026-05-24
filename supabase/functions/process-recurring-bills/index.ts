@@ -48,13 +48,15 @@ Deno.serve(async (req) => {
     }
 
     for (const tpl of due) {
-      // Idempotency lock — try to claim this run
-      const { error: runErr } = await supabase
+      // Idempotency lock — try to claim this run as "pending creator confirmation"
+      const { data: runRow, error: runErr } = await supabase
         .from("recurring_bill_runs")
-        .insert({ recurring_bill_id: tpl.id, run_date: tpl.next_run_date });
+        .insert({ recurring_bill_id: tpl.id, run_date: tpl.next_run_date, status: "pending" })
+        .select("id")
+        .single();
 
       if (runErr) {
-        // Duplicate (already processed) — just advance the date
+        // Duplicate (already created) — just advance the schedule and move on
         skipped++;
         const nextRun = computeNextRun(
           tpl.frequency,
@@ -69,65 +71,19 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Create the expense
-      const { data: expense, error: expErr } = await supabase
-        .from("expenses")
-        .insert({
-          room_id: tpl.room_id,
-          created_by: tpl.created_by,
-          paid_by: tpl.paid_by,
-          title: tpl.title,
-          total_amount: tpl.total_amount,
-          category: tpl.category,
-          notes: tpl.notes,
-          split_type: tpl.split_type,
-          status: "pending",
-        })
-        .select()
-        .single();
+      // Ask the bill creator to confirm — do NOT create the expense yet
+      await supabase.from("notifications").insert({
+        user_id: tpl.created_by,
+        room_id: tpl.room_id,
+        type: "recurring_bill",
+        title: `🔁 Confirm recurring bill: ${tpl.title}`,
+        body: `${tpl.total_amount} is scheduled for today. Tap to approve or skip.`,
+        reference_type: "recurring_bill",
+        reference_id: tpl.id,
+        is_read: false,
+      });
 
-      if (expErr || !expense) {
-        console.error("Expense insert failed:", expErr);
-        continue;
-      }
-
-      // Create splits
-      const splits = (tpl.recurring_bill_splits || []).map((s: any) => ({
-        expense_id: expense.id,
-        user_id: s.user_id,
-        amount: s.amount,
-        status: "pending",
-        is_paid: s.user_id === tpl.paid_by,
-      }));
-
-      if (splits.length > 0) {
-        await supabase.from("expense_splits").insert(splits);
-      }
-
-      // Notify members (except payer)
-      const notifyRows = splits
-        .filter((s: any) => s.user_id !== tpl.paid_by)
-        .map((s: any) => ({
-          user_id: s.user_id,
-          room_id: tpl.room_id,
-          type: "expense",
-          title: `🔁 Recurring: ${tpl.title}`,
-          body: `Your share: ${s.amount}`,
-          reference_type: "expense",
-          reference_id: expense.id,
-          is_read: false,
-        }));
-      if (notifyRows.length > 0) {
-        await supabase.from("notifications").insert(notifyRows);
-      }
-
-      // Link run to expense + advance schedule
-      await supabase
-        .from("recurring_bill_runs")
-        .update({ expense_id: expense.id })
-        .eq("recurring_bill_id", tpl.id)
-        .eq("run_date", tpl.next_run_date);
-
+      // Advance schedule so the next cycle is queued
       const nextRun = computeNextRun(
         tpl.frequency,
         tpl.day_of_week,
