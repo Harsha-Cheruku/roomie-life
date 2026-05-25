@@ -20,6 +20,11 @@ function NotesImagePreview({ path }: { path: string }) {
     let cancelled = false;
     (async () => {
       try {
+        // External URL or data URL: use as-is
+        if (/^(https?:|data:)/i.test(path)) {
+          if (!cancelled) setUrl(path);
+          return;
+        }
         const { data } = await supabase.storage
           .from('chat-attachments')
           .createSignedUrl(path, 60 * 60);
