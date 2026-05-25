@@ -20,6 +20,11 @@ function NotesImagePreview({ path }: { path: string }) {
     let cancelled = false;
     (async () => {
       try {
+        // External URL or data URL: use as-is
+        if (/^(https?:|data:)/i.test(path)) {
+          if (!cancelled) setUrl(path);
+          return;
+        }
         const { data } = await supabase.storage
           .from('chat-attachments')
           .createSignedUrl(path, 60 * 60);
@@ -514,13 +519,6 @@ export const ExpenseDetailSheet = ({
                   </div>
                 )}
 
-                {mySplit.is_paid && mySplit.payment_screenshot_url && (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <p className="text-xs text-muted-foreground mb-2">Payment proof</p>
-                    <NotesImagePreview path={mySplit.payment_screenshot_url} />
-                  </div>
-                )}
-
                 {mySplit.status === 'accepted' && !mySplit.is_paid && (
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                     <Button className="flex-1 h-9 gap-2" onClick={() => handlePayment(mySplit)}>
@@ -595,21 +593,67 @@ export const ExpenseDetailSheet = ({
               <div className="bg-card rounded-2xl p-4 shadow-card">
                 <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
                   <Receipt className="w-4 h-4 text-primary" />
-                  Receipt
+                  Original Bill Photo
                 </h3>
-                <div className="rounded-xl overflow-hidden bg-muted">
-                  <img 
-                    src={expense.receipt_url} 
-                    alt="Receipt" 
-                    className="w-full h-auto max-h-64 object-contain"
-                  />
+                <NotesImagePreview path={expense.receipt_url} />
+              </div>
+            )}
+
+            {/* Payment proofs from everyone who marked paid */}
+            {expense.splits?.some(s => s.is_paid && s.payment_screenshot_url) && (
+              <div className="bg-card rounded-2xl p-4 shadow-card space-y-3">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <Check className="w-4 h-4 text-mint" />
+                  Payment Proofs
+                </h3>
+                <div className="space-y-3">
+                  {expense.splits!.filter(s => s.is_paid && s.payment_screenshot_url).map(s => {
+                    const p = memberProfiles.get(s.user_id);
+                    const isMine = s.user_id === user?.id;
+                    return (
+                      <div key={s.id} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <ProfileAvatar avatar={p?.avatar} size="sm" />
+                          <p className="flex-1 text-sm font-medium text-foreground">
+                            {isMine ? 'You' : p?.display_name || 'Unknown'}
+                          </p>
+                          <p className="text-sm font-semibold text-mint">{currency}{s.amount.toFixed(2)}</p>
+                          {isMine && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-coral hover:bg-coral/10"
+                              disabled={updatingId === s.id}
+                              onClick={async () => {
+                                if (!confirm('Remove your payment screenshot?')) return;
+                                setUpdatingId(s.id);
+                                try {
+                                  if (s.payment_screenshot_url && !/^https?:/i.test(s.payment_screenshot_url)) {
+                                    await supabase.storage.from('chat-attachments').remove([s.payment_screenshot_url]);
+                                  }
+                                  const { error } = await supabase
+                                    .from('expense_splits')
+                                    .update({ payment_screenshot_url: null })
+                                    .eq('id', s.id);
+                                  if (error) throw error;
+                                  toast({ title: 'Screenshot removed' });
+                                  onUpdate();
+                                } catch (e) {
+                                  toast({ title: 'Failed to remove', variant: 'destructive' });
+                                } finally {
+                                  setUpdatingId(null);
+                                }
+                              }}
+                            >
+                              {updatingId === s.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </Button>
+                          )}
+                        </div>
+                        <NotesImagePreview path={s.payment_screenshot_url!} />
+                      </div>
+                    );
+                  })}
                 </div>
-                <Button variant="outline" className="w-full mt-3 gap-2" asChild>
-                  <a href={expense.receipt_url} target="_blank" rel="noopener noreferrer">
-                    <Download className="w-4 h-4" />
-                    View Full Receipt
-                  </a>
-                </Button>
               </div>
             )}
 
