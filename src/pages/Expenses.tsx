@@ -163,6 +163,10 @@ export const Expenses = () => {
           paid_by,
           status,
           created_at,
+          category,
+          notes,
+          notes_image_url,
+          receipt_url,
           expense_splits (
             id,
             user_id,
