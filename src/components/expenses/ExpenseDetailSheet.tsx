@@ -519,13 +519,6 @@ export const ExpenseDetailSheet = ({
                   </div>
                 )}
 
-                {mySplit.is_paid && mySplit.payment_screenshot_url && (
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <p className="text-xs text-muted-foreground mb-2">Payment proof</p>
-                    <NotesImagePreview path={mySplit.payment_screenshot_url} />
-                  </div>
-                )}
-
                 {mySplit.status === 'accepted' && !mySplit.is_paid && (
                   <div className="flex gap-2 mt-3 pt-3 border-t border-border">
                     <Button className="flex-1 h-9 gap-2" onClick={() => handlePayment(mySplit)}>
