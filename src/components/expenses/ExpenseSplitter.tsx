@@ -398,7 +398,7 @@ export const ExpenseSplitter = ({
         .insert({
           room_id: currentRoom.id,
           created_by: user.id,
-          paid_by: user.id,
+          paid_by: paidBy || user.id,
           title,
           total_amount: calculateTotal(),
           receipt_url: receiptPath || (receiptImage && !receiptImage.startsWith('data:') ? receiptImage : null),
@@ -444,8 +444,11 @@ export const ExpenseSplitter = ({
               expense_item_id: createdItem.id,
               user_id: userId,
               amount: i === 0 ? baseShare + remainder : baseShare,
-              is_paid: userId === user.id,
-              status: userId === user.id ? 'accepted' : 'pending',
+              // The actual payer's own share is auto-marked paid; the
+              // creator's share is auto-accepted (no Accept/Reject loop
+              // back to themselves) but only paid if they ARE the payer.
+              is_paid: userId === (paidBy || user.id),
+              status: (userId === (paidBy || user.id) || userId === user.id) ? 'accepted' : 'pending',
             });
           });
         }
