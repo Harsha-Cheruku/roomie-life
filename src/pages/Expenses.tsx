@@ -757,15 +757,53 @@ export const Expenses = () => {
       {/* Summary Card with Bill KPIs */}
       <div className="px-4 mb-6">
         <div className="gradient-coral rounded-3xl p-4 sm:p-5 shadow-coral">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-3">
             <div className="min-w-0 flex-1">
-              <p className="text-primary-foreground/70 text-sm">Total This Month</p>
+              <div className="flex items-center gap-1 mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => shiftMonth(-1)}
+                  className="p-1 rounded-md hover:bg-primary-foreground/10 press-effect"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5 text-primary-foreground/80" />
+                </button>
+                <p className="text-primary-foreground/80 text-xs font-medium truncate">
+                  Total · {monthLabel}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => !isCurrentMonth && shiftMonth(1)}
+                  disabled={isCurrentMonth}
+                  className="p-1 rounded-md hover:bg-primary-foreground/10 press-effect disabled:opacity-30"
+                  aria-label="Next month"
+                >
+                  <ChevronRight className="w-3.5 h-3.5 text-primary-foreground/80" />
+                </button>
+              </div>
               <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.5rem,6vw,2.25rem)]">
-                ₹{stats.total.toLocaleString()}
+                ₹{monthTotal.toLocaleString()}
+              </p>
+              <p className="text-[10px] text-primary-foreground/60 mt-1">
+                All-time ₹{stats.total.toLocaleString()} · {activeRecurringCount} recurring active
               </p>
             </div>
-            <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center shrink-0 ml-3">
-              <Receipt className="w-6 h-6 text-primary-foreground" />
+            <div className="flex items-center gap-2 shrink-0">
+              {canReset && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8 px-2 gap-1 text-xs"
+                  onClick={() => setShowResetDialog(true)}
+                  title="Reset all settled bills"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </Button>
+              )}
+              <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center">
+                <Receipt className="w-6 h-6 text-primary-foreground" />
+              </div>
             </div>
           </div>
 
