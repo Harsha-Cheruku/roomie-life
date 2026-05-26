@@ -81,7 +81,7 @@ interface Balance {
 }
 
 export const Expenses = () => {
-  const { user, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
+  const { user, profile, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
