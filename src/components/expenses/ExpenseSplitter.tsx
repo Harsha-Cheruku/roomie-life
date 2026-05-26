@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -72,6 +73,13 @@ export const ExpenseSplitter = ({
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Who actually paid for this scanned bill. Defaults to current user but
+  // can be changed to any roommate before the bill is locked.
+  const [paidBy, setPaidBy] = useState<string>('');
+
+  useEffect(() => {
+    if (user && !paidBy) setPaidBy(user.id);
+  }, [user, paidBy]);
   
   // New: Lock flow states
   const [isLocked, setIsLocked] = useState(false);
@@ -115,8 +123,9 @@ export const ExpenseSplitter = ({
       initialLoadRef.current = false;
       setIsLocked(false);
       setShowLockedView(false);
+      setPaidBy(user?.id || '');
     }
-  }, [open]);
+  }, [open, user?.id]);
 
   useEffect(() => {
     if (currentRoom && open) {
