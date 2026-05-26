@@ -5,6 +5,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Checkbox } from '@/components/ui/checkbox';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -72,6 +73,13 @@ export const ExpenseSplitter = ({
   const [assignments, setAssignments] = useState<ItemAssignment>({});
   const [expandedItem, setExpandedItem] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  // Who actually paid for this scanned bill. Defaults to current user but
+  // can be changed to any roommate before the bill is locked.
+  const [paidBy, setPaidBy] = useState<string>('');
+
+  useEffect(() => {
+    if (user && !paidBy) setPaidBy(user.id);
+  }, [user, paidBy]);
   
   // New: Lock flow states
   const [isLocked, setIsLocked] = useState(false);
@@ -115,8 +123,9 @@ export const ExpenseSplitter = ({
       initialLoadRef.current = false;
       setIsLocked(false);
       setShowLockedView(false);
+      setPaidBy(user?.id || '');
     }
-  }, [open]);
+  }, [open, user?.id]);
 
   useEffect(() => {
     if (currentRoom && open) {
@@ -389,7 +398,7 @@ export const ExpenseSplitter = ({
         .insert({
           room_id: currentRoom.id,
           created_by: user.id,
-          paid_by: user.id,
+          paid_by: paidBy || user.id,
           title,
           total_amount: calculateTotal(),
           receipt_url: receiptPath || (receiptImage && !receiptImage.startsWith('data:') ? receiptImage : null),
@@ -435,8 +444,11 @@ export const ExpenseSplitter = ({
               expense_item_id: createdItem.id,
               user_id: userId,
               amount: i === 0 ? baseShare + remainder : baseShare,
-              is_paid: userId === user.id,
-              status: userId === user.id ? 'accepted' : 'pending',
+              // The actual payer's own share is auto-marked paid; the
+              // creator's share is auto-accepted (no Accept/Reject loop
+              // back to themselves) but only paid if they ARE the payer.
+              is_paid: userId === (paidBy || user.id),
+              status: (userId === (paidBy || user.id) || userId === user.id) ? 'accepted' : 'pending',
             });
           });
         }
@@ -500,6 +512,40 @@ export const ExpenseSplitter = ({
               className="mt-1 rounded-xl"
               placeholder="Expense title"
             />
+          </div>
+
+          {/* Paid by — who actually paid this scanned bill */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Paid by</label>
+            <Select value={paidBy} onValueChange={setPaidBy}>
+              <SelectTrigger className="mt-1 h-11 rounded-xl">
+                <SelectValue placeholder="Select who paid">
+                  {(() => {
+                    const m = roomMembers.find(rm => rm.user_id === paidBy);
+                    if (!m) return 'Select who paid';
+                    return (
+                      <span className="flex items-center gap-2">
+                        <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                        <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                      </span>
+                    );
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {roomMembers.map(m => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                      <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Defaults to you. Change it if a roommate actually paid the bill.
+            </p>
           </div>
 
           {/* Items list */}
@@ -836,10 +882,16 @@ export const ExpenseSplitter = ({
         total={calculateTotal()}
         subtotal={calculateSubtotal()}
         adjustments={adjustments}
-        paidBy={{
-          name: profile?.display_name || 'You',
-          avatar: profile?.avatar || '😊',
-        }}
+        paidBy={(() => {
+          const m = roomMembers.find(rm => rm.user_id === paidBy);
+          if (m) {
+            return {
+              name: m.user_id === user?.id ? 'You' : m.profile.display_name,
+              avatar: m.profile.avatar,
+            };
+          }
+          return { name: profile?.display_name || 'You', avatar: profile?.avatar || '😊' };
+        })()}
         splits={getSplits()}
         category="general"
         createdAt={new Date()}
