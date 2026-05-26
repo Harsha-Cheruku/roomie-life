@@ -514,6 +514,40 @@ export const ExpenseSplitter = ({
             />
           </div>
 
+          {/* Paid by — who actually paid this scanned bill */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Paid by</label>
+            <Select value={paidBy} onValueChange={setPaidBy}>
+              <SelectTrigger className="mt-1 h-11 rounded-xl">
+                <SelectValue placeholder="Select who paid">
+                  {(() => {
+                    const m = roomMembers.find(rm => rm.user_id === paidBy);
+                    if (!m) return 'Select who paid';
+                    return (
+                      <span className="flex items-center gap-2">
+                        <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                        <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                      </span>
+                    );
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {roomMembers.map(m => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                      <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Defaults to you. Change it if a roommate actually paid the bill.
+            </p>
+          </div>
+
           {/* Items list */}
           <div className="space-y-3">
             <label className="text-sm font-medium text-muted-foreground">
@@ -848,10 +882,16 @@ export const ExpenseSplitter = ({
         total={calculateTotal()}
         subtotal={calculateSubtotal()}
         adjustments={adjustments}
-        paidBy={{
-          name: profile?.display_name || 'You',
-          avatar: profile?.avatar || '😊',
-        }}
+        paidBy={(() => {
+          const m = roomMembers.find(rm => rm.user_id === paidBy);
+          if (m) {
+            return {
+              name: m.user_id === user?.id ? 'You' : m.profile.display_name,
+              avatar: m.profile.avatar,
+            };
+          }
+          return { name: profile?.display_name || 'You', avatar: profile?.avatar || '😊' };
+        })()}
         splits={getSplits()}
         category="general"
         createdAt={new Date()}
