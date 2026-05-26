@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat, Eye } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat, Eye, ChevronLeft, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,12 +21,23 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
+import { useAdminCheck } from "@/hooks/useAdminCheck";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface ExpenseSplit {
   id: string;
@@ -75,6 +86,7 @@ export const Expenses = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { isOnline, pendingCount, syncQueue } = useOfflineExpenses();
+  const { isAdmin } = useAdminCheck();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -133,6 +145,16 @@ export const Expenses = () => {
   
   // Date filtering
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
+
+  // Top-card month picker (independent from the list date chips)
+  const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [monthTotal, setMonthTotal] = useState(0);
+  const [activeRecurringCount, setActiveRecurringCount] = useState(0);
+  const [isResetting, setIsResetting] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Expense KPIs - Real-time updates
   const [stats, setStats] = useState({ 
@@ -300,6 +322,17 @@ export const Expenses = () => {
         settledBills,
       });
 
+      // Month-scoped total for the top card
+      const monthStart = selectedMonth;
+      const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
+      const mTotal = visibleAllExpenses
+        .filter((e: any) => {
+          const d = new Date(e.created_at || 0);
+          return d >= monthStart && d < monthEnd;
+        })
+        .reduce((s: number, e: any) => s + Number(e.total_amount || 0), 0);
+      setMonthTotal(mTotal);
+
       // Calculate balances with other users
       await calculateBalances(visibleAllExpenses);
     } catch (error) {
@@ -307,7 +340,26 @@ export const Expenses = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoom, user, activeTab, isSoloMode]);
+  }, [currentRoom, user, activeTab, isSoloMode, selectedMonth]);
+
+  // Re-fetch monthly total when the user changes the selected month,
+  // even if the underlying expense list hasn't changed.
+  // (fetchExpenses already depends on selectedMonth, so just call it.)
+
+  // Active recurring bills count for the room (new KPI).
+  useEffect(() => {
+    if (!currentRoom) return;
+    let cancelled = false;
+    (async () => {
+      const { count } = await supabase
+        .from('recurring_bills')
+        .select('id', { count: 'exact', head: true })
+        .eq('room_id', currentRoom.id)
+        .eq('is_active', true);
+      if (!cancelled) setActiveRecurringCount(count || 0);
+    })();
+    return () => { cancelled = true; };
+  }, [currentRoom, expenses.length]);
 
   useEffect(() => {
     if (currentRoom) {
@@ -534,7 +586,14 @@ export const Expenses = () => {
   });
 
   // Filter expenses based on KPI filter and date filter
+  // De-dupe: hide rows that are already surfaced in the action sections above
+  // so the same bill never shows as two cards on this page.
+  const sectionedIds = new Set<string>([
+    ...pendingForMe.map(e => e.id),
+    ...unpaidSplits.map(e => e.id),
+  ]);
   const filteredExpenses = expenses.filter(exp => {
+    if (sectionedIds.has(exp.id)) return false;
     // Date filter
     const expDate = new Date(exp.created_at);
     const now = new Date();
@@ -573,6 +632,68 @@ export const Expenses = () => {
     
     return true;
   });
+
+  // Admin can reset when EVERY bill in the room is settled (and there is at least one).
+  const allBillsSettled = expenses.length > 0 && expenses.every(e => e.status === 'settled');
+  const canReset = isAdmin && allBillsSettled && !isSoloMode;
+
+  const handleResetAllBills = async () => {
+    if (!currentRoom || !user || !isAdmin) return;
+    setIsResetting(true);
+    try {
+      // 1) Fetch all expense ids & room members
+      const [{ data: expRows }, { data: memberRows }] = await Promise.all([
+        supabase.from('expenses').select('id').eq('room_id', currentRoom.id),
+        supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id),
+      ]);
+      const expIds = (expRows || []).map(r => r.id);
+
+      // 2) Notify every member BEFORE deletion so the notification row survives
+      const adminName = profile?.display_name || 'Admin';
+      const notifs = (memberRows || []).map(m => ({
+        user_id: m.user_id,
+        room_id: currentRoom.id,
+        type: 'expense' as const,
+        title: 'Bills reset by admin',
+        body: `${adminName} cleared all settled bills for this room.`,
+      }));
+      if (notifs.length) {
+        await supabase.from('notifications').insert(notifs);
+      }
+
+      // 3) Delete children first, then expenses
+      if (expIds.length) {
+        const { data: delReqs } = await supabase
+          .from('expense_delete_requests')
+          .select('id')
+          .in('expense_id', expIds);
+        const reqIds = (delReqs || []).map(r => r.id);
+        if (reqIds.length) {
+          await supabase.from('expense_delete_votes').delete().in('request_id', reqIds);
+          await supabase.from('expense_delete_requests').delete().in('id', reqIds);
+        }
+        await supabase.from('expense_splits').delete().in('expense_id', expIds);
+        await supabase.from('expense_items').delete().in('expense_id', expIds);
+        await supabase.from('expenses').delete().in('id', expIds);
+      }
+
+      toast({ title: 'Bills reset', description: 'All settled bills were cleared and members were notified.' });
+      setShowResetDialog(false);
+      fetchExpenses();
+    } catch (e: any) {
+      console.error('Reset failed:', e);
+      toast({ title: 'Reset failed', description: e?.message || 'Please try again.', variant: 'destructive' });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
+  const monthLabel = selectedMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const isCurrentMonth = selectedMonth.getMonth() === new Date().getMonth()
+    && selectedMonth.getFullYear() === new Date().getFullYear();
+  const shiftMonth = (delta: number) => {
+    setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
+  };
 
   return (
     <div className="min-h-screen bg-background pb-32">
