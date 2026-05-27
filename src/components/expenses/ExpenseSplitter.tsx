@@ -909,6 +909,8 @@ export const ExpenseSplitter = ({
               </div>
             </div>
           </div>
+          </>
+          )}
         </div>
 
         {/* Complete Bill button - triggers lock flow */}
@@ -923,7 +925,7 @@ export const ExpenseSplitter = ({
           <Button 
             className="flex-1 h-14 rounded-xl text-base gap-2 press-effect"
             onClick={handleCompleteBill}
-            disabled={items.length === 0}
+            disabled={items.length === 0 || paidByMode === null || !paidBy}
           >
             <Lock className="w-5 h-5" />
             Complete Bill
