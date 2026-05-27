@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X, Receipt, Percent } from 'lucide-react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X, Receipt, Percent, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -76,6 +76,9 @@ export const ExpenseSplitter = ({
   // Who actually paid for this scanned bill. Defaults to current user but
   // can be changed to any roommate before the bill is locked.
   const [paidBy, setPaidBy] = useState<string>('');
+  // Two-step "Who paid?" prompt: 'self' = you paid, 'other' = a roommate paid.
+  // Until the user answers we hide the rest of the splitter so the choice is unmissable.
+  const [paidByMode, setPaidByMode] = useState<'self' | 'other' | null>(null);
 
   useEffect(() => {
     if (user && !paidBy) setPaidBy(user.id);
@@ -124,6 +127,7 @@ export const ExpenseSplitter = ({
       setIsLocked(false);
       setShowLockedView(false);
       setPaidBy(user?.id || '');
+      setPaidByMode(null);
     }
   }, [open, user?.id]);
 
