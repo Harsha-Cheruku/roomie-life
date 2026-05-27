@@ -503,6 +503,58 @@ export const ExpenseDetailSheet = ({
               </div>
             </div>
 
+            {/* Bill Summary — visible to everyone involved so creator/payer
+                and splitees both see how much has been received vs. owed. */}
+            {(() => {
+              const splits = expense.splits || [];
+              const otherSplits = splits.filter(s => s.user_id !== expense.paid_by && s.status !== 'rejected');
+              const owedTotal = otherSplits.reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              const receivedTotal = otherSplits.filter(s => s.is_paid).reduce((sum, s) => sum + Number(s.amount || 0), 0);
+              const balance = Math.max(owedTotal - receivedTotal, 0);
+              const pct = owedTotal > 0 ? Math.min(100, (receivedTotal / owedTotal) * 100) : 0;
+              if (otherSplits.length === 0) return null;
+              return (
+                <div className="bg-card rounded-2xl p-4 shadow-card space-y-3">
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary" />
+                    Bill Summary
+                  </h3>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-muted/40 rounded-xl p-2">
+                      <p className="text-[11px] text-muted-foreground">Owed</p>
+                      <p className="text-sm font-bold text-foreground">{currency}{owedTotal.toFixed(2)}</p>
+                    </div>
+                    <div className="bg-mint/10 rounded-xl p-2">
+                      <p className="text-[11px] text-mint">Received</p>
+                      <p className="text-sm font-bold text-mint">{currency}{receivedTotal.toFixed(2)}</p>
+                    </div>
+                    <div className={cn(
+                      "rounded-xl p-2",
+                      balance === 0 ? "bg-mint/10" : "bg-coral/10"
+                    )}>
+                      <p className={cn("text-[11px]", balance === 0 ? "text-mint" : "text-coral")}>Balance</p>
+                      <p className={cn("text-sm font-bold", balance === 0 ? "text-mint" : "text-coral")}>
+                        {currency}{balance.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-mint transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  {balance === 0 ? (
+                    <p className="text-xs text-mint text-center font-medium">✓ Fully received — bill settled</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center">
+                      {otherSplits.filter(s => s.is_paid).length} of {otherSplits.length} {otherSplits.length === 1 ? 'person has' : 'people have'} paid
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Your share summary + payment actions */}
             {mySplit && !isCreator && expense.paid_by !== user?.id && (
               <div className="bg-card rounded-2xl p-4 shadow-card">
