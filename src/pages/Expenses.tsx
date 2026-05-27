@@ -396,6 +396,15 @@ export const Expenses = () => {
     }
   }, [currentRoom, activeTab, fetchExpenses, user]);
 
+  // Clear stale data immediately when switching rooms so the previous room's
+  // bills don't linger (and so the loader takes over while we refetch).
+  useEffect(() => {
+    setExpenses([]);
+    setBalances([]);
+    setMemberProfiles(new Map());
+    setIsLoading(true);
+  }, [currentRoom?.id]);
+
   const calculateBalances = async (expenseData: any[]) => {
     if (!currentRoom || !user) return;
 
