@@ -173,9 +173,14 @@ export const Expenses = () => {
   const fetchExpenses = useCallback(async () => {
     if (!currentRoom || !user) return;
 
-    setIsLoading(true);
+    // Only show the full-page loader on the very first load for this room.
+    // Subsequent tab/month changes & realtime refreshes silently update data
+    // so the UI doesn't flicker back to a spinner each time.
+    setIsLoading(prev => (prev ? true : prev));
     try {
-      let query = supabase
+      // Single unfiltered fetch — we filter for the active tab in JS below.
+      // Avoids a second round-trip for the "all expenses" stats query.
+      const query = supabase
         .from('expenses')
         .select(`
           id,
@@ -202,12 +207,6 @@ export const Expenses = () => {
         .eq('room_id', currentRoom.id)
         .order('created_at', { ascending: false });
 
-      if (activeTab === 'pending') {
-        query = query.eq('status', 'pending');
-      } else if (activeTab === 'settled') {
-        query = query.eq('status', 'settled');
-      }
-
       const { data: expenseData, error: expenseError } = await query;
       if (expenseError) throw expenseError;
 
@@ -229,7 +228,12 @@ export const Expenses = () => {
         expense.paid_by === user.id &&
         (expense.expense_splits || []).every((split: any) => split.user_id === user.id);
 
-      const visibleExpenseData = (expenseData || []).filter(expense => !isSoloMode || isPersonalSoloExpense(expense));
+      const allVisible = (expenseData || []).filter(expense => !isSoloMode || isPersonalSoloExpense(expense));
+      const visibleExpenseData = allVisible.filter(expense => {
+        if (activeTab === 'pending') return expense.status === 'pending';
+        if (activeTab === 'settled') return expense.status === 'settled';
+        return true;
+      });
 
       const expensesWithProfiles = visibleExpenseData.map(expense => ({
         ...expense,
@@ -240,26 +244,8 @@ export const Expenses = () => {
 
       setExpenses(expensesWithProfiles);
 
-      // Calculate stats from ALL expenses (not filtered)
-      const { data: allExpenses } = await supabase
-        .from('expenses')
-        .select(`
-          id,
-          total_amount,
-          created_by,
-          paid_by,
-          status,
-          expense_splits (
-            id,
-            user_id,
-            amount,
-            is_paid,
-            status
-          )
-        `)
-        .eq('room_id', currentRoom.id);
-
-      const visibleAllExpenses = (allExpenses || []).filter(expense => !isSoloMode || isPersonalSoloExpense(expense));
+      // Stats are derived from the SAME fetch (no second round-trip).
+      const visibleAllExpenses = allVisible;
 
       let totalSpent = 0;
       let youPaid = 0;
