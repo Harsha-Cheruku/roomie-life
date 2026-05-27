@@ -201,6 +201,19 @@ export const ExpenseDetailSheet = ({
 
       if (error) throw error;
 
+      // Auto-settle if every split is paid (or rejected)
+      const { data: allSplits } = await supabase
+        .from('expense_splits')
+        .select('id, is_paid, status')
+        .eq('expense_id', expense.id);
+      const allDone = allSplits?.every(s => s.is_paid || s.status === 'rejected');
+      if (allDone) {
+        await supabase
+          .from('expenses')
+          .update({ status: 'settled' })
+          .eq('id', expense.id);
+      }
+
       // Create notification for the person who originally paid
       const userName = profile?.display_name || 'Someone';
       await createExpensePaidNotification(
@@ -657,13 +670,13 @@ export const ExpenseDetailSheet = ({
               </div>
             )}
 
-            {(expense.notes || expense.notes_image_url) && (
+            {(expense.notes || (expense.notes_image_url && expense.notes_image_url !== expense.receipt_url)) && (
               <div className="bg-card rounded-2xl p-4 shadow-card space-y-3">
                 <h3 className="font-semibold text-foreground">Notes</h3>
                 {expense.notes && (
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{expense.notes}</p>
                 )}
-                {expense.notes_image_url && (
+                {expense.notes_image_url && expense.notes_image_url !== expense.receipt_url && (
                   <NotesImagePreview path={expense.notes_image_url} />
                 )}
               </div>
