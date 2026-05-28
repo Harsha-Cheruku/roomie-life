@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat, Eye, ChevronLeft, RotateCcw } from "lucide-react";
+import { Camera, Plus, TrendingUp, TrendingDown, Receipt, Users, ChevronRight, Loader2, Check, X, Clock, CreditCard, FileX, UserCircle, User, WifiOff, Repeat, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,23 +21,12 @@ import { TopBar } from "@/components/layout/TopBar";
 import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
-import { useAdminCheck } from "@/hooks/useAdminCheck";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
 
 interface ExpenseSplit {
   id: string;
@@ -81,12 +70,11 @@ interface Balance {
 }
 
 export const Expenses = () => {
-  const { user, profile, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
+  const { user, currentRoom, isSoloMode, toggleSoloMode } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
   const { isOnline, pendingCount, syncQueue } = useOfflineExpenses();
-  const { isAdmin } = useAdminCheck();
   const [activeTab, setActiveTab] = useState<"all" | "pending" | "settled">("all");
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
@@ -145,16 +133,6 @@ export const Expenses = () => {
   
   // Date filtering
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'week' | 'month'>('month');
-
-  // Top-card month picker (independent from the list date chips)
-  const [selectedMonth, setSelectedMonth] = useState<Date>(() => {
-    const d = new Date();
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  });
-  const [monthTotal, setMonthTotal] = useState(0);
-  const [activeRecurringCount, setActiveRecurringCount] = useState(0);
-  const [isResetting, setIsResetting] = useState(false);
-  const [showResetDialog, setShowResetDialog] = useState(false);
 
   // Expense KPIs - Real-time updates
   const [stats, setStats] = useState({ 
@@ -322,17 +300,6 @@ export const Expenses = () => {
         settledBills,
       });
 
-      // Month-scoped total for the top card
-      const monthStart = selectedMonth;
-      const monthEnd = new Date(selectedMonth.getFullYear(), selectedMonth.getMonth() + 1, 1);
-      const mTotal = visibleAllExpenses
-        .filter((e: any) => {
-          const d = new Date(e.created_at || 0);
-          return d >= monthStart && d < monthEnd;
-        })
-        .reduce((s: number, e: any) => s + Number(e.total_amount || 0), 0);
-      setMonthTotal(mTotal);
-
       // Calculate balances with other users
       await calculateBalances(visibleAllExpenses);
     } catch (error) {
@@ -340,26 +307,7 @@ export const Expenses = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentRoom, user, activeTab, isSoloMode, selectedMonth]);
-
-  // Re-fetch monthly total when the user changes the selected month,
-  // even if the underlying expense list hasn't changed.
-  // (fetchExpenses already depends on selectedMonth, so just call it.)
-
-  // Active recurring bills count for the room (new KPI).
-  useEffect(() => {
-    if (!currentRoom) return;
-    let cancelled = false;
-    (async () => {
-      const { count } = await supabase
-        .from('recurring_bills')
-        .select('id', { count: 'exact', head: true })
-        .eq('room_id', currentRoom.id)
-        .eq('is_active', true);
-      if (!cancelled) setActiveRecurringCount(count || 0);
-    })();
-    return () => { cancelled = true; };
-  }, [currentRoom, expenses.length]);
+  }, [currentRoom, user, activeTab, isSoloMode]);
 
   useEffect(() => {
     if (currentRoom) {
@@ -395,15 +343,6 @@ export const Expenses = () => {
       };
     }
   }, [currentRoom, activeTab, fetchExpenses, user]);
-
-  // Clear stale data immediately when switching rooms so the previous room's
-  // bills don't linger (and so the loader takes over while we refetch).
-  useEffect(() => {
-    setExpenses([]);
-    setBalances([]);
-    setMemberProfiles(new Map());
-    setIsLoading(true);
-  }, [currentRoom?.id]);
 
   const calculateBalances = async (expenseData: any[]) => {
     if (!currentRoom || !user) return;
@@ -595,14 +534,7 @@ export const Expenses = () => {
   });
 
   // Filter expenses based on KPI filter and date filter
-  // De-dupe: hide rows that are already surfaced in the action sections above
-  // so the same bill never shows as two cards on this page.
-  const sectionedIds = new Set<string>([
-    ...pendingForMe.map(e => e.id),
-    ...unpaidSplits.map(e => e.id),
-  ]);
   const filteredExpenses = expenses.filter(exp => {
-    if (sectionedIds.has(exp.id)) return false;
     // Date filter
     const expDate = new Date(exp.created_at);
     const now = new Date();
@@ -641,68 +573,6 @@ export const Expenses = () => {
     
     return true;
   });
-
-  // Admin can reset when EVERY bill in the room is settled (and there is at least one).
-  const allBillsSettled = expenses.length > 0 && expenses.every(e => e.status === 'settled');
-  const canReset = isAdmin && allBillsSettled && !isSoloMode;
-
-  const handleResetAllBills = async () => {
-    if (!currentRoom || !user || !isAdmin) return;
-    setIsResetting(true);
-    try {
-      // 1) Fetch all expense ids & room members
-      const [{ data: expRows }, { data: memberRows }] = await Promise.all([
-        supabase.from('expenses').select('id').eq('room_id', currentRoom.id),
-        supabase.from('room_members').select('user_id').eq('room_id', currentRoom.id),
-      ]);
-      const expIds = (expRows || []).map(r => r.id);
-
-      // 2) Notify every member BEFORE deletion so the notification row survives
-      const adminName = profile?.display_name || 'Admin';
-      const notifs = (memberRows || []).map(m => ({
-        user_id: m.user_id,
-        room_id: currentRoom.id,
-        type: 'expense' as const,
-        title: 'Bills reset by admin',
-        body: `${adminName} cleared all settled bills for this room.`,
-      }));
-      if (notifs.length) {
-        await supabase.from('notifications').insert(notifs);
-      }
-
-      // 3) Delete children first, then expenses
-      if (expIds.length) {
-        const { data: delReqs } = await supabase
-          .from('expense_delete_requests')
-          .select('id')
-          .in('expense_id', expIds);
-        const reqIds = (delReqs || []).map(r => r.id);
-        if (reqIds.length) {
-          await supabase.from('expense_delete_votes').delete().in('request_id', reqIds);
-          await supabase.from('expense_delete_requests').delete().in('id', reqIds);
-        }
-        await supabase.from('expense_splits').delete().in('expense_id', expIds);
-        await supabase.from('expense_items').delete().in('expense_id', expIds);
-        await supabase.from('expenses').delete().in('id', expIds);
-      }
-
-      toast({ title: 'Bills reset', description: 'All settled bills were cleared and members were notified.' });
-      setShowResetDialog(false);
-      fetchExpenses();
-    } catch (e: any) {
-      console.error('Reset failed:', e);
-      toast({ title: 'Reset failed', description: e?.message || 'Please try again.', variant: 'destructive' });
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
-  const monthLabel = selectedMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-  const isCurrentMonth = selectedMonth.getMonth() === new Date().getMonth()
-    && selectedMonth.getFullYear() === new Date().getFullYear();
-  const shiftMonth = (delta: number) => {
-    setSelectedMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + delta, 1));
-  };
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -766,53 +636,15 @@ export const Expenses = () => {
       {/* Summary Card with Bill KPIs */}
       <div className="px-4 mb-6">
         <div className="gradient-coral rounded-3xl p-4 sm:p-5 shadow-coral">
-          <div className="flex items-center justify-between mb-4 gap-3">
+          <div className="flex items-center justify-between mb-4">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1 mb-0.5">
-                <button
-                  type="button"
-                  onClick={() => shiftMonth(-1)}
-                  className="p-1 rounded-md hover:bg-primary-foreground/10 press-effect"
-                  aria-label="Previous month"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5 text-primary-foreground/80" />
-                </button>
-                <p className="text-primary-foreground/80 text-xs font-medium truncate">
-                  Total · {monthLabel}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => !isCurrentMonth && shiftMonth(1)}
-                  disabled={isCurrentMonth}
-                  className="p-1 rounded-md hover:bg-primary-foreground/10 press-effect disabled:opacity-30"
-                  aria-label="Next month"
-                >
-                  <ChevronRight className="w-3.5 h-3.5 text-primary-foreground/80" />
-                </button>
-              </div>
+              <p className="text-primary-foreground/70 text-sm">Total This Month</p>
               <p className="font-bold text-primary-foreground font-display leading-none break-all text-[clamp(1.5rem,6vw,2.25rem)]">
-                ₹{monthTotal.toLocaleString()}
-              </p>
-              <p className="text-[10px] text-primary-foreground/60 mt-1">
-                All-time ₹{stats.total.toLocaleString()} · {activeRecurringCount} recurring active
+                ₹{stats.total.toLocaleString()}
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {canReset && (
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8 px-2 gap-1 text-xs"
-                  onClick={() => setShowResetDialog(true)}
-                  title="Reset all settled bills"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Reset
-                </Button>
-              )}
-              <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center">
-                <Receipt className="w-6 h-6 text-primary-foreground" />
-              </div>
+            <div className="w-12 h-12 rounded-2xl bg-primary-foreground/20 flex items-center justify-center shrink-0 ml-3">
+              <Receipt className="w-6 h-6 text-primary-foreground" />
             </div>
           </div>
 
@@ -1234,29 +1066,6 @@ export const Expenses = () => {
         else if (tab === 'storage') navigate('/storage');
         else if (tab === 'chat') navigate('/chat');
       }} />
-
-      <AlertDialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reset all bills?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This permanently removes every settled bill, item and split from this room.
-              All members will receive a notification that you cleared the bills. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => { e.preventDefault(); handleResetAllBills(); }}
-              disabled={isResetting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RotateCcw className="w-4 h-4 mr-2" />}
-              Reset bills
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };
