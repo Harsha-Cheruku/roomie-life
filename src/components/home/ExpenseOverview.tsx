@@ -75,7 +75,10 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const channel = supabase
         .channel(`expense-overview-${currentRoom.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, schedule)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, schedule)
+        // Only react to splits where the current user is involved → avoids
+        // refetching the entire home overview every time any split anywhere
+        // in the DB changes (was the main cause of the home-page lag).
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits', filter: `user_id=eq.${user.id}` }, schedule)
         .subscribe();
 
       return () => {
