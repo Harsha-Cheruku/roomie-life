@@ -178,14 +178,16 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         return rows.sort((a, b) => b.amount - a.amount);
       };
 
-      setData({
+      const next: ExpenseData = {
         total, pending, settled, willPay, willGet, todaySpending,
         members: buildRows(memberAmounts),
         willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
         willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
         willPayBills,
         willGetBills,
-      });
+      };
+      setData(next);
+      setRoomCache('home-expense-overview', currentRoom.id, next);
     } catch (error) {
       console.error('Error fetching expense data:', error);
     } finally {
