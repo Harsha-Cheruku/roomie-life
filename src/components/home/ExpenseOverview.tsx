@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useCurrency } from "@/hooks/useCurrency";
+import { getRoomCache, setRoomCache } from "@/lib/roomCache";
 import {
   Select,
   SelectContent,
@@ -62,6 +63,17 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [isLoading, setIsLoading] = useState(true);
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+
+  // Hydrate from per-room cache so switching rooms doesn't flash a spinner.
+  useEffect(() => {
+    const cached = getRoomCache<ExpenseData>('home-expense-overview', currentRoom?.id);
+    if (cached) {
+      setData(cached);
+      setIsLoading(false);
+    } else {
+      setIsLoading(true);
+    }
+  }, [currentRoom?.id]);
 
   useEffect(() => {
     if (currentRoom && user) {
@@ -166,14 +178,16 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         return rows.sort((a, b) => b.amount - a.amount);
       };
 
-      setData({
+      const next: ExpenseData = {
         total, pending, settled, willPay, willGet, todaySpending,
         members: buildRows(memberAmounts),
         willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
         willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
         willPayBills,
         willGetBills,
-      });
+      };
+      setData(next);
+      setRoomCache('home-expense-overview', currentRoom.id, next);
     } catch (error) {
       console.error('Error fetching expense data:', error);
     } finally {

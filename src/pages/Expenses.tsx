@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { getRoomCache, setRoomCache } from "@/lib/roomCache";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -321,6 +322,12 @@ export const Expenses = () => {
 
       // Calculate balances with other users
       await calculateBalances(visibleAllExpenses);
+
+      // Cache successful payload so room switches hydrate instantly next time.
+      setRoomCache('expenses-page', currentRoom.id, {
+        expenses: expensesWithProfiles,
+        allVisible,
+      });
     } catch (error) {
       console.error('Error fetching expenses:', error);
     } finally {
@@ -385,10 +392,21 @@ export const Expenses = () => {
   // Clear stale data immediately when switching rooms so the previous room's
   // bills don't linger (and so the loader takes over while we refetch).
   useEffect(() => {
-    setExpenses([]);
-    setBalances([]);
-    setMemberProfiles(new Map());
-    setIsLoading(true);
+    // Hydrate from per-room cache so switching rooms shows the previous
+    // payload immediately while a fresh fetch runs in the background.
+    const cached = getRoomCache<{ expenses: Expense[]; allVisible: any[] }>(
+      'expenses-page',
+      currentRoom?.id,
+    );
+    if (cached) {
+      setExpenses(cached.expenses);
+      setIsLoading(false);
+    } else {
+      setExpenses([]);
+      setBalances([]);
+      setMemberProfiles(new Map());
+      setIsLoading(true);
+    }
   }, [currentRoom?.id]);
 
   const calculateBalances = async (expenseData: any[]) => {
