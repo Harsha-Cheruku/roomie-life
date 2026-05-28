@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X, Receipt, Percent, UserCheck } from 'lucide-react';
+import { Check, ChevronDown, Users, Minus, Plus, Save, Loader2, PlusCircle, Lock, Edit3, Tag, X, Receipt, Percent } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -76,9 +76,6 @@ export const ExpenseSplitter = ({
   // Who actually paid for this scanned bill. Defaults to current user but
   // can be changed to any roommate before the bill is locked.
   const [paidBy, setPaidBy] = useState<string>('');
-  // Two-step "Who paid?" prompt: 'self' = you paid, 'other' = a roommate paid.
-  // Until the user answers we hide the rest of the splitter so the choice is unmissable.
-  const [paidByMode, setPaidByMode] = useState<'self' | 'other' | null>(null);
 
   useEffect(() => {
     if (user && !paidBy) setPaidBy(user.id);
@@ -127,7 +124,6 @@ export const ExpenseSplitter = ({
       setIsLocked(false);
       setShowLockedView(false);
       setPaidBy(user?.id || '');
-      setPaidByMode(null);
     }
   }, [open, user?.id]);
 
@@ -507,97 +503,6 @@ export const ExpenseSplitter = ({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto mt-4 space-y-4 pb-4">
-          {/* Step 1 — Who paid for this bill? */}
-          <div className="bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <UserCheck className="w-4 h-4 text-primary" />
-              <h3 className="font-semibold text-sm">Who paid for this bill?</h3>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setPaidByMode('self');
-                  setPaidBy(user?.id || '');
-                }}
-                className={`p-3 rounded-xl border text-left transition-colors ${
-                  paidByMode === 'self'
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <ProfileAvatar avatar={profile?.avatar} size="sm" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">Paid by you</p>
-                    <p className="text-[11px] text-muted-foreground">I paid this bill</p>
-                  </div>
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setPaidByMode('other');
-                  // clear so the user explicitly picks a roommate below
-                  if (paidBy === user?.id) setPaidBy('');
-                }}
-                className={`p-3 rounded-xl border text-left transition-colors ${
-                  paidByMode === 'other'
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-primary/50'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-primary" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">Paid by roommate</p>
-                    <p className="text-[11px] text-muted-foreground">Choose who paid</p>
-                  </div>
-                </div>
-              </button>
-            </div>
-
-            {paidByMode === 'other' && (
-              <div>
-                <label className="text-xs text-muted-foreground">Select roommate</label>
-                <Select value={paidBy} onValueChange={setPaidBy}>
-                  <SelectTrigger className="mt-1 h-11 rounded-xl">
-                    <SelectValue placeholder="Choose who paid">
-                      {(() => {
-                        const m = roomMembers.find(rm => rm.user_id === paidBy);
-                        if (!m) return 'Choose who paid';
-                        return (
-                          <span className="flex items-center gap-2">
-                            <ProfileAvatar avatar={m.profile.avatar} size="xs" />
-                            <span>{m.profile.display_name}</span>
-                          </span>
-                        );
-                      })()}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roomMembers
-                      .filter(m => m.user_id !== user?.id)
-                      .map(m => (
-                        <SelectItem key={m.user_id} value={m.user_id}>
-                          <span className="flex items-center gap-2">
-                            <ProfileAvatar avatar={m.profile.avatar} size="xs" />
-                            <span>{m.profile.display_name}</span>
-                          </span>
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-
-          {paidByMode === null ? (
-            <div className="text-center text-sm text-muted-foreground py-8">
-              Choose who paid above to continue splitting this bill.
-            </div>
-          ) : (
-          <>
           {/* Title input */}
           <div>
             <label className="text-sm font-medium text-muted-foreground">Title</label>
@@ -607,6 +512,40 @@ export const ExpenseSplitter = ({
               className="mt-1 rounded-xl"
               placeholder="Expense title"
             />
+          </div>
+
+          {/* Paid by — who actually paid this scanned bill */}
+          <div>
+            <label className="text-sm font-medium text-muted-foreground">Paid by</label>
+            <Select value={paidBy} onValueChange={setPaidBy}>
+              <SelectTrigger className="mt-1 h-11 rounded-xl">
+                <SelectValue placeholder="Select who paid">
+                  {(() => {
+                    const m = roomMembers.find(rm => rm.user_id === paidBy);
+                    if (!m) return 'Select who paid';
+                    return (
+                      <span className="flex items-center gap-2">
+                        <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                        <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                      </span>
+                    );
+                  })()}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {roomMembers.map(m => (
+                  <SelectItem key={m.user_id} value={m.user_id}>
+                    <span className="flex items-center gap-2">
+                      <ProfileAvatar avatar={m.profile.avatar} size="xs" />
+                      <span>{m.user_id === user?.id ? 'You' : m.profile.display_name}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Defaults to you. Change it if a roommate actually paid the bill.
+            </p>
           </div>
 
           {/* Items list */}
@@ -909,8 +848,6 @@ export const ExpenseSplitter = ({
               </div>
             </div>
           </div>
-          </>
-          )}
         </div>
 
         {/* Complete Bill button - triggers lock flow */}
@@ -925,7 +862,7 @@ export const ExpenseSplitter = ({
           <Button 
             className="flex-1 h-14 rounded-xl text-base gap-2 press-effect"
             onClick={handleCompleteBill}
-            disabled={items.length === 0 || paidByMode === null || !paidBy}
+            disabled={items.length === 0}
           >
             <Lock className="w-5 h-5" />
             Complete Bill

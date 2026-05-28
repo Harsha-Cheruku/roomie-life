@@ -81,14 +81,12 @@ export function useGlobalAlarm() {
     } catch (err) { console.error("Global alarm: fetch error", err); }
   }, [roomId, activeTrigger?.id]);
 
-  // Poll every 30s + realtime subscription. Realtime is the primary signal;
-  // polling is just a safety net so the long interval is fine and dramatically
-  // reduces database load when many rooms / users are online.
+  // Poll every 5s + realtime subscription
   useEffect(() => {
     if (!roomId) return;
     fetchActiveTrigger();
 
-    pollIntervalRef.current = window.setInterval(fetchActiveTrigger, 30000);
+    pollIntervalRef.current = window.setInterval(fetchActiveTrigger, 5000);
 
     const channel = supabase
       .channel(`global-alarm-triggers-${roomId}`)

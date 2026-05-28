@@ -6,7 +6,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useCurrency } from "@/hooks/useCurrency";
-import { getRoomCache, setRoomCache } from "@/lib/roomCache";
 import {
   Select,
   SelectContent,
@@ -64,17 +63,6 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
-  // Hydrate from per-room cache so switching rooms doesn't flash a spinner.
-  useEffect(() => {
-    const cached = getRoomCache<ExpenseData>('home-expense-overview', currentRoom?.id);
-    if (cached) {
-      setData(cached);
-      setIsLoading(false);
-    } else {
-      setIsLoading(true);
-    }
-  }, [currentRoom?.id]);
-
   useEffect(() => {
     if (currentRoom && user) {
       fetchExpenseData();
@@ -87,10 +75,7 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       const channel = supabase
         .channel(`expense-overview-${currentRoom.id}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, schedule)
-        // Only react to splits where the current user is involved → avoids
-        // refetching the entire home overview every time any split anywhere
-        // in the DB changes (was the main cause of the home-page lag).
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits', filter: `user_id=eq.${user.id}` }, schedule)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, schedule)
         .subscribe();
 
       return () => {
@@ -178,16 +163,14 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
         return rows.sort((a, b) => b.amount - a.amount);
       };
 
-      const next: ExpenseData = {
+      setData({
         total, pending, settled, willPay, willGet, todaySpending,
         members: buildRows(memberAmounts),
         willPayPerMember: buildRows(willPayPerUser).filter((r) => r.amount > 0),
         willGetPerMember: buildRows(willGetPerUser).filter((r) => r.amount > 0),
         willPayBills,
         willGetBills,
-      };
-      setData(next);
-      setRoomCache('home-expense-overview', currentRoom.id, next);
+      });
     } catch (error) {
       console.error('Error fetching expense data:', error);
     } finally {
