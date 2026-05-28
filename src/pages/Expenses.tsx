@@ -22,6 +22,7 @@ import { EmptyState } from "@/components/empty-states/EmptyState";
 import { useToast } from "@/hooks/use-toast";
 import { useOfflineExpenses } from "@/hooks/useOfflineExpenses";
 import { useAdminCheck } from "@/hooks/useAdminCheck";
+import { getRoomCache, setRoomCache } from "@/lib/roomCache";
 import {
   DropdownMenu,
   DropdownMenuContent,
