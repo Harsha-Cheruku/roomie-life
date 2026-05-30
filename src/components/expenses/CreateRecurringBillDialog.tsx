@@ -8,7 +8,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
-import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 
 interface Member {
   user_id: string;
@@ -162,27 +161,11 @@ export const CreateRecurringBillDialog = ({ open, onOpenChange, onCreated }: Pro
           <div>
             <Label>Paid By</Label>
             <Select value={paidBy} onValueChange={setPaidBy}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select payer">
-                  {(() => {
-                    const m = members.find((x) => x.user_id === paidBy);
-                    if (!m) return "Select payer";
-                    return (
-                      <span className="flex items-center gap-2">
-                        <ProfileAvatar avatar={m.avatar || "😊"} size="xs" />
-                        <span className="truncate">{m.user_id === user?.id ? "You" : m.display_name}</span>
-                      </span>
-                    );
-                  })()}
-                </SelectValue>
-              </SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select payer" /></SelectTrigger>
               <SelectContent>
                 {members.map((m) => (
                   <SelectItem key={m.user_id} value={m.user_id}>
-                    <span className="flex items-center gap-2">
-                      <ProfileAvatar avatar={m.avatar || "😊"} size="xs" />
-                      <span>{m.user_id === user?.id ? "You" : m.display_name}</span>
-                    </span>
+                    {m.avatar} {m.display_name}
                   </SelectItem>
                 ))}
               </SelectContent>

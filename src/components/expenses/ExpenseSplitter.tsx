@@ -365,21 +365,20 @@ export const ExpenseSplitter = ({
     setIsSaving(true);
     try {
       // If we have a scanned receipt image (data URL from camera/upload),
-      // upload it to storage so the original bill photo travels with the
-      // expense (and stays small in the DB row).
-      let receiptPath: string | null = null;
+      // upload it to storage so it shows up in the bill's Notes section.
+      let notesImagePath: string | null = null;
       if (receiptImage && receiptImage.startsWith('data:')) {
         try {
           const blob = await (await fetch(receiptImage)).blob();
           const ext = (blob.type.split('/')[1] || 'jpg').toLowerCase();
-          const path = `${user.id}/receipts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+          const path = `${user.id}/notes/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
           const { error: upErr } = await supabase.storage
             .from('chat-attachments')
             .upload(path, blob, { contentType: blob.type || 'image/jpeg', upsert: false });
-          if (!upErr) receiptPath = path;
-          else console.warn('Receipt upload failed:', upErr);
+          if (!upErr) notesImagePath = path;
+          else console.warn('Receipt upload to notes failed:', upErr);
         } catch (e) {
-          console.warn('Receipt upload error:', e);
+          console.warn('Receipt -> notes upload error:', e);
         }
       }
 
@@ -392,12 +391,12 @@ export const ExpenseSplitter = ({
           paid_by: user.id,
           title,
           total_amount: calculateTotal(),
-          receipt_url: receiptPath || (receiptImage && !receiptImage.startsWith('data:') ? receiptImage : null),
+          receipt_url: receiptImage,
           status: 'pending',
           category: 'general',
           split_type: 'custom',
-          notes: null,
-          notes_image_url: null,
+          notes: notesImagePath ? '📷 Scanned receipt attached' : null,
+          notes_image_url: notesImagePath,
         })
         .select()
         .single();

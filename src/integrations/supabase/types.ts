@@ -748,33 +748,24 @@ export type Database = {
       recurring_bill_runs: {
         Row: {
           created_at: string
-          decided_at: string | null
-          decided_by: string | null
           expense_id: string | null
           id: string
           recurring_bill_id: string
           run_date: string
-          status: string
         }
         Insert: {
           created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
           expense_id?: string | null
           id?: string
           recurring_bill_id: string
           run_date: string
-          status?: string
         }
         Update: {
           created_at?: string
-          decided_at?: string | null
-          decided_by?: string | null
           expense_id?: string | null
           id?: string
           recurring_bill_id?: string
           run_date?: string
-          status?: string
         }
         Relationships: [
           {

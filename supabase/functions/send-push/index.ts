@@ -131,7 +131,6 @@ interface PushPayload {
   url?: string;
   tag?: string;
   reference_type?: string;
-  reference_id?: string;
 }
 
 const routeFor = (refType?: string) => {
@@ -196,7 +195,6 @@ serve(async (req) => {
               url: body.url || routeFor(body.reference_type),
               tag: body.tag || "",
               reference_type: body.reference_type || "",
-              reference_id: body.reference_id || "",
             },
           );
           if (!r.ok && (r.code === 404 || r.code === 400)) {
