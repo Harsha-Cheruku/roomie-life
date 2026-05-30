@@ -55,17 +55,25 @@ export default function AdminReports() {
     const rows = (data ?? []) as unknown as Report[];
     setReports(rows);
 
-    const ids = Array.from(new Set(rows.flatMap((r) => [r.reporter_id, r.reported_user_id].filter(Boolean) as string[])));
-    if (ids.length) {
+    // Only fetch profiles we don't already have cached to avoid re-querying
+    // the profiles table on every refresh / realtime event.
+    const needed = Array.from(new Set(
+      rows.flatMap((r) => [r.reporter_id, r.reported_user_id].filter(Boolean) as string[])
+    )).filter((id) => !profiles[id]);
+    if (needed.length) {
       const { data: profs } = await supabase
         .from("profiles")
         .select("user_id, display_name, avatar")
-        .in("user_id", ids);
-      const map: Record<string, { display_name: string; avatar: string | null }> = {};
-      (profs ?? []).forEach((p: any) => {
-        map[p.user_id] = { display_name: p.display_name, avatar: p.avatar };
-      });
-      setProfiles(map);
+        .in("user_id", needed);
+      if (profs?.length) {
+        setProfiles((prev) => {
+          const next = { ...prev };
+          (profs as any[]).forEach((p) => {
+            next[p.user_id] = { display_name: p.display_name, avatar: p.avatar };
+          });
+          return next;
+        });
+      }
     }
     setLoading(false);
   };
@@ -74,8 +82,25 @@ export default function AdminReports() {
     load();
     const channel = supabase
       .channel("admin-reports")
-      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, () => {
-        load();
+      .on("postgres_changes", { event: "*", schema: "public", table: "reports" }, (payload) => {
+        // Apply the change locally instead of refetching the whole list.
+        // Cuts DB reads dramatically when many reports stream in.
+        setReports((prev) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Report;
+            if (prev.some((r) => r.id === row.id)) return prev;
+            return [row, ...prev].slice(0, 200);
+          }
+          if (payload.eventType === "UPDATE") {
+            const row = payload.new as Report;
+            return prev.map((r) => (r.id === row.id ? row : r));
+          }
+          if (payload.eventType === "DELETE") {
+            const oldId = (payload.old as any)?.id;
+            return prev.filter((r) => r.id !== oldId);
+          }
+          return prev;
+        });
       })
       .subscribe();
     return () => {

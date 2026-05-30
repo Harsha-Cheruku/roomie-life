@@ -45,12 +45,17 @@ export default function AdminTickets() {
       .limit(500);
     const list = (data ?? []) as Ticket[];
     setTickets(list);
-    const ids = Array.from(new Set(list.map(t => t.user_id)));
-    if (ids.length) {
-      const { data: ps } = await supabase.from("profiles").select("user_id,display_name,avatar").in("user_id", ids);
-      const map: Record<string, Profile> = {};
-      (ps ?? []).forEach((p: any) => { map[p.user_id] = p; });
-      setProfiles(map);
+    // Only query profiles we don't already have to avoid repeated reads.
+    const needed = Array.from(new Set(list.map(t => t.user_id))).filter(id => !profiles[id]);
+    if (needed.length) {
+      const { data: ps } = await supabase.from("profiles").select("user_id,display_name,avatar").in("user_id", needed);
+      if (ps?.length) {
+        setProfiles(prev => {
+          const next = { ...prev };
+          (ps as any[]).forEach((p) => { next[p.user_id] = p; });
+          return next;
+        });
+      }
     }
     setLoading(false);
   };
@@ -59,9 +64,31 @@ export default function AdminTickets() {
     load();
     const ch = supabase
       .channel("admin-tickets")
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "support_tickets" }, (payload) => {
+        // Apply incremental change instead of refetching the full list.
+        setTickets(prev => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Ticket;
+            if (prev.some(t => t.id === row.id)) return prev;
+            return [row, ...prev].slice(0, 500);
+          }
+          if (payload.eventType === "UPDATE") {
+            const row = payload.new as Ticket;
+            const next = prev.map(t => (t.id === row.id ? row : t));
+            // Keep sorted by last_message_at desc
+            next.sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
+            return next;
+          }
+          if (payload.eventType === "DELETE") {
+            const oldId = (payload.old as any)?.id;
+            return prev.filter(t => t.id !== oldId);
+          }
+          return prev;
+        });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filtered = tickets.filter(t => {
