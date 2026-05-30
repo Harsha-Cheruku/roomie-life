@@ -1,9 +1,36 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { errorResponse, logError } from "../_shared/errors.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const MODEL = 'google/gemini-2.5-flash';
+
+const sha256Hex = async (bytes: Uint8Array) => {
+  const buf = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+};
+
+const getUserIdFromAuth = (req: Request): string | null => {
+  try {
+    const auth = req.headers.get('Authorization') || '';
+    const token = auth.replace(/^Bearer\s+/i, '');
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const json = JSON.parse(atob(padded.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof json?.sub === 'string' ? json.sub : null;
+  } catch { return null; }
+};
+
+const supabaseAdmin = () => {
+  const url = Deno.env.get('SUPABASE_URL');
+  const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!url || !key) return null;
+  return createClient(url, key, { auth: { persistSession: false } });
 };
 
 const toMoney = (value: unknown) => {
@@ -71,6 +98,7 @@ serve(async (req) => {
   try {
     let imageBase64: string | undefined;
     let imageMime = 'image/jpeg';
+    let rawBytes: Uint8Array | null = null;
     const contentType = req.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -87,6 +115,7 @@ serve(async (req) => {
       }
       imageMime = file.type || 'image/jpeg';
       const buf = new Uint8Array(await file.arrayBuffer());
+      rawBytes = buf;
       // Chunked base64 encode to keep peak memory low for large images.
       let binary = '';
       const chunk = 0x8000;
@@ -97,6 +126,15 @@ serve(async (req) => {
     } else {
       const body = await req.json().catch(() => ({} as { imageBase64?: string }));
       imageBase64 = body.imageBase64;
+      if (imageBase64) {
+        try {
+          const b64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          rawBytes = arr;
+        } catch { /* ignore */ }
+      }
     }
 
     if (!imageBase64) {
@@ -104,6 +142,61 @@ serve(async (req) => {
         JSON.stringify({ error: 'No image provided' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // ---- Rate limit + cache (best-effort; failures don't break scanning) ----
+    const admin = supabaseAdmin();
+    const userId = getUserIdFromAuth(req);
+    const inputHash = rawBytes ? await sha256Hex(rawBytes) : null;
+    const cacheKey = inputHash ? `${MODEL}:${inputHash}` : null;
+
+    if (admin && cacheKey) {
+      try {
+        const { data: cached } = await admin
+          .from('ai_response_cache')
+          .select('response')
+          .eq('input_hash', cacheKey)
+          .maybeSingle();
+        if (cached?.response) {
+          console.log('Cache HIT for', cacheKey.slice(0, 24));
+          admin.from('ai_response_cache')
+            .update({ last_used_at: new Date().toISOString(), hit_count: (cached as any).hit_count ? undefined : undefined })
+            .eq('input_hash', cacheKey)
+            .then(() => {});
+          return new Response(JSON.stringify({ ...cached.response, cached: true }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Cache': 'HIT' },
+          });
+        }
+      } catch (e) { console.warn('cache lookup failed', e); }
+    }
+
+    if (admin && userId) {
+      try {
+        const { data: rl } = await admin.rpc('check_ai_rate_limit', {
+          _user_id: userId,
+          _endpoint: 'scan-receipt',
+          _max_calls: 10,
+          _window_seconds: 60,
+          _cooldown_seconds: 60,
+        });
+        const row = Array.isArray(rl) ? rl[0] : rl;
+        if (row && row.allowed === false) {
+          return new Response(
+            JSON.stringify({
+              error: `Too many scans. Please wait ${row.retry_after_seconds}s before trying again.`,
+              retry_after: row.retry_after_seconds,
+            }),
+            {
+              status: 429,
+              headers: {
+                ...corsHeaders,
+                'Content-Type': 'application/json',
+                'Retry-After': String(row.retry_after_seconds || 60),
+              },
+            }
+          );
+        }
+      } catch (e) { console.warn('rate limit check failed', e); }
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -124,7 +217,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: MODEL,
         messages: [
           {
             role: 'system',
@@ -233,6 +326,17 @@ CRITICAL RULES:
     }
 
     console.log('Extracted receipt data:', parsedResult);
+
+    if (admin && cacheKey) {
+      admin.from('ai_response_cache')
+        .upsert({
+          input_hash: cacheKey,
+          model: MODEL,
+          response: parsedResult,
+          last_used_at: new Date().toISOString(),
+        }, { onConflict: 'input_hash' })
+        .then(({ error }) => { if (error) console.warn('cache write failed', error); });
+    }
 
     return new Response(JSON.stringify(parsedResult), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
