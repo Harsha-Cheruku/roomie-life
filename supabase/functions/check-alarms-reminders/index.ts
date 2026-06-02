@@ -30,6 +30,19 @@ Deno.serve(async (req) => {
 
     console.log(`[check-alarms] Running at UTC: ${now.toISOString()}`);
 
+    // Short-circuit: cheap existence check. If no active alarms AND no stale ringing
+    // triggers, exit immediately to save CPU/DB work on the per-minute cron tick.
+    const [{ count: activeAlarmCount }, { count: ringingCount }] = await Promise.all([
+      supabase.from("alarms").select("id", { count: "exact", head: true }).eq("is_active", true),
+      supabase.from("alarm_triggers").select("id", { count: "exact", head: true }).eq("status", "ringing"),
+    ]);
+    if (!activeAlarmCount && !ringingCount) {
+      return new Response(
+        JSON.stringify({ success: true, skipped: true, reason: "no-work" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
+      );
+    }
+
     // Cleanup stale ringing triggers quickly so old alarms don't ring when users reopen the app.
     const { data: staleTriggers, error: staleErr } = await supabase
       .from("alarm_triggers")

@@ -20,6 +20,22 @@ Deno.serve(async (req) => {
     const now = new Date();
     let processed = 0;
 
+    // Short-circuit: cheap existence check before main work on the per-minute cron tick.
+    const { count: dueCount } = await supabase
+      .from("reminders")
+      .select("id", { count: "exact", head: true })
+      .eq("notified", false)
+      .eq("status", "scheduled")
+      .lte("remind_at", now.toISOString())
+      .gte("remind_at", new Date(now.getTime() - 600000).toISOString());
+
+    if (!dueCount) {
+      return new Response(
+        JSON.stringify({ success: true, processed: 0, skipped: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Fetch due reminders that haven't been notified yet
     const { data: dueReminders, error: fetchErr } = await supabase
       .from("reminders")

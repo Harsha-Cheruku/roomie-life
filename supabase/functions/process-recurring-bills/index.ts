@@ -34,6 +34,20 @@ Deno.serve(async (req) => {
     let processed = 0;
     let skipped = 0;
 
+    // Short-circuit: skip when no bills are due today.
+    const { count: dueCount } = await supabase
+      .from("recurring_bills")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true)
+      .lte("next_run_date", today);
+
+    if (!dueCount) {
+      return new Response(
+        JSON.stringify({ success: true, processed: 0, skipped: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const { data: due, error } = await supabase
       .from("recurring_bills")
       .select("*, recurring_bill_splits(user_id, amount)")

@@ -302,13 +302,14 @@ export const useGameLobby = () => {
 
     // Realtime is the primary channel — polling is only a safety net for missed events.
     // Lower frequency = less main-thread churn = snappier dice/animation.
+    // Realtime drives updates; this is only a safety net for missed events.
+    // Raised from 1.5s/2.5s to 10s/15s to cut DB load ~6x while keeping gameplay snappy.
     const interval = window.setInterval(() => {
       if (Date.now() < suppressPollUntilRef.current) return;
-      // Skip when tab is hidden — saves battery & avoids stale UI work.
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void fetchLobbyState(lobby.id);
       void fetchPlayers(lobby.id);
-    }, lobby.status === "waiting" ? 2500 : 1500);
+    }, lobby.status === "waiting" ? 15000 : 10000);
 
     return () => window.clearInterval(interval);
   }, [fetchLobbyState, fetchPlayers, lobby?.id, lobby?.status]);
