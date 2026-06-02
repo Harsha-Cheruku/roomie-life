@@ -63,26 +63,31 @@ export const RoomHeader = () => {
     if (!user?.id || userRooms.length <= 1) return;
 
     const fetchRoomUnreads = async () => {
-      const otherRooms = userRooms.filter(r => r.id !== currentRoom?.id);
+      const otherRoomIds = userRooms
+        .filter(r => r.id !== currentRoom?.id)
+        .map(r => r.id);
+      if (otherRoomIds.length === 0) { setRoomUnreadCounts({}); return; }
+
+      // Single query for all rooms instead of N queries.
+      const { data } = await supabase
+        .from("notifications")
+        .select("room_id")
+        .eq("user_id", user.id)
+        .eq("is_read", false)
+        .in("room_id", otherRoomIds);
+
       const counts: Record<string, number> = {};
-
-      for (const room of otherRooms) {
-        const { count } = await supabase
-          .from("notifications")
-          .select("*", { count: "exact", head: true })
-          .eq("user_id", user.id)
-          .eq("room_id", room.id)
-          .eq("is_read", false);
-        counts[room.id] = count || 0;
-      }
-
+      otherRoomIds.forEach(id => { counts[id] = 0; });
+      (data || []).forEach((n: any) => {
+        if (n.room_id) counts[n.room_id] = (counts[n.room_id] || 0) + 1;
+      });
       setRoomUnreadCounts(counts);
     };
 
     fetchRoomUnreads();
 
-    // Refresh every 30 seconds
-    const interval = setInterval(fetchRoomUnreads, 30000);
+    // Reduced from 30s to 90s; combined into one query (was N per interval).
+    const interval = setInterval(fetchRoomUnreads, 90000);
     return () => clearInterval(interval);
   }, [user?.id, userRooms, currentRoom?.id]);
 

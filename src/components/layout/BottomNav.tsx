@@ -110,7 +110,8 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
       .subscribe();
 
     channelRef.current = channel;
-    pollRef.current = window.setInterval(fetchUnread, 30000);
+    // Realtime INSERT handler increments live; poll is only a resync safety net.
+    pollRef.current = window.setInterval(fetchUnread, 120000);
 
     return () => {
       if (channelRef.current) {

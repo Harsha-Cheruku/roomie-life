@@ -86,7 +86,9 @@ export function useGlobalAlarm() {
     if (!roomId) return;
     fetchActiveTrigger();
 
-    pollIntervalRef.current = window.setInterval(fetchActiveTrigger, 5000);
+    // Realtime drives updates; poll is a safety net for missed events.
+    // Reduced from 5s to 30s to cut query load ~6x without affecting UX.
+    pollIntervalRef.current = window.setInterval(fetchActiveTrigger, 30000);
 
     const channel = supabase
       .channel(`global-alarm-triggers-${roomId}`)
