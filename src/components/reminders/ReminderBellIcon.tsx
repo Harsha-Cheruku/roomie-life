@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { Bell } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useReminderCount } from "@/hooks/useReminderCount";
 import { ReminderPanel } from "./ReminderPanel";
 
 interface ReminderBellIconProps {
@@ -12,47 +10,8 @@ interface ReminderBellIconProps {
 }
 
 export const ReminderBellIcon = ({ filterType }: ReminderBellIconProps) => {
-  const { user, currentRoom } = useAuth();
-  const [count, setCount] = useState(0);
+  const { count, refetch } = useReminderCount(filterType);
   const [showPanel, setShowPanel] = useState(false);
-
-  const fetchCount = useCallback(async () => {
-    if (!user || !currentRoom) return;
-
-    const { count: c, error } = await supabase
-      .from("reminders")
-      .select("id", { count: "exact", head: true })
-      .eq("room_id", currentRoom.id)
-      .eq("reminder_type", filterType)
-      .in("status", ["scheduled", "notified"])
-      .or(`created_by.eq.${user.id},user_id.eq.${user.id}`);
-
-    if (!error && c !== null) setCount(c);
-  }, [user, currentRoom, filterType]);
-
-  useEffect(() => {
-    fetchCount();
-
-    if (!currentRoom) return;
-
-    const channel = supabase
-      .channel(`reminder-bell-${filterType}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "reminders",
-          filter: `room_id=eq.${currentRoom.id}`,
-        },
-        () => fetchCount()
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentRoom, fetchCount, filterType]);
 
   return (
     <>
@@ -74,7 +33,7 @@ export const ReminderBellIcon = ({ filterType }: ReminderBellIconProps) => {
         open={showPanel}
         onOpenChange={setShowPanel}
         filterType={filterType}
-        onUpdate={fetchCount}
+        onUpdate={refetch}
       />
     </>
   );

@@ -519,7 +519,9 @@ export const Chat = () => {
       if (document.visibilityState !== 'visible') return;
       void fetchMessages({ silent: true, incremental: true });
     };
-    const intervalMs = connectionState === 'connected' ? 5000 : 2000;
+    // Realtime is primary. Safety-net poll: was 5s/2s, now 30s/10s — cuts query
+    // volume ~6x while keeping fast catch-up via focus/online listeners below.
+    const intervalMs = connectionState === 'connected' ? 30000 : 10000;
     const interval = window.setInterval(tick, intervalMs);
     // Immediate catch-up on focus/online
     const onFocus = () => tick();
