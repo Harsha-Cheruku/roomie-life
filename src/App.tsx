@@ -26,8 +26,6 @@ const Storage = lazy(() => import("./pages/Storage").then(m => ({ default: m.Sto
 const Chat = lazy(() => import("./pages/Chat").then(m => ({ default: m.Chat })));
 const Alarms = lazy(() => import("./pages/Alarms"));
 const Reminders = lazy(() => import("./pages/Reminders"));
-const MusicSync = lazy(() => import("./pages/MusicSync"));
-const Games = lazy(() => import("./pages/Games"));
 const Notifications = lazy(() => import("./pages/Notifications"));
 const NotificationSettings = lazy(() => import("./pages/NotificationSettings"));
 const AdminPanel = lazy(() => import("./pages/AdminPanel"));
@@ -251,22 +249,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Reminders />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/music"
-              element={
-                <ProtectedRoute>
-                  <MusicSync />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/games"
-              element={
-                <ProtectedRoute>
-                  <Games />
                 </ProtectedRoute>
               }
             />
