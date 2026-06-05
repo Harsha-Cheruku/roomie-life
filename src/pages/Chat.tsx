@@ -88,7 +88,24 @@ const messagesAreEqual = (current: Message[], next: Message[]) => {
   });
 };
 
-const MESSAGE_HISTORY_LIMIT = 300;
+const MESSAGE_HISTORY_LIMIT = 150;
+const CHAT_CACHE_PREFIX = 'roommate_chat_cache_v1:';
+const CHAT_POLL_INTERVAL_MS = 30000;
+
+const readChatCache = (roomId: string): Message[] | null => {
+  try {
+    const raw = localStorage.getItem(CHAT_CACHE_PREFIX + roomId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+};
+
+const writeChatCache = (roomId: string, msgs: Message[]) => {
+  try {
+    localStorage.setItem(CHAT_CACHE_PREFIX + roomId, JSON.stringify(msgs.slice(-MESSAGE_HISTORY_LIMIT)));
+  } catch { /* quota / private mode */ }
+};
 
 const sortMessages = (items: Message[]) =>
   [...items].sort((a, b) => {
@@ -199,7 +216,8 @@ export const Chat = () => {
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((message) => message.id));
     newestMessageAtRef.current = messages.length ? messages[messages.length - 1].created_at : null;
-  }, [messages]);
+    if (currentRoom && messages.length) writeChatCache(currentRoom.id, messages);
+  }, [messages, currentRoom]);
 
   const fetchMessageViews = useCallback(async (messageList: Message[]) => {
     if (messageList.length === 0) {
