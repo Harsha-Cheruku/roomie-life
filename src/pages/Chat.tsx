@@ -360,6 +360,12 @@ export const Chat = () => {
     newestMessageAtRef.current = null;
     fetchingMessagesRef.current = false;
     setSelectedMessageId(null);
+    // Instant render from local cache for a zero-latency feel.
+    const cached = readChatCache(currentRoom.id);
+    if (cached && cached.length) {
+      setMessages(cached);
+      setIsLoading(false);
+    }
     void fetchRoomMembers();
     void fetchMessages();
   }, [currentRoom, fetchMessages, fetchRoomMembers]);
