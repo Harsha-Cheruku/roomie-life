@@ -71,6 +71,7 @@ serve(async (req) => {
   try {
     let imageBase64: string | undefined;
     let imageMime = 'image/jpeg';
+    let requestedModel: string | undefined;
     const contentType = req.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -79,6 +80,8 @@ serve(async (req) => {
       // timeouts/OOM on mobile networks.
       const form = await req.formData();
       const file = form.get('image');
+      const m = form.get('model');
+      if (typeof m === 'string' && m.length > 0 && m.length < 100) requestedModel = m;
       if (!(file instanceof File)) {
         return new Response(
           JSON.stringify({ error: 'No image file provided' }),
@@ -95,8 +98,9 @@ serve(async (req) => {
       }
       imageBase64 = `data:${imageMime};base64,${btoa(binary)}`;
     } else {
-      const body = await req.json().catch(() => ({} as { imageBase64?: string }));
+      const body = await req.json().catch(() => ({} as { imageBase64?: string; model?: string }));
       imageBase64 = body.imageBase64;
+      if (typeof body.model === 'string') requestedModel = body.model;
     }
 
     if (!imageBase64) {
@@ -124,7 +128,8 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        // Default to the cost-effective lite model; clients can override.
+        model: requestedModel || 'google/gemini-2.5-flash-lite',
         messages: [
           {
             role: 'system',

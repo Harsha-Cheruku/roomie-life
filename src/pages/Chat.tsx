@@ -88,7 +88,24 @@ const messagesAreEqual = (current: Message[], next: Message[]) => {
   });
 };
 
-const MESSAGE_HISTORY_LIMIT = 300;
+const MESSAGE_HISTORY_LIMIT = 150;
+const CHAT_CACHE_PREFIX = 'roommate_chat_cache_v1:';
+const CHAT_POLL_INTERVAL_MS = 30000;
+
+const readChatCache = (roomId: string): Message[] | null => {
+  try {
+    const raw = localStorage.getItem(CHAT_CACHE_PREFIX + roomId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch { return null; }
+};
+
+const writeChatCache = (roomId: string, msgs: Message[]) => {
+  try {
+    localStorage.setItem(CHAT_CACHE_PREFIX + roomId, JSON.stringify(msgs.slice(-MESSAGE_HISTORY_LIMIT)));
+  } catch { /* quota / private mode */ }
+};
 
 const sortMessages = (items: Message[]) =>
   [...items].sort((a, b) => {
@@ -199,7 +216,8 @@ export const Chat = () => {
   useEffect(() => {
     messageIdsRef.current = new Set(messages.map((message) => message.id));
     newestMessageAtRef.current = messages.length ? messages[messages.length - 1].created_at : null;
-  }, [messages]);
+    if (currentRoom && messages.length) writeChatCache(currentRoom.id, messages);
+  }, [messages, currentRoom]);
 
   const fetchMessageViews = useCallback(async (messageList: Message[]) => {
     if (messageList.length === 0) {
@@ -342,6 +360,12 @@ export const Chat = () => {
     newestMessageAtRef.current = null;
     fetchingMessagesRef.current = false;
     setSelectedMessageId(null);
+    // Instant render from local cache for a zero-latency feel.
+    const cached = readChatCache(currentRoom.id);
+    if (cached && cached.length) {
+      setMessages(cached);
+      setIsLoading(false);
+    }
     void fetchRoomMembers();
     void fetchMessages();
   }, [currentRoom, fetchMessages, fetchRoomMembers]);
@@ -377,164 +401,33 @@ export const Chat = () => {
 
   useEffect(() => { markMessagesSeen(); }, [markMessagesSeen]);
 
-  // Realtime subscription
+  // Lazy 30s polling — only when the tab is visible. Replaces always-on
+  // realtime channel + sub-second polling to free up sockets and DB load.
   useEffect(() => {
     if (!currentRoom) return;
-    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    setConnectionState('connected');
 
-    let cancelled = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let attempt = 0;
-
-    const buildChannel = () => supabase
-      .channel(`room-${currentRoom.id}-messages-realtime`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          setMessages(prev => {
-            const next = mergeMessages(prev, [newMsg]);
-            return messagesAreEqual(prev, next) ? prev : next;
-          });
-          const currentUserId = userIdRef.current;
-          if (newMsg.sender_id === currentUserId || autoScrollRef.current) {
-            scrollToBottom('smooth');
-          } else {
-            setHasNewMessagesBelow(true);
-          }
-          if (newMsg.sender_id !== currentUserId) {
-            const senderProfile = profilesMapRef.current.get(newMsg.sender_id);
-            toastHook({ title: senderProfile?.display_name || 'Someone', description: newMsg.message_type === 'text' ? newMsg.content.slice(0, 50) : `Sent a ${newMsg.message_type}` });
-          }
-        }
-      )
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` },
-        (payload) => {
-          const updated = payload.new as Message;
-          setMessages(prev => {
-            const next = mergeMessages(prev, [updated]);
-            return messagesAreEqual(prev, next) ? prev : next;
-          });
-        }
-      )
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_views' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') return;
-
-          const receipt = payload.new as Partial<SeenReceipt>;
-          if (!receipt.message_id || !receipt.user_id || !receipt.seen_at) return;
-          if (!messageIdsRef.current.has(receipt.message_id)) return;
-
-          setMessageViews((prev) => mergeSeenReceipts(prev, [receipt as SeenReceipt]));
-        }
-      )
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'message_reactions' },
-        (payload) => {
-          const r = payload.new as Reaction;
-          if (!messageIdsRef.current.has(r.message_id)) return;
-          setReactions((prev) => {
-            const list = prev[r.message_id] || [];
-            if (list.some((x) => x.user_id === r.user_id && x.emoji === r.emoji)) return prev;
-            return { ...prev, [r.message_id]: [...list, r] };
-          });
-        }
-      )
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'message_reactions' },
-        (payload) => {
-          const r = payload.old as Reaction;
-          if (!r.message_id) return;
-          setReactions((prev) => ({
-            ...prev,
-            [r.message_id]: (prev[r.message_id] || []).filter((x) => !(x.user_id === r.user_id && x.emoji === r.emoji)),
-          }));
-        }
-      );
-
-    const scheduleReconnect = () => {
-      if (cancelled) return;
-      if (reconnectTimer) return;
-      attempt = Math.min(attempt + 1, 6);
-      const delay = Math.min(1000 * 2 ** (attempt - 1), 15000); // 1s,2s,4s,8s,15s cap
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        if (cancelled) return;
-        if (channelRef.current) {
-          supabase.removeChannel(channelRef.current);
-          channelRef.current = null;
-        }
-        connect();
-      }, delay);
-    };
-
-    const connect = () => {
-      setConnectionState('connecting');
-      const channel = buildChannel();
-      channel.subscribe((status) => {
-        if (cancelled) return;
-        if (status === 'SUBSCRIBED') {
-          attempt = 0;
-          setConnectionState('connected');
-          // Refresh on (re)connect to recover any missed messages.
-          void fetchMessages({ silent: true, incremental: true });
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          setConnectionState('disconnected');
-          scheduleReconnect();
-        }
-      });
-      channelRef.current = channel;
-    };
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null; }
-    };
-    // Only re-subscribe when the room actually changes. profilesMap/user/toast are
-    // accessed via refs to keep the channel stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentRoom?.id]);
-
-  // Realtime + reconnect-only refresh. Removed 3.5s polling that caused message-list churn / lag.
-  useEffect(() => {
-    if (!currentRoom) return;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") void fetchMessages({ silent: true, incremental: true });
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("online", onVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("online", onVisible);
-    };
-  }, [currentRoom, fetchMessages]);
-
-  // Always-on background sync: poll every few seconds regardless of realtime
-  // state. messagesAreEqual prevents re-renders when nothing changed, so this
-  // is cheap. When realtime is healthy we slow down; when it stalls we speed
-  // up. Also kicks off immediately on focus / online events for instant catch-up.
-  useEffect(() => {
-    if (!currentRoom) return;
     const tick = () => {
       if (document.visibilityState !== 'visible') return;
       void fetchMessages({ silent: true, incremental: true });
     };
-    // Realtime is primary. Safety-net poll: was 5s/2s, now 30s/10s — cuts query
-    // volume ~6x while keeping fast catch-up via focus/online listeners below.
-    const intervalMs = connectionState === 'connected' ? 30000 : 10000;
-    const interval = window.setInterval(tick, intervalMs);
-    // Immediate catch-up on focus/online
+
+    // Initial catch-up
+    tick();
+    const interval = window.setInterval(tick, CHAT_POLL_INTERVAL_MS);
+
     const onFocus = () => tick();
     window.addEventListener('focus', onFocus);
     window.addEventListener('online', onFocus);
     document.addEventListener('visibilitychange', onFocus);
+
     return () => {
       window.clearInterval(interval);
       window.removeEventListener('focus', onFocus);
       window.removeEventListener('online', onFocus);
       document.removeEventListener('visibilitychange', onFocus);
     };
-  }, [currentRoom, fetchMessages, connectionState]);
+  }, [currentRoom, fetchMessages]);
 
   useEffect(() => {
     if (!messages.length) return;
