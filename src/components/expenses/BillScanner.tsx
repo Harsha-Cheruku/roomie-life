@@ -3,6 +3,7 @@ import { Camera, Upload, X, Loader2, Scan, AlertTriangle, RotateCcw } from 'luci
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
+import { useReceiptUpload, compressReceiptImage } from '@/hooks/useReceiptUpload';
 
 interface ExtractedItem {
   name: string;
@@ -23,80 +24,17 @@ interface BillScannerProps {
   onScanComplete: (result: ScanResult, imageBase64: string) => void;
 }
 
-/**
- * Lightweight image prep for OCR:
- * Just downscale large photos and JPEG-compress so the upload is fast.
- * The AI model handles colour, contrast and noise on its own — heavy
- * grayscale/histogram/unsharp passes added seconds without improving accuracy.
- */
-const preprocessForOCR = (
-  dataUrl: string
-): Promise<{ dataUrl: string; blob: Blob }> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      // Cap the longest edge — large photos slow upload + AI processing,
-      // but keep enough resolution for small printed text on phone photos.
-      // 1400px is plenty for Gemini OCR and keeps the base64 payload small
-      // enough that mobile networks don't time out the request.
-      const maxDim = 1400;
-      if (width > maxDim || height > maxDim) {
-        const ratio = Math.min(maxDim / width, maxDim / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d')!;
-      // 'high' quality smoothing is very expensive on mobile WebView and
-      // adds 1-3s of UI freeze on big photos for no OCR benefit.
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'medium';
-      ctx.drawImage(img, 0, 0, width, height);
-
-      // We deliberately skip the contrast/histogram pass: it scans + writes
-      // ~17MB of pixel data on the main thread for a 1400×2400 photo and
-      // froze the UI on lower-end Android phones. Gemini handles colour,
-      // shadow and contrast well on its own.
-      //
-      // JPEG @ 0.82 — visually identical to 0.9 for receipts but ~40%
-      // smaller payload. Emit a Blob (binary) for upload to avoid the
-      // 33% base64 overhead and the giant string allocation that caused
-      // OOM/timeouts on low-end Android WebViews.
-      canvas.toBlob(
-        (blob) => {
-          if (blob) {
-            resolve({ dataUrl: canvas.toDataURL('image/jpeg', 0.82), blob });
-          } else {
-            resolve({ dataUrl, blob: new Blob() });
-          }
-        },
-        'image/jpeg',
-        0.82
-      );
-    };
-    img.onerror = () => resolve({ dataUrl, blob: new Blob() });
-    img.src = dataUrl;
-  });
-};
-
 export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerProps) => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [isScanning, setIsScanning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const cameraCapturePendingRef = useRef(false);
-  const imageBlobRef = useRef<Blob | null>(null);
   const { toast } = useToast();
+  const { scan, setBlob, isScanning, remaining, monthlyLimit } = useReceiptUpload();
 
-  // If the BillScanner was opened from a Share-Target flow, pick up the
-  // pending image and use it as the preview right away.
   useEffect(() => {
     if (!open) return;
     try {
@@ -114,15 +52,12 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
       cameraCapturePendingRef.current = false;
       return;
     }
-
     cameraCapturePendingRef.current = false;
     setCaptureError(null);
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Invalid file', description: 'Please select an image file', variant: 'destructive' });
       return;
     }
-
-    // Reject huge files early
     if (file.size > 10 * 1024 * 1024) {
       toast({ title: 'File too large', description: 'Max 10MB', variant: 'destructive' });
       return;
@@ -132,24 +67,17 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     const reader = new FileReader();
     reader.onload = async (event) => {
       const raw = event.target?.result as string;
-      // Show preview immediately so the UI is responsive,
-      // then run heavy preprocessing without blocking.
       setImagePreview(raw);
-      // Fallback blob = the original file so scan can run even if
-      // preprocessing fails or is still pending.
-      imageBlobRef.current = file;
+      setBlob(file);
       const runHeavy = async () => {
         try {
-          const { dataUrl, blob } = await preprocessForOCR(raw);
+          const { dataUrl, blob } = await compressReceiptImage(file);
           setImagePreview(dataUrl);
-          if (blob && blob.size > 0) imageBlobRef.current = blob;
-        } catch {
-          // keep raw preview
-        } finally {
+          if (blob && blob.size > 0) setBlob(blob);
+        } catch { /* keep raw */ } finally {
           setIsProcessing(false);
         }
       };
-      // Defer to next idle frame so the preview paints first
       const ric = (window as any).requestIdleCallback as undefined | ((cb: () => void) => number);
       if (ric) ric(runHeavy); else setTimeout(runHeavy, 50);
     };
@@ -158,61 +86,19 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
 
   const scanReceipt = async () => {
     if (!imagePreview) return;
-    const blob = imageBlobRef.current;
-    if (!blob || blob.size === 0) {
-      setScanError('Image not ready yet, try again in a moment.');
+    if (remaining <= 0) {
+      const msg = `Monthly scan limit reached (${monthlyLimit}/month). Resets next month.`;
+      setScanError(msg);
+      toast({ title: 'Limit reached', description: msg, variant: 'destructive' });
       return;
     }
-
-    setIsScanning(true);
     setScanError(null);
-    // Auto-retry transient network/5xx errors once — phone camera flows
-    // often hit a flaky cell connection on the very first request.
-    const callOnce = async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60_000);
-      try {
-        // Upload the image as a binary file via FormData instead of a
-        // base64 JSON payload — base64 inflates the request by ~33% and
-        // forces both client and edge runtime to materialize the whole
-        // string in memory, which caused timeouts/OOM on low-end Android.
-        const form = new FormData();
-        form.append('image', blob, 'receipt.jpg');
-        const r = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/scan-receipt`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            },
-            body: form,
-            signal: controller.signal,
-          }
-        );
-        return r;
-      } finally {
-        clearTimeout(timeout);
-      }
-    };
-
     try {
-      let response: Response;
-      try {
-        response = await callOnce();
-        if (!response.ok && response.status >= 500) throw new Error('retry');
-      } catch {
-        // brief backoff then one retry
-        await new Promise((r) => setTimeout(r, 800));
-        response = await callOnce();
-      }
-
-      const data = await response.json().catch(() => ({} as { error?: string; items?: unknown[] }));
-      if (!response.ok) throw new Error(data.error || `Server returned ${response.status}`);
-      if (!data.items || (data.items as unknown[]).length === 0) {
+      const data = await scan();
+      if (!data.items || data.items.length === 0) {
         throw new Error("Couldn't read any items from this photo");
       }
-
-      toast({ title: 'Receipt scanned!', description: `Found ${(data.items as unknown[]).length} items` });
+      toast({ title: 'Receipt scanned!', description: `Found ${data.items.length} items` });
       onScanComplete(data as ScanResult, imagePreview);
       handleClose();
     } catch (error) {
@@ -224,15 +110,12 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
         : 'Could not process receipt';
       setScanError(msg);
       toast({ title: 'Scan failed', description: msg, variant: 'destructive' });
-    } finally {
-      setIsScanning(false);
     }
   };
 
   const handleClose = () => {
     setImagePreview(null);
-    imageBlobRef.current = null;
-    setIsScanning(false);
+    setBlob(null);
     setIsProcessing(false);
     setScanError(null);
     setCaptureError(null);
@@ -244,10 +127,6 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     setScanError(null);
     if (cameraInputRef.current) cameraInputRef.current.value = '';
     cameraCapturePendingRef.current = true;
-    // Removed window-focus + timeout heuristic: on Android the camera intent
-    // often returns the photo AFTER focus fires, producing a false
-    // "capture failed" banner even when the user successfully took a photo.
-    // We now rely solely on the input's change event.
     cameraInputRef.current?.click();
   };
 
@@ -258,17 +137,8 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
     fileInputRef.current?.click();
   };
 
-  const retakePhoto = () => {
-    setImagePreview(null);
-    setScanError(null);
-    startCameraCapture();
-  };
-
-  const chooseDifferent = () => {
-    setImagePreview(null);
-    setScanError(null);
-    startUpload();
-  };
+  const retakePhoto = () => { setImagePreview(null); setScanError(null); startCameraCapture(); };
+  const chooseDifferent = () => { setImagePreview(null); setScanError(null); startUpload(); };
 
   return (
     <Sheet open={open} onOpenChange={handleClose}>
@@ -278,9 +148,13 @@ export const BillScanner = ({ open, onOpenChange, onScanComplete }: BillScannerP
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
+          <p className="text-xs text-muted-foreground text-center">
+            {remaining} of {monthlyLimit} scans remaining this month
+          </p>
+
           {!imagePreview ? (
             <div className="space-y-4">
-              <div 
+              <div
                 className="border-2 border-dashed border-primary/30 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors"
                 onClick={startUpload}
               >
