@@ -3,6 +3,8 @@ import { Paperclip, Image, File, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { checkRoomStorageQuota, formatBytes } from "@/hooks/useRoomStorageQuota";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,6 +22,7 @@ export function AttachmentPicker({ userId, onAttachmentUploaded, disabled }: Att
   const [uploading, setUploading] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { currentRoom } = useAuth();
 
   const uploadFile = async (file: File, type: 'image' | 'file') => {
     if (!file) return;
@@ -28,6 +31,15 @@ export function AttachmentPicker({ userId, onAttachmentUploaded, disabled }: Att
     if (file.size > maxSize) {
       toast.error('File too large. Maximum size is 10MB.');
       return;
+    }
+
+    // 500MB-per-room hard cap
+    if (currentRoom?.id) {
+      const quota = await checkRoomStorageQuota(currentRoom.id, file.size);
+      if (!quota.allowed) {
+        toast.error(`Room storage full: ${formatBytes(quota.usedBytes)} of ${formatBytes(quota.limitBytes)} used.`);
+        return;
+      }
     }
 
     setUploading(true);
