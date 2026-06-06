@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { MessageCircle } from "lucide-react";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
+import { useVisibilityPoll } from "@/hooks/useVisibilityPoll";
 
 interface RecentMessage {
   id: string;
@@ -26,18 +27,8 @@ export const RecentMessagesPreview = () => {
     });
   };
 
-  useEffect(() => {
-    if (!currentRoom?.id) return;
-    
-    fetchRecentMessages();
-
-    const channel = supabase
-      .channel('home-messages-preview')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages', filter: `room_id=eq.${currentRoom.id}` }, () => fetchRecentMessages())
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [currentRoom?.id]);
+  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
+  useVisibilityPoll(fetchRecentMessages, 60_000, [currentRoom?.id], !!currentRoom?.id);
 
   const fetchRecentMessages = async () => {
     if (!currentRoom?.id) return;
