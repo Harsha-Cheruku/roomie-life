@@ -46,10 +46,7 @@ export const TaskPreview = () => {
   const [statusCounts, setStatusCounts] = useState({ pending: 0, in_progress: 0, done: 0 });
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
-  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
-  useVisibilityPoll(fetchTasks, 60_000, [currentRoom?.id, isSoloMode, user?.id], !!currentRoom);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     if (!currentRoom) return;
     try {
       let query = supabase.from('tasks').select('*').eq('room_id', currentRoom.id).neq('status', 'rejected');
@@ -75,7 +72,10 @@ export const TaskPreview = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentRoom?.id, isSoloMode, user?.id]);
+
+  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
+  useVisibilityPoll(fetchTasks, 60_000, [currentRoom?.id, isSoloMode, user?.id], !!currentRoom);
 
   const handleTaskAction = async (taskId: string, action: 'accept' | 'reject') => {
     setUpdatingTaskId(taskId);
