@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -27,10 +27,7 @@ export const RecentMessagesPreview = () => {
     });
   };
 
-  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
-  useVisibilityPoll(fetchRecentMessages, 60_000, [currentRoom?.id], !!currentRoom?.id);
-
-  const fetchRecentMessages = async () => {
+  const fetchRecentMessages = useCallback(async () => {
     if (!currentRoom?.id) return;
 
     try {
@@ -70,7 +67,10 @@ export const RecentMessagesPreview = () => {
     } catch (error) {
       console.error("Error fetching recent messages:", error);
     }
-  };
+  }, [currentRoom?.id]);
+
+  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
+  useVisibilityPoll(fetchRecentMessages, 60_000, [currentRoom?.id], !!currentRoom?.id);
 
   if (recentMessages.length === 0) return null;
 
