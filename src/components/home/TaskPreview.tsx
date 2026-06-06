@@ -45,16 +45,8 @@ export const TaskPreview = () => {
   const [statusCounts, setStatusCounts] = useState({ pending: 0, in_progress: 0, done: 0 });
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (currentRoom) {
-      fetchTasks();
-      const channel = supabase
-        .channel('task-preview-changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `room_id=eq.${currentRoom.id}` }, () => fetchTasks())
-        .subscribe();
-      return () => { supabase.removeChannel(channel); };
-    }
-  }, [currentRoom, isSoloMode, user?.id]);
+  // Lazy poll (60s, visible-tab only) — replaces always-on realtime channel.
+  useVisibilityPoll(fetchTasks, 60_000, [currentRoom?.id, isSoloMode, user?.id], !!currentRoom);
 
   const fetchTasks = async () => {
     if (!currentRoom) return;
