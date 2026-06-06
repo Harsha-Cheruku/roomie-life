@@ -64,8 +64,6 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
 
-  // Lazy poll (60s, visible-tab only) — replaces 2 always-on realtime channels.
-
   const fetchExpenseData = async () => {
     if (!currentRoom || !user) return;
 
@@ -158,6 +156,14 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       setIsLoading(false);
     }
   };
+
+  // Lazy poll (60s, visible-tab only) — replaces 2 always-on realtime channels.
+  useVisibilityPoll(
+    () => { void fetchExpenseData(); },
+    60_000,
+    [currentRoom?.id, user?.id, isSoloMode],
+    !!(currentRoom && user),
+  );
 
   if (isLoading) {
     return (
