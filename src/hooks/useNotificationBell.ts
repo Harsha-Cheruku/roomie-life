@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useVisibilityPoll } from './useVisibilityPoll';
 
 export const useNotificationBell = () => {
   const { user, currentRoom } = useAuth();
@@ -42,63 +43,8 @@ export const useNotificationBell = () => {
     }
   }, [user?.id, currentRoom?.id]);
 
-  useEffect(() => {
-    fetchUnreadCount();
-
-    if (!user) return;
-
-    // Subscribe to realtime updates for notifications
-    const channel = supabase
-      .channel(`notifications-bell-${user.id}-${currentRoom?.id || 'all'}`)
-      .on(
-        'postgres_changes',
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          console.log('New notification received, refetching count...');
-          fetchUnreadCount();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          console.log('Notification updated, refetching count...');
-          fetchUnreadCount();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { 
-          event: 'DELETE', 
-          schema: 'public', 
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`
-        },
-        () => {
-          console.log('Notification deleted, refetching count...');
-          fetchUnreadCount();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('Subscribed to notification bell updates');
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user?.id, currentRoom?.id, fetchUnreadCount]);
+  // Lazy poll (45s, visible-tab only) — replaces 3 always-on realtime listeners.
+  useVisibilityPoll(fetchUnreadCount, 45_000, [user?.id, currentRoom?.id]);
 
   return { unreadCount, isLoading, refetch: fetchUnreadCount };
 };
