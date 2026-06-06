@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useVisibilityPoll } from "./useVisibilityPoll";
 
 export const usePendingExpenseCount = () => {
   const { user, currentRoom, isSoloMode } = useAuth();
@@ -30,41 +31,13 @@ export const usePendingExpenseCount = () => {
     }
   }, [currentRoom?.id, user?.id, isSoloMode]);
 
-  useEffect(() => {
-    if (!user?.id || !currentRoom?.id) {
-      setPendingExpenseCount(0);
-      return;
-    }
-    if (isSoloMode) {
-      setPendingExpenseCount(0);
-      return;
-    }
-
-    void fetchPendingExpenseCount();
-
-    const channel = supabase
-      .channel(`pending-expense-count-${user.id}-${currentRoom.id}`)
-      // Filter to only this user's splits to drastically reduce realtime traffic
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expense_splits", filter: `user_id=eq.${user.id}` },
-        () => {
-          void fetchPendingExpenseCount();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expenses", filter: `room_id=eq.${currentRoom.id}` },
-        () => {
-          void fetchPendingExpenseCount();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentRoom?.id, fetchPendingExpenseCount, user?.id, isSoloMode]);
+  // Lazy poll (60s, visible-tab only) — replaces 2 always-on realtime listeners.
+  useVisibilityPoll(
+    fetchPendingExpenseCount,
+    60_000,
+    [user?.id, currentRoom?.id, isSoloMode],
+    !!(user?.id && currentRoom?.id && !isSoloMode),
+  );
 
   return pendingExpenseCount;
 };

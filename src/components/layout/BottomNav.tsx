@@ -89,29 +89,9 @@ export const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
     }
 
     fetchUnread();
-
-    const channel = supabase
-      .channel(`chat-unread-${user.id}-${currentRoom.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `room_id=eq.${currentRoom.id}`,
-        },
-        (payload) => {
-          const msg = payload.new as { sender_id?: string };
-          if (msg?.sender_id && msg.sender_id !== user.id) {
-            setUnreadChat((prev) => prev + 1);
-          }
-        }
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-    // Realtime INSERT handler increments live; poll is only a resync safety net.
-    pollRef.current = window.setInterval(fetchUnread, 120000);
+    // Realtime channel removed for cost. Poll every 60s while tab is visible.
+    const tick = () => { if (document.visibilityState === 'visible') fetchUnread(); };
+    pollRef.current = window.setInterval(tick, 60000);
 
     return () => {
       if (channelRef.current) {

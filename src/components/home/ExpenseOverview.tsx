@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Wallet, Loader2, ArrowUpCircle, ArrowDownCircle, Calendar, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { ProfileAvatar } from "@/components/profile/ProfileAvatar";
 import { useCurrency } from "@/hooks/useCurrency";
+import { useVisibilityPoll } from "@/hooks/useVisibilityPoll";
 import {
   Select,
   SelectContent,
@@ -62,28 +63,6 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
   const [isLoading, setIsLoading] = useState(true);
   const [breakdownMode, setBreakdownMode] = useState<'paid' | 'willPay' | 'willGet'>('paid');
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (currentRoom && user) {
-      fetchExpenseData();
-
-      let timer: ReturnType<typeof setTimeout> | null = null;
-      const schedule = () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => { fetchExpenseData(); timer = null; }, 300);
-      };
-      const channel = supabase
-        .channel(`expense-overview-${currentRoom.id}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `room_id=eq.${currentRoom.id}` }, schedule)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'expense_splits' }, schedule)
-        .subscribe();
-
-      return () => {
-        if (timer) clearTimeout(timer);
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [currentRoom, user, isSoloMode]);
 
   const fetchExpenseData = async () => {
     if (!currentRoom || !user) return;
@@ -177,6 +156,14 @@ export const ExpenseOverview = ({ pendingExpenseCount = 0 }: { pendingExpenseCou
       setIsLoading(false);
     }
   };
+
+  // Lazy poll (60s, visible-tab only) — replaces 2 always-on realtime channels.
+  useVisibilityPoll(
+    () => { void fetchExpenseData(); },
+    60_000,
+    [currentRoom?.id, user?.id, isSoloMode],
+    !!(currentRoom && user),
+  );
 
   if (isLoading) {
     return (

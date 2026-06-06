@@ -37,25 +37,9 @@ export const RoomHeader = () => {
   useEffect(() => {
     if (currentRoom?.id) {
       fetchMembers();
-      
-      // Subscribe to presence for online status
-      const channel = supabase.channel(`room-presence-${currentRoom.id}`);
-      
-      channel
-        .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
-          updateOnlineStatus(state);
-        })
-        .subscribe(async (status) => {
-          if (status === 'SUBSCRIBED' && user) {
-            await channel.track({ user_id: user.id, online_at: new Date().toISOString() });
-          }
-        });
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     }
+    // Presence channel removed: the green online dot was cosmetic and the
+    // always-on websocket + heartbeat traffic was a major recurring cost.
   }, [currentRoom?.id, user?.id]);
 
   // Fetch unread notification counts for all rooms
