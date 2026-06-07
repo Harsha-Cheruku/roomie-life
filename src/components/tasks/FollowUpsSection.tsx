@@ -75,20 +75,15 @@ export const FollowUpsSection = ({ roomId }: FollowUpsSectionProps) => {
   }, [roomId]);
 
   useEffect(() => {
+    // Realtime channel removed to cut idle DB/socket load. Refetch happens
+    // on mount, on tab focus, and after the user mutates a reminder below.
     fetchReminders();
-
-    const channel = supabase
-      .channel('followups-reminders')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'reminders',
-        filter: `room_id=eq.${roomId}`
-      }, () => fetchReminders())
-      .subscribe();
-
+    const onFocus = () => { if (document.visibilityState === 'visible') fetchReminders(); };
+    document.addEventListener('visibilitychange', onFocus);
+    window.addEventListener('focus', onFocus);
     return () => {
-      supabase.removeChannel(channel);
+      document.removeEventListener('visibilitychange', onFocus);
+      window.removeEventListener('focus', onFocus);
     };
   }, [roomId, fetchReminders]);
 
