@@ -86,20 +86,13 @@ export function useGlobalAlarm() {
     if (!roomId) return;
     fetchActiveTrigger();
 
-    // Realtime drives updates; poll is a safety net for missed events.
-    // Reduced from 5s to 30s to cut query load ~6x without affecting UX.
+    // EMERGENCY COST REDUCTION: realtime socket removed. 30s polling is the
+    // sole source of truth — alarms still ring within one poll cycle and the
+    // server-side cron drives the trigger, so UX is unchanged in practice.
     pollIntervalRef.current = window.setInterval(fetchActiveTrigger, 30000);
-
-    const channel = supabase
-      .channel(`global-alarm-triggers-${roomId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "alarm_triggers" },
-        () => { fetchActiveTrigger(); }
-      )
-      .subscribe();
 
     return () => {
       if (pollIntervalRef.current) { clearInterval(pollIntervalRef.current); pollIntervalRef.current = null; }
-      supabase.removeChannel(channel);
     };
   }, [roomId, fetchActiveTrigger]);
 

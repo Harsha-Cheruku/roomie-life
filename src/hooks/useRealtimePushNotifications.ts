@@ -1,77 +1,11 @@
-import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { usePushNotifications } from './usePushNotifications';
-
 /**
- * Hook that listens for new notifications in realtime and triggers browser push notifications.
- * Always shows push for the receiver — even when the app is in foreground (WhatsApp-style).
+ * Disabled: realtime fallback channel removed to cut a persistent socket per
+ * logged-in user. Users who enable Web Push already receive OS-level
+ * notifications via the send-push edge function + Service Worker; users who
+ * don't enable push will see the in-app notification bell update on its
+ * 45-second visibility poll. Keeping this exported as a no-op so existing
+ * imports continue to compile.
  */
 export const useRealtimePushNotifications = () => {
-  const { user, currentRoom } = useAuth();
-  const { showNotification, isEnabled } = usePushNotifications();
-
-  useEffect(() => {
-    // Only run as a FOREGROUND fallback when system push is NOT enabled.
-    // When push is enabled, the database trigger -> send-push edge function
-    // -> Service Worker pipeline already delivers a real OS notification,
-    // so showing one again from here would just duplicate it.
-    if (!user || !currentRoom || isEnabled) return;
-
-    const channel = supabase
-      .channel(`realtime-push-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
-        },
-        async (payload) => {
-          const notification = payload.new as {
-            title: string;
-            body?: string;
-            type: string;
-            reference_type?: string;
-            is_read?: boolean;
-          };
-
-          // Skip if already read
-          if (notification.is_read) return;
-
-          // Always show push notification for the receiver (WhatsApp-style)
-          await showNotification(notification.title, {
-            body: notification.body || undefined,
-            tag: `roomsync-${notification.type}-${Date.now()}`,
-            requireInteraction: true,
-            data: {
-              url: getUrlForNotification(notification.reference_type)
-            }
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, currentRoom, isEnabled, showNotification]);
+  // no-op
 };
-
-function getUrlForNotification(referenceType?: string): string {
-  switch (referenceType) {
-    case 'expense':
-      return '/expenses';
-    case 'task':
-      return '/tasks';
-    case 'reminder':
-      return '/reminders';
-    case 'alarm':
-      return '/alarms';
-    case 'chat':
-      return '/chat';
-    default:
-      return '/';
-  }
-}

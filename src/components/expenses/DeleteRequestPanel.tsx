@@ -49,13 +49,9 @@ export const DeleteRequestPanel = ({ expenseId, participantIds, onDeleted }: Pro
   }, [expenseId]);
 
   useEffect(() => {
+    // Realtime channel removed. Delete-vote panels are short-lived dialogs;
+    // we refetch on open + after every user action (vote/cancel) below.
     void load();
-    const ch = supabase
-      .channel(`del-req-${expenseId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "expense_delete_requests", filter: `expense_id=eq.${expenseId}` }, () => void load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "expense_delete_votes" }, () => void load())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
   }, [expenseId, load]);
 
   if (!request || !user) return null;
